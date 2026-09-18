@@ -1,0 +1,1 @@
+export default function Loading(){return <div className="globalLoading"><div className="loadingMark"><i/><i/><i/></div><b>Preparing inspection workspace</b><span>Loading station configuration and UI modules…</span></div>}

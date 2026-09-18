@@ -1,0 +1,14 @@
+export type Status='OK'|'NOK'|'WARN'|'IDLE';
+export type Role='NoUser'|'Operator'|'Service'|'Administrator';
+export interface DatasetSummary{id:string;name:string;source_type:string;source_path:string;sample_count:number;image_count:number;categories:Record<string,number>;channels:Record<string,number>;created_at:string}
+export interface ImageRecord{channel:string;filename:string;relative_path:string;absolute_path:string}
+export interface Sample{id:string;position:number;wt_index:number;category:string;base_name:string;metadata:{image_no?:string;machine?:string;code?:string;defect_label?:string;u_index?:string;event_id?:string;io_code?:string;tail_code?:string};images:Record<string,ImageRecord>}
+export interface Defect{name:string;confidence:number;bbox_xywh_norm?:number[];polygon_norm?:number[][];channel?:string;severity:'minor'|'major'|'critical';tolerance?:'IT'|'AT';size_px?:number;position_text?:string}
+export interface ChannelResult{channel:string;image_path:string;status:'OK'|'NOK'|'WARN';defects:Defect[];measurements:Record<string,string|number>;engine:string;elapsed_ms:number}
+export interface InspectionResult{dataset_id:string;sample_id:string;position:number;wt_index:number;category:string;status:'OK'|'NOK'|'WARN';expected_label?:string;channels:ChannelResult[];defects:Defect[];created_at:string}
+export interface Job{id:string;dataset_id:string;status:'queued'|'running'|'completed'|'failed'|'cancelled';total:number;completed:number;current_sample_id?:string;error?:string;summary:Record<string,number>}
+export interface SystemInfo{app:string;version:string;mode:'AUTO'|'SETUP';bridge:string;settings:{station_name:string;line_name:string;installation_name:string;station_index:number;role:Role;channel_labels:Record<string,string>;image_format:'BMP'|'TIF'};session:{username:string;role:Role;logged_in:boolean}}
+export interface LogRow{time:string;level:string;message:string}
+export interface StorageRuntime{active:boolean;started_at?:string;saved_lenses:number;saved_images:number;event_count:number;position_counts:Record<string,number>;error_counts:Record<string,number>;last_saved_at?:string;reason:string}
+export interface ErrorClass{key:string;label:string;color:string;symbol:string;severity:string}
+export interface FocusMetric{key:string;label:string;value:number;status:'green'|'yellow'|'red';optimum:[number,number];acceptable:[number,number]}
