@@ -14,14 +14,14 @@ import {LensViewer} from './LensViewer';
 import {StatusMatrix} from './StatusMatrix';
 import {TopBar} from './TopBar';
 import {TrendChart} from './TrendChart';
-import {useUI} from './UIProvider';
+import {useUI,type StatusShape} from './UIProvider';
 
 type WorkspaceTab='quality'|'activity'|'control';
 type InspectionBottomTab='messages'|'wt'|'trend';
 type WtViewMode='images'|'names';
 
 export function InspectionDashboard({inspectionMode=false}:{inspectionMode?:boolean}){
- const{prefs,patch}=useUI();
+ const{prefs,set,patch}=useUI();
  const[info,setInfo]=useState<SystemInfo|null>(demoSystemInfo);
  const[datasets,setDatasets]=useState<DatasetSummary[]>([demoDataset]);
  const[datasetId,setDatasetId]=useState(DEMO_DATASET_ID);
@@ -65,7 +65,7 @@ export function InspectionDashboard({inspectionMode=false}:{inspectionMode?:bool
  const yieldPct=results.length?counts.OK/results.length*100:0;
  const nokRate=results.length?counts.NOK/results.length*100:0;
  const wtSamples=useMemo(()=>samples.filter(s=>s.wt_index===(sample?.wt_index||1)),[samples,sample]);
- const wtChannelImages=useMemo(()=>Array.from({length:16},(_,i)=>{const position=i+1,s=wtSamples.find(row=>row.position===position),image=s?.images[channel];return {position,sample:s,image,channel,name:image?.filename||`Position ${position} · No ${channel.toUpperCase()} image`,src:s&&image?samplePreviewUrl(datasetId,s,channel):''}}),[wtSamples,datasetId,channel]);
+ const wtChannelImages=useMemo(()=>Array.from({length:16},(_,i)=>{const position=i+1,s=wtSamples.find(row=>row.position===position),image=s?.images[channel],result=s?resultMap.get(s.id):undefined,defect=result?.defects?.[0]?.name||'No defect';return {position,sample:s,image,result,defect,channel,name:image?.filename||`Position ${position} · No ${channel.toUpperCase()} image`,src:s&&image?samplePreviewUrl(datasetId,s,channel):''}}),[wtSamples,datasetId,channel,resultMap]);
  const channelLabels:Record<string,string>={...(info?.settings.channel_labels||{}),h:'Telecentric',d:'Dark Field',n:'Diffuse',p:'Phase Contrast'};
  const currentPreviewChannel=sample?.images[channel]?channel:sample?.images.h?'h':sample?.images.d?'d':Object.keys(sample?.images||{})[0]||'h';
  const detailPreviewSrc=sample?samplePreviewUrl(datasetId,sample,currentPreviewChannel):'';
@@ -146,7 +146,7 @@ export function InspectionDashboard({inspectionMode=false}:{inspectionMode?:bool
  function relative(step:number){if(!sample||!samples.length)return;const i=samples.findIndex(x=>x.id===sample.id),next=samples[(i+step+samples.length)%samples.length];select(next.id)}
 
  function beginResize(kind:'history'|'details',e:ReactPointerEvent<HTMLButtonElement>){
-   if(window.innerWidth<1060)return;e.preventDefault();
+   if(prefs.uiLocked||window.innerWidth<1060)return;e.preventDefault();
    const host=e.currentTarget.parentElement;if(!host)return;
    const rect=host.getBoundingClientRect(),startX=e.clientX,h0=prefs.historyWidth,v0=prefs.viewerWidth,d0=prefs.detailsWidth,total=h0+v0+d0;
    let next={historyWidth:h0,viewerWidth:v0,detailsWidth:d0};
@@ -157,7 +157,7 @@ export function InspectionDashboard({inspectionMode=false}:{inspectionMode?:bool
    window.addEventListener('pointermove',move);window.addEventListener('pointerup',up,{once:true});
  }
  function beginInspectionResize(kind:'history'|'control'|'details',e:ReactPointerEvent<HTMLButtonElement>){
-   if(window.innerWidth<1060)return;e.preventDefault();
+   if(prefs.uiLocked||window.innerWidth<1060)return;e.preventDefault();
    const startX=e.clientX,h0=prefs.inspectionHistoryWidth,c0=prefs.inspectionControlWidth,d0=prefs.inspectionDetailsWidth;
    let next={inspectionHistoryWidth:h0,inspectionControlWidth:c0,inspectionDetailsWidth:d0};
    const root=document.documentElement;document.body.classList.add('is-resizing-dashboard');
@@ -171,7 +171,7 @@ export function InspectionDashboard({inspectionMode=false}:{inspectionMode?:bool
    window.addEventListener('pointermove',move);window.addEventListener('pointerup',up,{once:true});
  }
  function beginBottomResize(e:ReactPointerEvent<HTMLButtonElement>){
-   e.preventDefault();const startY=e.clientY,h0=prefs.bottomHeight;document.body.classList.add('is-resizing-dashboard');
+   if(prefs.uiLocked)return;e.preventDefault();const startY=e.clientY,h0=prefs.bottomHeight;document.body.classList.add('is-resizing-dashboard');
    const move=(ev:PointerEvent)=>{const h=Math.max(126,Math.min(Math.min(340,window.innerHeight*.43),h0+(startY-ev.clientY)));document.documentElement.style.setProperty('--dashboard-bottom-height',`${h}px`)};
    const up=(ev:PointerEvent)=>{const h=Math.max(126,Math.min(Math.min(340,window.innerHeight*.43),h0+(startY-ev.clientY)));document.body.classList.remove('is-resizing-dashboard');window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);patch({bottomHeight:h})};
    window.addEventListener('pointermove',move);window.addEventListener('pointerup',up,{once:true});
@@ -180,25 +180,40 @@ export function InspectionDashboard({inspectionMode=false}:{inspectionMode?:bool
 
  const layoutClass=!showHistory&&!showDetails?'viewerOnly':!showHistory?'noHistory':!showDetails?'noDetails':'';
 
- if(inspectionMode)return <div className="premiumDashboardPage oakWorkstationPage inspectionReferencePage">
-   <TopBar workstation demo={demoMode} info={info} onRefresh={refreshSystem} onUpload={()=>setLoader(true)} onLayout={()=>window.dispatchEvent(new Event('lens-open-customizer'))} stats={prefs.showKpis?{yieldPct:displayYield,total:demoMode?42560:samples.length,nokRate:displayNok,evaluated:demoMode?1137:results.length}:undefined}/>
-   <div className="inspectionSourceBar">
+ if(inspectionMode)return <div className={`premiumDashboardPage oakWorkstationPage inspectionReferencePage ${prefs.manualSkeleton?'pdfSkeletonMode':''}`}>
+   {prefs.manualSkeleton?<div className="pdfMenuStrip">
+     <button onClick={()=>setToast('User login dialog ready')}>Benutzerwechsel</button>
+     <button onClick={()=>window.location.href='/storage'}>Bildfilter</button>
+     <button onClick={()=>window.location.href='/registration'}>Registrierung</button>
+     <button onClick={()=>window.location.href='/focus'}>Fokus</button>
+     <button onClick={()=>window.location.href='/settings'}>Einstellungen</button>
+     <button onClick={()=>window.location.href='/bv-test'}>BV Test</button>
+     <button onClick={()=>setToast(`OKLIN3 · Version ${info?.version||'7.4.0'}`)}>Info</button>
+     <button onClick={()=>setToast('Open the operator manual for help')}>Hilfe</button>
+     <button onClick={()=>setToast('Exit is disabled in the browser interface')}>Beenden</button>
+     <span/>
+     <button onClick={()=>setLoader(true)}>Datensatz</button>
+     <button onClick={()=>window.dispatchEvent(new Event('lens-open-customizer'))}>UI</button>
+   </div>:<TopBar workstation demo={demoMode} info={info} onRefresh={refreshSystem} onUpload={()=>setLoader(true)} onLayout={()=>window.dispatchEvent(new Event('lens-open-customizer'))} stats={prefs.showKpis?{yieldPct:displayYield,total:demoMode?42560:samples.length,nokRate:displayNok,evaluated:demoMode?1137:results.length}:undefined}/>} 
+   {!prefs.manualSkeleton&&<div className="inspectionSourceBar">
      <div className="inspectionDatasetPicker"><FolderOpen/><span><small></small><select value={datasetId} onChange={e=>{setDatasetId(e.target.value);loadDataset(e.target.value)}}>{datasets.map(d=><option value={d.id} key={d.id}>{d.name} · {d.sample_count} lenses</option>)}</select></span><button onClick={()=>setLoader(true)}>Upload Folder</button><button className="iconOnly" onClick={()=>refreshDatasets()} title="Refresh datasets"><RefreshCw/></button></div>
      <div className={`inspectionJobPill ${job?.status||'idle'}`}><i/><span><small>{job?.status==='failed'?'Inspection error':isRunning?'Inspection running':job?.status==='completed'?'Last run complete':''}</small><b>{isRunning?`${job?.completed||0} / ${job?.total||samples.length}`:`${samples.length} lenses loaded`}</b></span>{isRunning&&<em style={{width:`${jobProgress}%`}}/>}</div>
      <button className="inspectionLayoutButton" onClick={()=>window.dispatchEvent(new Event('lens-open-customizer'))}><LayoutDashboard/>Adjust Layout</button>
-   </div>
+   </div>}
 
    <div className="inspectionReferenceViewport">
      <div className="inspectionReferenceGrid">
        <div className="inspectionHistoryColumn">
          <StatusMatrix samples={samples} results={resultMap} current={current} onPick={select} maxRows={40} onArchive={async wt=>{if(demoMode){setToast(`WT-${String(wt).padStart(4,'0')} added to archive queue`);return}try{const r=await api.archiveRing(datasetId,wt);setToast(`WT ${wt} archived · ${r.images} images`)}catch(e){setToast((e as Error).message)}}}/>
          <div className="inspectionHistoryActions"><button onClick={archiveCurrentWt}><Archive/>Archive ring-buffer images</button><button onClick={()=>setShowLegend(v=>!v)}><CircleAlert/>Status symbol legend</button></div>
-         {showLegend&&<div className="inspectionLegendPopover"><div className="inspectionLegendHead"><b>Status symbols</b><button onClick={()=>setShowLegend(false)}>×</button></div><div className="inspectionLegendGrid"><span><i className="ok"/>Inspection OK</span><span><i className="nok"/>Lens NOK</span><span><i className="warn"/>Warning / corrected</span><span><i className="idle"/>Not inspected</span><span><i className="camera"/>Acquisition error</span><span><i className="empty"/>No lens detected</span></div></div>}
+         {showLegend&&<div className="inspectionLegendPopover"><div className="inspectionLegendHead"><div><b>Status symbols</b><small>Changes apply immediately everywhere</small></div><button onClick={()=>setShowLegend(false)}>×</button></div><div className="inspectionLegendEditors">{([
+           ['Inspection OK','ok','okColor','okShape'],['Lens Not OK','nok','nokColor','nokShape'],['Warning / corrected','warn','warnColor','warnShape'],['Not inspected','idle','idleColor','idleShape']
+         ] as const).map(([label,tone,colorKey,shapeKey])=><div key={tone}><i className={tone}/><b>{label}</b><input aria-label={`${label} color`} type="color" value={prefs[colorKey]} onChange={e=>set(colorKey,e.target.value)}/><select aria-label={`${label} symbol`} value={prefs[shapeKey]} onChange={e=>set(shapeKey,e.target.value as StatusShape)}><option value="circle">● Circle</option><option value="square">■ Square</option><option value="diamond">◆ Diamond</option><option value="ring">○ Ring</option><option value="plus">✚ Plus</option></select></div>)}</div><div className="inspectionLegendFixed"><span><i className="camera"/>Acquisition error</span><span></span></div></div>}
        </div>
        <button className="inspectionVerticalSplit historySplit" onPointerDown={e=>beginInspectionResize('history',e)} title="Drag to resize WT history"><GripVertical/></button>
 
        <section className="inspectionMachinePanel">
-         <div className="inspectionStationName"><b>Anlage GDL6BV2</b><span>Station 2</span></div>
+         <div className="inspectionStationName"><span><b>Anlage GDL6BV2</b>  ( Station 2 )</span></div>
          <div className="inspectionControlBlock"><h2>Aktuelle Betriebsart</h2><div className="inspectionAutoMode"><Play/><span><b>Automaticbetrib</b><small>{isRunning?'Inspection cycle active':'Ready for production'}</small></span>
          
          </div>
@@ -227,9 +242,9 @@ export function InspectionDashboard({inspectionMode=false}:{inspectionMode?:bool
 
        <button className="inspectionHorizontalSplit" onPointerDown={beginBottomResize} title="Drag to resize the bottom workspace"><GripHorizontal/></button>
        <section className="inspectionLogPanel">
-         <div className="inspectionLogTabs"><button className={inspectionBottomTab==='messages'?'active':''} onClick={()=>setInspectionBottomTab('messages')}>System messages</button><button className={inspectionBottomTab==='wt'?'active':''} onClick={()=>setInspectionBottomTab('wt')}>WT View</button><button className={inspectionBottomTab==='trend'?'active':''} onClick={()=>setInspectionBottomTab('trend')}>Trend statistics</button><span/>{inspectionBottomTab==='messages'&&<><button className={logFilter==='all'?'filterActive':''} onClick={()=>setLogFilter('all')}>All</button><button className={logFilter==='warning'?'filterActive':''} onClick={()=>setLogFilter('warning')}>Warnings</button><button className={logFilter==='error'?'filterActive':''} onClick={()=>setLogFilter('error')}>Errors</button></>}</div>
+         <div className="inspectionLogTabs"><button className={inspectionBottomTab==='messages'?'active':''} onClick={()=>setInspectionBottomTab('messages')}>System messages</button><button className={inspectionBottomTab==='wt'?'active':''} onClick={()=>setInspectionBottomTab('wt')}>WT View</button><button className={inspectionBottomTab==='trend'?'active':''} onClick={()=>setInspectionBottomTab('trend')}>Trend statistics</button><span/>{inspectionBottomTab==='wt'&&<div className="inspectionWtTabMeta"><b>{sample?.metadata.io_code||`WT-${String(sample?.wt_index||1).padStart(4,'0')}`}</b><small>{channelLabels[channel]||channel.toUpperCase()} · 16 positions</small><em>{wtChannelImages.filter(item=>item.image).length} images</em><div className="inspectionWtToggle"><button className={wtViewMode==='images'?'active':''} onClick={()=>setWtViewMode('images')}>Images</button><button className={wtViewMode==='names'?'active':''} onClick={()=>setWtViewMode('names')}>Names</button></div></div>}{inspectionBottomTab==='messages'&&<><button className={logFilter==='all'?'filterActive':''} onClick={()=>setLogFilter('all')}>All</button><button className={logFilter==='warning'?'filterActive':''} onClick={()=>setLogFilter('warning')}>Warnings</button><button className={logFilter==='error'?'filterActive':''} onClick={()=>setLogFilter('error')}>Errors</button></>}</div>
          {inspectionBottomTab==='messages'&&<div className="inspectionLogRows referenceMessageRows">{filteredReferenceLogs.map((l,i)=><div className={l.level} key={`${l.time}-${i}`}><time>{l.time}</time><span>{l.message}</span></div>)}</div>}
-         {inspectionBottomTab==='wt'&&<div className="inspectionWtView"><div className="inspectionWtViewHead"><span><b>{sample?.metadata.io_code||`WT-${String(sample?.wt_index||1).padStart(4,'0')}`}</b><small>{channelLabels[channel]||channel.toUpperCase()} · 16 positions</small></span><div className="inspectionWtHeadRight"><em>{wtChannelImages.filter(item=>item.image).length} available</em><div className="inspectionWtToggle" aria-label="WT view display mode"><button className={wtViewMode==='images'?'active':''} onClick={()=>setWtViewMode('images')}>Images</button><button className={wtViewMode==='names'?'active':''} onClick={()=>setWtViewMode('names')}>Names</button></div></div></div><div className={`inspectionWtGallery ${wtViewMode}`}>{wtChannelImages.map(item=><button key={`${item.position}-${item.channel}`} className={`${item.sample?.id===current?'selected':''} ${!item.image?'missing':''}`} onClick={()=>{if(item.sample){select(item.sample.id);setChannel(item.channel)}}} disabled={!item.sample} title={item.name}>{wtViewMode==='images'?<div>{item.src.startsWith('demo:')?<i className={`oakDemoLens tone-${(item.position%4)+1}`}/>:item.src?<img src={item.src} alt={item.name}/>:<span className="inspectionMissingImage">No image</span>}<b>P{item.position}</b></div>:<div className="inspectionNameOnly"><b>P{item.position}</b><span>{item.name}</span></div>}</button>)}</div></div>}
+         {inspectionBottomTab==='wt'&&<div className="inspectionWtView"><div className={`inspectionWtGallery ${wtViewMode}`}>{wtChannelImages.map(item=>{const status=item.result?.status||'WAITING',tone=status==='OK'?'ok':status==='NOK'?'nok':status==='WARN'?'warn':'idle',shortDefect=item.defect.length>16?`${item.defect.slice(0,14)}…`:item.defect;return <button key={`${item.position}-${item.channel}`} className={`${item.sample?.id===current?'selected':''} ${!item.image?'missing':''} ${tone}`} onClick={()=>{if(item.sample){select(item.sample.id);setChannel(item.channel)}}} disabled={!item.sample} title={`${item.name} · ${item.defect}`}>{wtViewMode==='images'?<><div className="inspectionWtSquare">{item.src.startsWith('demo:')?<i className={`oakDemoLens tone-${(item.position%4)+1}`}/>:item.src?<img src={item.src} alt={item.name}/>:<span className="inspectionMissingImage">No image</span>}<b>Position {item.position}</b><i className={`wtStatusDot ${tone}`} title={status}/><em className="wtDefectChip" title={item.defect}>{shortDefect}</em></div><span className="wtTileResult"><b>{status==='WAITING'?'Not inspected':status==='NOK'?'Not OK':status}</b></span></>:<div className="inspectionNameOnly"><b>Position {item.position}</b><span>{item.name}</span><small>{status} · {item.defect}</small><i className={`wtStatusDot ${tone}`}/></div>}</button>})}</div></div>}
          {inspectionBottomTab==='trend'&&<div className="inspectionTrendView"><div className="inspectionTrendChart"><TrendChart results={results}/></div><div className="inspectionTrendStats"><span><small>Current yield</small><b>{displayYield.toFixed(1)}%</b></span><span><small>OK lenses</small><b className="good">{counts.OK}</b></span><span><small>NOK lenses</small><b className="bad">{counts.NOK}</b></span><span><small>Warnings</small><b className="warn">{counts.WARN}</b></span><span><small>Evaluated</small><b>{results.length} / {samples.length}</b></span></div></div>}
        </section>
      </div>

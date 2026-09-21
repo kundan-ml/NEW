@@ -60,6 +60,7 @@ export function InspectionCanvas({imageUrl,defects,selectedDefect=0,showDefects=
 
  useEffect(()=>{if(frame.current)cancelAnimationFrame(frame.current);frame.current=requestAnimationFrame(paint);return()=>{if(frame.current)cancelAnimationFrame(frame.current)}},[paint]);
  useEffect(()=>{const h=host.current;if(!h)return;const ro=new ResizeObserver(()=>{paint();if(state==='ready'&&source.current){}});ro.observe(h);return()=>ro.disconnect()},[paint,state]);
+ useEffect(()=>{const onFull=()=>requestAnimationFrame(()=>requestAnimationFrame(fit));document.addEventListener('fullscreenchange',onFull);return()=>document.removeEventListener('fullscreenchange',onFull)},[state]);
 
  function zoomAt(factor:number,cx?:number,cy?:number){const h=host.current,i=source.current;if(!h||!i)return;const rect=h.getBoundingClientRect(),px=cx??rect.width/2,py=cy??rect.height/2;setView(v=>{const ns=Math.max(.025,Math.min(12,v.scale*factor));const ix=(px-v.x)/v.scale,iy=(py-v.y)/v.scale;return{scale:ns,x:px-ix*ns,y:py-iy*ns}})}
  function wheel(e:React.WheelEvent){e.preventDefault();const rect=e.currentTarget.getBoundingClientRect();zoomAt(e.deltaY<0?1.13:.885,e.clientX-rect.left,e.clientY-rect.top)}

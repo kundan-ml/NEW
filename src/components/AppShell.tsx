@@ -24,11 +24,13 @@ import {CommandPalette} from './CommandPalette';
 const items=[
   ['/','Dashboard',LayoutDashboard],
   ['/inspect','Inspection',Microscope],
-  ['#','WT History',History],
-  ['#','Statistics',ChartNoAxesCombined],
-  ['#','Recipe / Setup',SlidersHorizontal],
-  ['#','Maintenance',Settings],
-  ['#','System',Wrench],
+  ['/history','WT History',History],
+  ['/registration','Registration',Camera],
+  ['/focus','Focus Check',ChartNoAxesCombined],
+  ['/storage','Image Filter',FolderArchive],
+  ['/settings','Settings',SlidersHorizontal],
+  ['/bv-test','BV Test',Settings],
+  ['/system','System',Wrench],
 ] as const;
 
 export function AppShell({children}:{children:React.ReactNode}){
@@ -64,8 +66,8 @@ function ShellInner({children}:{children:React.ReactNode}){
     };
   },[]);
 
-  return <div className={`appShell ${prefs.sidebarCollapsed?'sidebarCollapsed':''}`}>
-    <aside className="sideRail productionRail">
+  return <div className={`appShell ${prefs.sidebarCollapsed?'sidebarCollapsed':''} ${prefs.manualSkeleton?'manualSkeletonShell':''}`}>
+    {!prefs.manualSkeleton&&<aside className="sideRail productionRail">
       <button className="brandArea productionBrand" onClick={()=>setCustomize(true)} title="Oaklin interface settings" aria-label="Open interface settings">
         <span className="brandAperture"><i/><i/><i/><i/><i/><i/></span>
       </button>
@@ -92,7 +94,7 @@ function ShellInner({children}:{children:React.ReactNode}){
         </button>
         <span className="buildLabel">OAKLIN · v7.4</span>
       </div>
-    </aside>
+    </aside>}
 
     <main className="appMain">{children}</main>
 
