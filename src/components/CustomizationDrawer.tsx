@@ -5,7 +5,7 @@ import {useUI,type Density,type StatusShape} from './UIProvider';
 import {GRADIENT_ANGLES,THEMES,type GradientDirection,type LayerGradient} from '@/lib/themes';
 
 export function CustomizationDrawer({open,onClose}:{open:boolean;onClose:()=>void}){
-  const{prefs,set,patch,reset}=useUI();
+  const{prefs,set,patch,selectTheme,resetThemeColors,reset}=useUI();
   if(!open)return null;
 
   const themes=Object.values(THEMES);
@@ -66,7 +66,7 @@ export function CustomizationDrawer({open,onClose}:{open:boolean;onClose:()=>voi
           </div>
           <div className="themeCards">
             {themes.map(theme=>
-              <button key={theme.name} onClick={()=>patch({theme:theme.name,manualSkeleton:theme.name==='pdf-skeleton'?true:prefs.manualSkeleton,customBg:'',customPanel:'',customHeader:'',customButton:'',customCanvas:'',customBorder:'',customText:'',customPrimary:'',customSecondary:'',customAccent:'',gradientStart:'',gradientEnd:''})} className={prefs.theme===theme.name?'selected':''}>
+              <button key={theme.name} onClick={()=>selectTheme(theme.name)} className={prefs.theme===theme.name?'selected':''}>
                 <i className="themePreview" style={{'--preview-bg':theme.tokens.background,'--preview-surface':theme.tokens.surface,'--preview-accent':theme.tokens.accent,'--preview-gradient':`linear-gradient(135deg,${theme.tokens.gradientStart},${theme.tokens.gradientEnd})`} as React.CSSProperties}><span/><em/></i>
                 <span><b>{theme.label}</b><small>{theme.description}</small></span>
                 {prefs.theme===theme.name&&<Check/>}
@@ -82,7 +82,7 @@ export function CustomizationDrawer({open,onClose}:{open:boolean;onClose:()=>voi
               ['Page background','customBg',activeTokens.background],['Panels','customPanel',activeTokens.surface],['Headers & tabs','customHeader',activeTokens.surfaceElevated],['Buttons','customButton',activeTokens.surfaceHover],['Image canvas','customCanvas','#000000'],['Borders','customBorder',activeTokens.border],['Primary text','customText',activeTokens.textPrimary],['Primary color','customPrimary',activeTokens.primary],['Secondary color','customSecondary',activeTokens.secondary],['Accent color','customAccent',activeTokens.accent]
             ] as const).map(([label,key,fallback])=><label key={key}><input type="color" value={prefs[key]||fallback} onChange={e=>set(key,e.target.value)}/><span>{label}</span></label>)}
           </div>
-          <button className="clearColorOverrides" onClick={()=>patch({customBg:'',customPanel:'',customHeader:'',customButton:'',customCanvas:'',customBorder:'',customText:'',customPrimary:'',customSecondary:'',customAccent:''})}>Use selected theme colors</button>
+          <button className="clearColorOverrides" onClick={resetThemeColors}><RotateCcw/> Use default colors for {THEMES[prefs.theme].label}</button>
         </section>
 
         <section className="customSection gradientEditorSection">

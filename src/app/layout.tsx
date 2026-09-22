@@ -18,7 +18,7 @@ export const metadata={
 
 export default async function RootLayout({children}:{children:React.ReactNode}){
   const preferences=await readInitialPreferences();
-  const theme=normalizeTheme(preferences.theme),tokens=THEMES[theme].tokens,angle=GRADIENT_ANGLES[preferences.gradientDirection||'to-bottom-right'],layers={...createDefaultLayerGradients(),...(preferences.layerGradients||{})};
+  const theme=normalizeTheme(preferences.theme),tokens=THEMES[theme].tokens,angle=GRADIENT_ANGLES[preferences.gradientDirection||'to-bottom-right'],layers={...createDefaultLayerGradients(theme),...(preferences.layerGradients||{})};
   const style={
     '--control-bg':preferences.customBg||tokens.background,
     '--control-panel':preferences.customPanel||tokens.surface,

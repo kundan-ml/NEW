@@ -32,16 +32,16 @@ export function normalizeTheme(value:unknown):ThemeName{
   return key in THEMES?key as ThemeName:LEGACY_THEME_MAP[key]||'pdf-skeleton';
 }
 
-export const createDefaultLayerGradients=():LayerGradients=>({
-  background:{enabled:false,angle:135,stops:[{color:'#111820',position:0},{color:'#16212b',position:100}]},
-  surface:{enabled:false,angle:160,stops:[{color:'#1b2833',position:0},{color:'#223442',position:100}]},
-  elevated:{enabled:false,angle:135,stops:[{color:'#223442',position:0},{color:'#293e4e',position:100}]},
-  button:{enabled:false,angle:135,stops:[{color:'#293e4e',position:0},{color:'#344a58',position:100}]},
-  primary:{enabled:true,angle:135,stops:[{color:'#5b5fc7',position:0},{color:'#31c7b5',position:100}]},
-  secondary:{enabled:false,angle:135,stops:[{color:'#8178d7',position:0},{color:'#c77dff',position:100}]},
-  accent:{enabled:false,angle:135,stops:[{color:'#42c7bd',position:0},{color:'#55a9d6',position:100}]},
-  canvas:{enabled:false,angle:135,stops:[{color:'#000000',position:0},{color:'#07101a',position:100}]}
-});
+export const createDefaultLayerGradients=(themeName:ThemeName='pdf-skeleton'):LayerGradients=>{const t=THEMES[themeName].tokens;return{
+  background:{enabled:false,angle:135,stops:[{color:t.background,position:0},{color:t.backgroundSecondary,position:100}]},
+  surface:{enabled:false,angle:160,stops:[{color:t.surface,position:0},{color:t.surfaceElevated,position:100}]},
+  elevated:{enabled:false,angle:135,stops:[{color:t.surfaceElevated,position:0},{color:t.surfaceHover,position:100}]},
+  button:{enabled:false,angle:135,stops:[{color:t.surfaceHover,position:0},{color:t.borderStrong,position:100}]},
+  primary:{enabled:true,angle:135,stops:[{color:t.gradientStart,position:0},{color:t.gradientEnd,position:100}]},
+  secondary:{enabled:false,angle:135,stops:[{color:t.primary,position:0},{color:t.secondary,position:100}]},
+  accent:{enabled:false,angle:135,stops:[{color:t.accent,position:0},{color:t.gradientEnd,position:100}]},
+  canvas:{enabled:false,angle:135,stops:[{color:'#000000',position:0},{color:t.background,position:100}]}
+}};
 
 export function gradientCss(gradient:LayerGradient,fallback:string):string{
   if(!gradient?.enabled||gradient.stops.length<2)return fallback;

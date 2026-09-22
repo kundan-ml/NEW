@@ -116,7 +116,7 @@ export function InspectionDashboard({
       const [i, s] = await Promise.all([api.system(), api.storageState()]);
       setInfo(i);
       setStorage(s);
-    } catch {}
+    } catch { }
   }, []);
   const changeOperationMode = useCallback(async (next?: "AUTO" | "MANUAL") => {
     const target = next || (operationMode === "AUTO" ? "MANUAL" : "AUTO");
@@ -129,21 +129,21 @@ export function InspectionDashboard({
       setToast(error instanceof Error ? error.message : "Unable to change operating mode");
     }
   }, [datasetId, operationMode, refreshSystem]);
-  async function rebuildGlobalHistory(allDatasets:DatasetSummary[]){
-    const ordered=[...allDatasets].sort((a,b)=>new Date(a.created_at).getTime()-new Date(b.created_at).getTime());
-    const loaded=await Promise.all(ordered.map(async dataset=>{
-      try{
-        const [sampleResponse,resultResponse]=await Promise.all([api.samples(dataset.id),api.results(dataset.id)]);
-        const resultBySample=new Map(resultResponse.items.map(result=>[result.sample_id,result]));
+  async function rebuildGlobalHistory(allDatasets: DatasetSummary[]) {
+    const ordered = [...allDatasets].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    const loaded = await Promise.all(ordered.map(async dataset => {
+      try {
+        const [sampleResponse, resultResponse] = await Promise.all([api.samples(dataset.id), api.results(dataset.id)]);
+        const resultBySample = new Map(resultResponse.items.map(result => [result.sample_id, result]));
         return sampleResponse.items
-          .sort((a,b)=>a.wt_index-b.wt_index||a.position-b.position||a.id.localeCompare(b.id))
-          .map(sample=>({datasetId:dataset.id,sample,result:resultBySample.get(sample.id)}));
-      }catch{return []}
+          .sort((a, b) => a.wt_index - b.wt_index || a.position - b.position || a.id.localeCompare(b.id))
+          .map(sample => ({ datasetId: dataset.id, sample, result: resultBySample.get(sample.id) }));
+      } catch { return [] }
     }));
-    const flat=loaded.flat().map((entry,index)=>({...entry,wt:Math.floor(index/16)+1,position:index%16+1}));
+    const flat = loaded.flat().map((entry, index) => ({ ...entry, wt: Math.floor(index / 16) + 1, position: index % 16 + 1 }));
     setGlobalHistory(flat);
-    const newestWt=flat.length?Math.ceil(flat.length/16):null;
-    setSelectedGlobalWt(currentWt=>currentWt&&newestWt&&currentWt<=newestWt?currentWt:newestWt);
+    const newestWt = flat.length ? Math.ceil(flat.length / 16) : null;
+    setSelectedGlobalWt(currentWt => currentWt && newestWt && currentWt <= newestWt ? currentWt : newestWt);
   }
   async function refreshDatasets(prefer?: string) {
     try {
@@ -155,7 +155,7 @@ export function InspectionDashboard({
         setDatasetId(id);
         return await loadDataset(id);
       }
-      setSamples([]);setResults([]);setCurrent(null);
+      setSamples([]); setResults([]); setCurrent(null);
       return [];
     } catch (error) {
       setToast(`Backend unavailable: ${(error as Error).message}`);
@@ -190,7 +190,7 @@ export function InspectionDashboard({
       return s.items;
     } catch (e) {
       setToast(`Dataset load failed: ${(e as Error).message}`);
-      setSamples([]);setResults([]);setCurrent(null);
+      setSamples([]); setResults([]); setCurrent(null);
       return [];
     }
   }
@@ -202,7 +202,7 @@ export function InspectionDashboard({
       .then((x) => {
         if (x.items.length) setLogs(x.items.reverse());
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => {
       runTokenRef.current += 1;
       wsRef.current?.close();
@@ -214,10 +214,10 @@ export function InspectionDashboard({
     () => new Map(results.map((r) => [r.sample_id, r])),
     [results],
   );
-  useEffect(()=>{
-    if(!datasetId)return;
-    setGlobalHistory(previous=>previous.map(entry=>entry.datasetId===datasetId?{...entry,result:resultMap.get(entry.sample.id)||entry.result}:entry));
-  },[datasetId,resultMap]);
+  useEffect(() => {
+    if (!datasetId) return;
+    setGlobalHistory(previous => previous.map(entry => entry.datasetId === datasetId ? { ...entry, result: resultMap.get(entry.sample.id) || entry.result } : entry));
+  }, [datasetId, resultMap]);
   const sample = useMemo(
     () => samples.find((s) => s.id === current) || null,
     [samples, current],
@@ -228,8 +228,8 @@ export function InspectionDashboard({
       errorMode === "none"
         ? []
         : (currentResult?.defects || []).filter(
-            (d) => errorMode === "all" || (d.tolerance || "AT") === "AT",
-          ),
+          (d) => errorMode === "all" || (d.tolerance || "AT") === "AT",
+        ),
     [currentResult, errorMode],
   );
   const counts = useMemo(
@@ -245,9 +245,9 @@ export function InspectionDashboard({
   );
   const yieldPct = results.length ? (counts.OK / results.length) * 100 : 0;
   const nokRate = results.length ? (counts.NOK / results.length) * 100 : 0;
-  const activeGlobalWt=selectedGlobalWt||globalHistory.find(entry=>entry.datasetId===datasetId&&entry.sample.id===current)?.wt||1;
-  const wtEntries=useMemo(()=>globalHistory.filter(entry=>entry.wt===activeGlobalWt),[globalHistory,activeGlobalWt]);
-  const wtSamples = useMemo(()=>wtEntries.map(entry=>entry.sample),[wtEntries]);
+  const activeGlobalWt = selectedGlobalWt || globalHistory.find(entry => entry.datasetId === datasetId && entry.sample.id === current)?.wt || 1;
+  const wtEntries = useMemo(() => globalHistory.filter(entry => entry.wt === activeGlobalWt), [globalHistory, activeGlobalWt]);
+  const wtSamples = useMemo(() => wtEntries.map(entry => entry.sample), [wtEntries]);
   const wtChannelImages = useMemo(
     () =>
       Array.from({ length: 16 }, (_, i) => {
@@ -255,7 +255,7 @@ export function InspectionDashboard({
           entry = wtEntries.find((row) => row.position === position),
           s = entry?.sample,
           image = s?.images[channel],
-          result = entry?.datasetId===datasetId&&s ? resultMap.get(s.id)||entry.result : entry?.result,
+          result = entry?.datasetId === datasetId && s ? resultMap.get(s.id) || entry.result : entry?.result,
           defect = result?.defects?.[0]?.name || "No defect";
         return {
           position,
@@ -379,7 +379,7 @@ export function InspectionDashboard({
     }
   }
 
-  async function run(targetDatasetId=datasetId, targetSampleCount=samples.length) {
+  async function run(targetDatasetId = datasetId, targetSampleCount = samples.length) {
     if (!targetDatasetId || isRunning) return;
     if (!targetSampleCount) {
       setToast("This lot contains no supported inspection images.");
@@ -413,11 +413,11 @@ export function InspectionDashboard({
           api
             .logs()
             .then((x) => setLogs(x.items.reverse()))
-            .catch(() => {});
+            .catch(() => { });
           api
             .storageState()
             .then(setStorage)
-            .catch(() => {});
+            .catch(() => { });
           ws.close();
           if (wsRef.current === ws) wsRef.current = null;
         }
@@ -433,11 +433,11 @@ export function InspectionDashboard({
       setBusy(false);
     }
   }
-  async function handleLotLoaded(id:string) {
-    const loadedSamples=await refreshDatasets(id);
+  async function handleLotLoaded(id: string) {
+    const loadedSamples = await refreshDatasets(id);
     setToast(`New lot imported · ${loadedSamples.length} lenses`);
-    if(operationMode==="AUTO"&&loadedSamples.length){
-      await run(id,loadedSamples.length);
+    if (operationMode === "AUTO" && loadedSamples.length) {
+      await run(id, loadedSamples.length);
     }
   }
   async function stop() {
@@ -507,23 +507,23 @@ export function InspectionDashboard({
     setCurrent(id);
     setSelectedDefect(0);
     const s = samples.find((x) => x.id === id);
-    const historyEntry=globalHistory.find(entry=>entry.datasetId===datasetId&&entry.sample.id===id);
-    if(historyEntry)setSelectedGlobalWt(historyEntry.wt);
+    const historyEntry = globalHistory.find(entry => entry.datasetId === datasetId && entry.sample.id === id);
+    if (historyEntry) setSelectedGlobalWt(historyEntry.wt);
     if (s && !s.images[channel])
       setChannel(
         s.images.h ? "h" : s.images.d ? "d" : Object.keys(s.images)[0] || "h",
       );
   }
-  async function selectHistoryEntry(entry:GlobalHistoryEntry){
+  async function selectHistoryEntry(entry: GlobalHistoryEntry) {
     setSelectedGlobalWt(entry.wt);
-    if(entry.datasetId!==datasetId){
+    if (entry.datasetId !== datasetId) {
       setDatasetId(entry.datasetId);
       await loadDataset(entry.datasetId);
     }
     setCurrent(entry.sample.id);
     setSelectedDefect(0);
-    const available=entry.sample.images;
-    if(!available[channel])setChannel(available.h?"h":available.d?"d":Object.keys(available)[0]||"h");
+    const available = entry.sample.images;
+    if (!available[channel]) setChannel(available.h ? "h" : available.d ? "d" : Object.keys(available)[0] || "h");
   }
   function relative(step: number) {
     if (!sample || !samples.length) return;
@@ -751,11 +751,11 @@ export function InspectionDashboard({
             stats={
               prefs.showKpis
                 ? {
-                    yieldPct: displayYield,
-                    total: samples.length,
-                    nokRate: displayNok,
-                    evaluated: results.length,
-                  }
+                  yieldPct: displayYield,
+                  total: samples.length,
+                  nokRate: displayNok,
+                  evaluated: results.length,
+                }
                 : undefined
             }
           />
@@ -819,7 +819,7 @@ export function InspectionDashboard({
                 currentDatasetId={datasetId}
                 onPick={select}
                 history={globalHistory}
-                onHistoryPick={(entry) => {void selectHistoryEntry(entry)}}
+                onHistoryPick={(entry) => { void selectHistoryEntry(entry) }}
                 maxRows={40}
                 onArchive={async (wt) => {
                   try {
@@ -909,11 +909,11 @@ export function InspectionDashboard({
             <section className="inspectionMachinePanel">
               <div className="inspectionStationName">
                 <span>
-                  <b>Installation GDL6BV2</b> · Station 2
+                  {/* <b>Installation GDL6BV2</b> · Station 2 */} <b className="" >Station 1</b>
                 </span>
               </div>
               <div className="inspectionControlBlock">
-                <h2>Current operating mode</h2>
+                <h2>Current Business mode</h2>
                 <button
                   className={`inspectionModeToggle ${operationMode.toLowerCase()}`}
                   onClick={() => changeOperationMode()}
@@ -921,7 +921,7 @@ export function InspectionDashboard({
                 >
                   {operationMode === "AUTO" ? <Play /> : <Pause />}
                   <span>
-                    <b>{operationMode === "AUTO" ? "Automatic operation" : "Manual operation"}</b>
+                    <b>{operationMode === "AUTO" ? "Setup Mode ( Automatic )" : " Setup Mode ( Manual )"}</b>
                     <small>
                       {operationMode === "AUTO"
                         ? isRunning ? "Inspection cycle active" : "Ready for production"
@@ -996,6 +996,11 @@ export function InspectionDashboard({
               selectedDefect={selectedDefect}
               onProbe={setProbe}
               processing={isRunning}
+              availablePositions={wtEntries.map((entry) => entry.position)}
+              onPosition={(position) => {
+                const entry = wtEntries.find((item) => item.position === position);
+                if (entry) void selectHistoryEntry(entry);
+              }}
             />
             <button
               className="inspectionVerticalSplit detailsSplit"
@@ -1143,7 +1148,7 @@ export function InspectionDashboard({
                       {wtChannelImages.filter((item) => item.image).length}{" "}
                       images
                     </em>
-                    <div className="inspectionWtToggle">
+                    {/* <div className="inspectionWtToggle">
                       <button
                         className={wtViewMode === "images" ? "active" : ""}
                         onClick={() => setWtViewMode("images")}
@@ -1156,7 +1161,7 @@ export function InspectionDashboard({
                       >
                         Names
                       </button>
-                    </div>
+                    </div> */}
                   </div>
                 )}
                 {inspectionBottomTab === "messages" && (
@@ -1214,7 +1219,7 @@ export function InspectionDashboard({
                           key={`${item.position}-${item.channel}`}
                           className={`${item.sample?.id === current ? "selected" : ""} ${!item.image ? "missing" : ""} ${tone}`}
                           onClick={() => {
-                            if (item.sample&&item.entry) {
+                            if (item.sample && item.entry) {
                               void selectHistoryEntry(item.entry);
                               setChannel(item.channel);
                             }
@@ -1332,11 +1337,11 @@ export function InspectionDashboard({
               aria-labelledby="login-title"
             >
               <div className="loginModalBrand">
-              <div className="loginEmblem emageLoginEmblem">
-                <img src="/brand/emage-mark.png" alt="Emage Group" />
+                <div className="loginEmblem emageLoginEmblem">
+                  <img src="/brand/emage-mark.png" alt="Emage Group" />
                 </div>
                 <span>
-                <small>EMAGE GROUP · SECURE ACCESS</small>
+                  <small>EMAGE GROUP · SECURE ACCESS</small>
                   <h2 id="login-title">Sign in or switch user</h2>
                   <p>
                     Select the operator identity and permission level for this
@@ -1405,7 +1410,7 @@ export function InspectionDashboard({
         <DatasetLoader
           open={loader}
           onClose={() => setLoader(false)}
-          onLoaded={(id) => {void handleLotLoaded(id)}}
+          onLoaded={(id) => { void handleLotLoaded(id) }}
         />
       </div>
     );
@@ -1425,11 +1430,11 @@ export function InspectionDashboard({
         stats={
           prefs.showKpis
             ? {
-                yieldPct: displayYield,
-                total: samples.length,
-                nokRate: displayNok,
-                evaluated: results.length,
-              }
+              yieldPct: displayYield,
+              total: samples.length,
+              nokRate: displayNok,
+              evaluated: results.length,
+            }
             : undefined
         }
       />
@@ -1526,7 +1531,7 @@ export function InspectionDashboard({
               currentDatasetId={datasetId}
               onPick={select}
               history={globalHistory}
-              onHistoryPick={(entry) => {void selectHistoryEntry(entry)}}
+              onHistoryPick={(entry) => { void selectHistoryEntry(entry) }}
               onArchive={async (wt) => {
                 try {
                   const r = await api.archiveRing(datasetId, wt);
@@ -1559,6 +1564,11 @@ export function InspectionDashboard({
             selectedDefect={selectedDefect}
             onProbe={setProbe}
             processing={job?.status === "running"}
+            availablePositions={wtEntries.map((entry) => entry.position)}
+            onPosition={(position) => {
+              const entry = wtEntries.find((item) => item.position === position);
+              if (entry) void selectHistoryEntry(entry);
+            }}
           />
           {showDetails && (
             <button
@@ -1914,7 +1924,7 @@ export function InspectionDashboard({
       <DatasetLoader
         open={loader}
         onClose={() => setLoader(false)}
-        onLoaded={(id) => {void handleLotLoaded(id)}}
+        onLoaded={(id) => { void handleLotLoaded(id) }}
       />
     </div>
   );
