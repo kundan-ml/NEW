@@ -715,11 +715,11 @@ export function InspectionDashboard({
             >
               Info
             </button>
-            <button
+            {/* <button
               onClick={() => setToast("Open the operator manual for help")}
             >
               Help
-            </button>
+            </button> */}
             <button
               onClick={() =>
                 setToast("Exit is disabled in the browser interface")
@@ -951,7 +951,7 @@ export function InspectionDashboard({
               <div className="inspectionWtCard">
                 <h2>Current WT</h2>
                 <InfoRow
-                  label="WT Nr."
+                  label="CT No."
                   value={
                     sample?.metadata.io_code || `CV-${sample?.wt_index || "—"}`
                   }
@@ -1600,7 +1600,7 @@ export function InspectionDashboard({
                   />
                   <InfoRow label="Lot Nr." value="N4262524" />
                   <InfoRow
-                    label="WT Nr."
+                    label="CT No."
                     value={
                       sample?.metadata.io_code ||
                       `CV-${sample?.wt_index || "—"}`
