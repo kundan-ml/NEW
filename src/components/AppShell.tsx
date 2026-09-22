@@ -22,8 +22,8 @@ import {CustomizationDrawer} from './CustomizationDrawer';
 import {CommandPalette} from './CommandPalette';
 
 const items=[
-  ['/','Dashboard',LayoutDashboard],
-  ['/inspect','Inspection',Microscope],
+  ['/','Inspection',Microscope],
+  ['/dashboard','Dashboard',LayoutDashboard],
   ['/history','WT History',History],
   ['/registration','Registration',Camera],
   ['/focus','Focus Check',ChartNoAxesCombined],
@@ -68,8 +68,8 @@ function ShellInner({children}:{children:React.ReactNode}){
 
   return <div className={`appShell ${prefs.sidebarCollapsed?'sidebarCollapsed':''} ${prefs.manualSkeleton?'manualSkeletonShell':''}`}>
     {!prefs.manualSkeleton&&<aside className="sideRail productionRail">
-      <button className="brandArea productionBrand" onClick={()=>setCustomize(true)} title="Oaklin interface settings" aria-label="Open interface settings">
-        <span className="brandAperture"><i/><i/><i/><i/><i/><i/></span>
+      <button className="brandArea productionBrand emageRailBrand" onClick={()=>setCustomize(true)} title="Emage Group interface settings" aria-label="Open interface settings">
+        <span className="emageMark"><img src="/brand/emage-mark.png" alt="Emage Group"/></span>
       </button>
 
       <nav className="productionNav" aria-label="Primary navigation">
@@ -92,7 +92,7 @@ function ShellInner({children}:{children:React.ReactNode}){
         >
           {prefs.sidebarCollapsed?<ChevronsRight/>:<ChevronsLeft/>}
         </button>
-        <span className="buildLabel">OAKLIN · v7.4</span>
+        <span className="buildLabel">EMAGE · v7.4</span>
       </div>
     </aside>}
 

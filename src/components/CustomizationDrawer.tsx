@@ -1,27 +1,15 @@
 'use client';
 
 import {Check,ChevronRight,ExternalLink,LayoutDashboard,MonitorCog,Palette,RotateCcw,Sparkles,X} from 'lucide-react';
-import {useUI,type AccentPreset,type Density,type StatusShape,type ThemePreset} from './UIProvider';
+import {useUI,type Density,type StatusShape} from './UIProvider';
+import {GRADIENT_ANGLES,THEMES,type GradientDirection,type LayerGradient} from '@/lib/themes';
 
 export function CustomizationDrawer({open,onClose}:{open:boolean;onClose:()=>void}){
   const{prefs,set,patch,reset}=useUI();
   if(!open)return null;
 
-  const themes:{key:ThemePreset;label:string;hint:string}[]=[
-    {key:'charcoal',label:'Charcoal',hint:'Deep neutral production default'},
-    {key:'graphite',label:'Graphite',hint:'Soft grey executive workstation'},
-    {key:'slate',label:'Industrial Slate',hint:'Steel blue inspection environment'},
-    {key:'navy',label:'Technical Navy',hint:'Classic optical workstation'},
-    {key:'classic',label:'Heritage',hint:'Warm charcoal and brass'},
-    {key:'arctic',label:'Arctic',hint:'Light laboratory workspace'}
-  ];
-  const accents:{key:AccentPreset;label:string}[]=[
-    {key:'bronze',label:'Classic Bronze'},
-    {key:'azure',label:'Azure'},
-    {key:'cyan',label:'Cyan'},
-    {key:'violet',label:'Violet'},
-    {key:'emerald',label:'Emerald'}
-  ];
+  const themes=Object.values(THEMES);
+  const activeTokens=THEMES[prefs.theme].tokens;
   const densities:Density[]=['compact','comfortable','spacious'];
 
   return <div className="drawerBackdrop" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
@@ -31,7 +19,7 @@ export function CustomizationDrawer({open,onClose}:{open:boolean;onClose:()=>voi
         <div>
           <span className="eyebrowText">PERSONALIZE WORKSPACE</span>
           <h2>Interface Studio</h2>
-          <p>Changes are saved locally on this workstation.</p>
+          <p>Changes are saved to the shared workstation profile.</p>
         </div>
         <button className="iconButton" onClick={onClose}><X/></button>
         <button className="drawerPopout" title="Open on another monitor" onClick={()=>window.open('/ui-studio','oaklin-ui-studio','width=520,height=900,resizable=yes,scrollbars=yes')}><ExternalLink/> Pop out</button>
@@ -77,11 +65,11 @@ export function CustomizationDrawer({open,onClose}:{open:boolean;onClose:()=>voi
             <div><b>Visual theme</b><small>Production-friendly palettes with status colors preserved</small></div>
           </div>
           <div className="themeCards">
-            {themes.map(t=>
-              <button key={t.key} onClick={()=>patch({theme:t.key,customBg:'',customPanel:'',customHeader:'',customButton:'',customCanvas:'',customBorder:'',customText:''})} className={prefs.theme===t.key?'selected':''}>
-                <i className={`themePreview ${t.key}`}/>
-                <span><b>{t.label}</b><small>{t.hint}</small></span>
-                {prefs.theme===t.key&&<Check/>}
+            {themes.map(theme=>
+              <button key={theme.name} onClick={()=>patch({theme:theme.name,manualSkeleton:theme.name==='pdf-skeleton'?true:prefs.manualSkeleton,customBg:'',customPanel:'',customHeader:'',customButton:'',customCanvas:'',customBorder:'',customText:'',customPrimary:'',customSecondary:'',customAccent:'',gradientStart:'',gradientEnd:''})} className={prefs.theme===theme.name?'selected':''}>
+                <i className="themePreview" style={{'--preview-bg':theme.tokens.background,'--preview-surface':theme.tokens.surface,'--preview-accent':theme.tokens.accent,'--preview-gradient':`linear-gradient(135deg,${theme.tokens.gradientStart},${theme.tokens.gradientEnd})`} as React.CSSProperties}><span/><em/></i>
+                <span><b>{theme.label}</b><small>{theme.description}</small></span>
+                {prefs.theme===theme.name&&<Check/>}
               </button>
             )}
           </div>
@@ -91,28 +79,33 @@ export function CustomizationDrawer({open,onClose}:{open:boolean;onClose:()=>voi
           <div className="customTitle"><Palette/><div><b>Fine color controls</b><small>Override individual interface layers after choosing a theme</small></div></div>
           <div className="fineColorGrid">
             {([
-              ['Page background','customBg','#0b0d0f'],['Panels','customPanel','#15191c'],['Headers & tabs','customHeader','#22282d'],['Buttons','customButton','#1a1f23'],['Image canvas','customCanvas','#000000'],['Borders','customBorder','#343b40'],['Primary text','customText','#eeece7']
+              ['Page background','customBg',activeTokens.background],['Panels','customPanel',activeTokens.surface],['Headers & tabs','customHeader',activeTokens.surfaceElevated],['Buttons','customButton',activeTokens.surfaceHover],['Image canvas','customCanvas','#000000'],['Borders','customBorder',activeTokens.border],['Primary text','customText',activeTokens.textPrimary],['Primary color','customPrimary',activeTokens.primary],['Secondary color','customSecondary',activeTokens.secondary],['Accent color','customAccent',activeTokens.accent]
             ] as const).map(([label,key,fallback])=><label key={key}><input type="color" value={prefs[key]||fallback} onChange={e=>set(key,e.target.value)}/><span>{label}</span></label>)}
           </div>
-          <button className="clearColorOverrides" onClick={()=>patch({customBg:'',customPanel:'',customHeader:'',customButton:'',customCanvas:'',customBorder:'',customText:''})}>Use selected theme colors</button>
+          <button className="clearColorOverrides" onClick={()=>patch({customBg:'',customPanel:'',customHeader:'',customButton:'',customCanvas:'',customBorder:'',customText:'',customPrimary:'',customSecondary:'',customAccent:''})}>Use selected theme colors</button>
+        </section>
+
+        <section className="customSection gradientEditorSection">
+          <div className="customTitle"><Sparkles/><div><b>Gradient studio</b><small>Central accent gradient shared by active controls and highlights</small></div></div>
+          <div className="gradientColorRow">
+            <ColorField label="Start" value={prefs.gradientStart||THEMES[prefs.theme].tokens.gradientStart} onChange={value=>set('gradientStart',value)}/>
+            <ColorField label="End" value={prefs.gradientEnd||THEMES[prefs.theme].tokens.gradientEnd} onChange={value=>set('gradientEnd',value)}/>
+          </div>
+          <label className="gradientDirection"><span>Direction</span><select value={prefs.gradientDirection} onChange={event=>set('gradientDirection',event.target.value as GradientDirection)}><option value="to-right">Left → Right</option><option value="to-left">Right → Left</option><option value="to-bottom">Top → Bottom</option><option value="to-top">Bottom → Top</option><option value="to-bottom-right">Top Left → Bottom Right</option><option value="to-top-right">Bottom Left → Top Right</option></select></label>
+          <Slider label="Gradient intensity" value={prefs.gradientIntensity} min={.25} max={1} step={.05} suffix={`${Math.round(prefs.gradientIntensity*100)}%`} onChange={value=>set('gradientIntensity',value)}/>
+          <div className="gradientLivePreview" style={{background:`linear-gradient(${GRADIENT_ANGLES[prefs.gradientDirection]},${prefs.gradientStart||THEMES[prefs.theme].tokens.gradientStart},${prefs.gradientEnd||THEMES[prefs.theme].tokens.gradientEnd})`}}><span>Live gradient</span><em>{GRADIENT_ANGLES[prefs.gradientDirection]}</em></div>
+          <button className="clearColorOverrides" onClick={()=>patch({gradientStart:'',gradientEnd:'',gradientDirection:'to-bottom-right',gradientIntensity:.9})}>Use theme gradient</button>
+        </section>
+
+        <section className="customSection layerGradientSection">
+          <div className="customTitle"><Palette/><div><b>Advanced layer gradients</b><small>Multi-color gradients with individual stops, percentages and 360° rotation</small></div></div>
+          <div className="layerGradientList">
+            {([['background','Page'],['surface','Panels'],['elevated','Headers'],['button','Buttons'],['primary','Primary actions'],['secondary','Secondary accents'],['accent','Accent details'],['canvas','Canvas']] as const).map(([key,label])=><LayerGradientEditor key={key} label={label} value={prefs.layerGradients[key]} onChange={value=>set('layerGradients',{...prefs.layerGradients,[key]:value})}/>) }
+          </div>
         </section>
 
         <section className="customSection">
-          <div className="customTitle">
-            <Sparkles/>
-            <div><b>Accent & motion</b><small>Decorative color never replaces OK/NOK semantics</small></div>
-          </div>
-          <div className="accentRow">
-            {accents.map(a=>
-              <button
-                key={a.key}
-                aria-label={a.label}
-                title={a.label}
-                className={`${a.key} ${prefs.accent===a.key?'selected':''}`}
-                onClick={()=>set('accent',a.key)}
-              ><i/></button>
-            )}
-          </div>
+          <div className="customTitle"><Sparkles/><div><b>Motion & atmosphere</b><small>Subtle interaction polish without distracting operators</small></div></div>
           <Toggle label="Interface animations" hint="Subtle transitions, live pulse and scan effects" checked={prefs.motion} onChange={v=>set('motion',v)}/>
           <Toggle label="Ambient glow" hint="Soft panel edge illumination" checked={prefs.glow} onChange={v=>set('glow',v)}/>
         </section>
@@ -197,4 +190,16 @@ function Slider({label,value,min,max,step,suffix,onChange}:{label:string;value:n
     <span><b>{label}</b><em>{suffix}</em></span>
     <input type="range" value={value} min={min} max={max} step={step} onChange={e=>onChange(Number(e.target.value))}/>
   </label>;
+}
+
+function ColorField({label,value,onChange}:{label:string;value:string;onChange:(value:string)=>void}){
+  return <label className="gradientColorField"><span>{label}</span><div><input type="color" value={value} onChange={event=>onChange(event.target.value)}/><code>{value.toUpperCase()}</code></div></label>;
+}
+
+function LayerGradientEditor({label,value,onChange}:{label:string;value:LayerGradient;onChange:(value:LayerGradient)=>void}){
+  const updateStop=(index:number,patch:Partial<LayerGradient['stops'][number]>)=>onChange({...value,stops:value.stops.map((stop,i)=>i===index?{...stop,...patch}:stop)});
+  const addStop=()=>{if(value.stops.length>=5)return;onChange({...value,stops:[...value.stops,{color:'#ffffff',position:50}].sort((a,b)=>a.position-b.position)})};
+  const removeStop=(index:number)=>{if(value.stops.length<=2)return;onChange({...value,stops:value.stops.filter((_,i)=>i!==index)})};
+  const preview=`linear-gradient(${value.angle}deg,${[...value.stops].sort((a,b)=>a.position-b.position).map(stop=>`${stop.color} ${stop.position}%`).join(',')})`;
+  return <details className="layerGradientEditor"><summary><span className="layerGradientSwatch" style={{background:value.enabled?preview:value.stops[0]?.color}}/><b>{label}</b><em>{value.enabled?`${value.stops.length} colors · ${value.angle}°`:'Solid'}</em></summary><div className="layerGradientBody"><Toggle label="Use gradient" checked={value.enabled} onChange={enabled=>onChange({...value,enabled})}/><Slider label="Rotation" value={value.angle} min={0} max={360} step={1} suffix={`${value.angle}°`} onChange={angle=>onChange({...value,angle})}/><div className="gradientStops">{value.stops.map((stop,index)=><div key={index}><input type="color" value={stop.color} onChange={event=>updateStop(index,{color:event.target.value})}/><input type="range" min={0} max={100} value={stop.position} onChange={event=>updateStop(index,{position:Number(event.target.value)})}/><code>{stop.position}%</code><button onClick={()=>removeStop(index)} disabled={value.stops.length<=2}>×</button></div>)}</div><div className="layerGradientPreview" style={{background:preview}}/><button className="addGradientStop" onClick={addStop} disabled={value.stops.length>=5}>+ Add color stop</button></div></details>;
 }

@@ -1,28 +1,37 @@
 'use client';
 
 import {useCallback,useEffect,useRef,useState} from 'react';
-import {Crosshair,Focus,Maximize2,Minus,MousePointer2,Plus,RotateCcw,ScanSearch} from 'lucide-react';
+import {createPortal} from 'react-dom';
+import {Crosshair,Focus,Maximize2,Minimize2,Minus,MousePointer2,Plus,RotateCcw,ScanSearch} from 'lucide-react';
 import type {Defect} from '@/types';
 
 type Probe={x:number;y:number;gray:number|null};
 type Props={imageUrl:string;defects:Defect[];selectedDefect?:number;showDefects?:boolean;showCrosshair?:boolean;onProbe?:(p:Probe)=>void};
 type View={scale:number;x:number;y:number};
+type SavedView={scale:number;centerX:number;centerY:number};
+
+const VIEW_STORAGE_KEY='lens-inspection-canvas-views-v1';
+
+function readSavedView(imageUrl:string):SavedView|null{
+ try{const views=JSON.parse(localStorage.getItem(VIEW_STORAGE_KEY)||'{}');const saved=views[imageUrl];return saved&&Number.isFinite(saved.scale)&&Number.isFinite(saved.centerX)&&Number.isFinite(saved.centerY)?saved:null}catch{return null}
+}
 
 export function InspectionCanvas({imageUrl,defects,selectedDefect=0,showDefects=true,showCrosshair=true,onProbe}:Props){
- const host=useRef<HTMLDivElement>(null);const canvas=useRef<HTMLCanvasElement>(null);const source=useRef<HTMLImageElement|null>(null);const pixels=useRef<HTMLCanvasElement|null>(null);const frame=useRef<number|null>(null);
- const[view,setView]=useState<View>({scale:1,x:0,y:0});const[drag,setDrag]=useState<{sx:number;sy:number;vx:number;vy:number}|null>(null);const[state,setState]=useState<'idle'|'loading'|'ready'|'error'>('idle');const[error,setError]=useState('');const[probe,setProbe]=useState<Probe|null>(null);
+ const host=useRef<HTMLDivElement>(null);const canvas=useRef<HTMLCanvasElement>(null);const source=useRef<HTMLImageElement|null>(null);const pixels=useRef<HTMLCanvasElement|null>(null);const frame=useRef<number|null>(null);const activeImage=useRef('');const lastSize=useRef({width:0,height:0});
+ const[view,setView]=useState<View>({scale:1,x:0,y:0});const[drag,setDrag]=useState<{sx:number;sy:number;vx:number;vy:number}|null>(null);const[state,setState]=useState<'idle'|'loading'|'ready'|'error'>('idle');const[error,setError]=useState('');const[probe,setProbe]=useState<Probe|null>(null);const[expanded,setExpanded]=useState(false);const[popupAspect,setPopupAspect]=useState(16/9);
 
  const fit=useCallback(()=>{const h=host.current,i=source.current;if(!h||!i||!i.naturalWidth)return;const r=h.getBoundingClientRect();const padding=Math.max(28,Math.min(r.width,r.height)*.055);const s=Math.max(.01,Math.min((r.width-padding*2)/i.naturalWidth,(r.height-padding*2)/i.naturalHeight));setView({scale:s,x:(r.width-i.naturalWidth*s)/2,y:(r.height-i.naturalHeight*s)/2})},[]);
+ const restoreOrFit=useCallback((url:string)=>{const h=host.current,i=source.current;if(!h||!i)return;const r=h.getBoundingClientRect(),saved=readSavedView(url);lastSize.current={width:r.width,height:r.height};activeImage.current=url;if(saved){const scale=Math.max(.025,Math.min(12,saved.scale));setView({scale,x:r.width/2-saved.centerX*scale,y:r.height/2-saved.centerY*scale})}else fit()},[fit]);
 
  useEffect(()=>{
-   let revoked='';setProbe(null);setError('');
+   let revoked='';activeImage.current='';setProbe(null);setError('');
    if(!imageUrl){source.current=null;pixels.current=null;setState('idle');return}
    setState('loading');
    if(imageUrl.startsWith('demo:')){
      const parts=imageUrl.split(':'),position=Number(parts[3]||7),channel=parts[4]||'h',status=parts[5]||'OK';
      const p=document.createElement('canvas');p.width=900;p.height=900;const ctx=p.getContext('2d');
      if(ctx){
-       const bg=ctx.createRadialGradient(450,430,60,450,450,445);bg.addColorStop(0,'#1d2428');bg.addColorStop(.76,'#080d11');bg.addColorStop(1,'#010305');ctx.fillStyle=bg;ctx.fillRect(0,0,900,900);
+       ctx.fillStyle='#000000';ctx.fillRect(0,0,900,900);
        ctx.save();ctx.shadowColor='rgba(218,238,242,.48)';ctx.shadowBlur=34;ctx.beginPath();ctx.arc(450,450,340,0,Math.PI*2);ctx.fillStyle=channel==='d'?'#535d61':'#aeb5b3';ctx.fill();ctx.restore();
        const lens=ctx.createRadialGradient(410,390,45,450,450,332);lens.addColorStop(0,channel==='d'?'#6f787a':'#cbd0cd');lens.addColorStop(.52,channel==='d'?'#596365':'#afb6b3');lens.addColorStop(.88,channel==='d'?'#434d50':'#929b99');lens.addColorStop(1,'#d6dcd8');ctx.beginPath();ctx.arc(450,450,323,0,Math.PI*2);ctx.fillStyle=lens;ctx.fill();
        ctx.strokeStyle='rgba(5,11,14,.94)';ctx.lineWidth=8;ctx.beginPath();ctx.arc(450,450,295,0,Math.PI*2);ctx.stroke();
@@ -32,24 +41,22 @@ export function InspectionCanvas({imageUrl,defects,selectedDefect=0,showDefects=
        if(status!=='OK'){ctx.strokeStyle=status==='NOK'?'#ff2f8f':'#f2b94b';ctx.lineWidth=6;ctx.lineCap='round';[[.78,.24,.89,.33],[.75,.72,.86,.68],[.22,.71,.27,.75]].slice(0,status==='NOK'?3:1).forEach(([x1,y1,x2,y2])=>{ctx.beginPath();ctx.moveTo(x1*900,y1*900);ctx.quadraticCurveTo((x1+x2)*450+12,y1*900-18,x2*900,y2*900);ctx.stroke()})}
        ctx.strokeStyle='rgba(255,255,255,.88)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(430,450);ctx.lineTo(470,450);ctx.moveTo(450,430);ctx.lineTo(450,470);ctx.stroke();
      }
-     const i=new Image();i.decoding='async';i.onload=()=>{source.current=i;pixels.current=p;setState('ready');requestAnimationFrame(fit)};i.src=p.toDataURL('image/png');
+     const i=new Image();i.decoding='async';i.onload=()=>{source.current=i;pixels.current=p;setState('ready');requestAnimationFrame(()=>restoreOrFit(imageUrl))};i.src=p.toDataURL('image/png');
      return;
    }
    const controller=new AbortController();
    (async()=>{try{
      const res=await fetch(imageUrl,{cache:'no-store',signal:controller.signal});if(!res.ok)throw new Error(`Image request failed (${res.status})`);
      const blob=await res.blob();revoked=URL.createObjectURL(blob);const i=new Image();i.decoding='async';
-     i.onload=()=>{source.current=i;const p=document.createElement('canvas');p.width=i.naturalWidth;p.height=i.naturalHeight;const ctx=p.getContext('2d',{willReadFrequently:true});ctx?.drawImage(i,0,0);pixels.current=p;setState('ready');requestAnimationFrame(fit)};
+     i.onload=()=>{source.current=i;const p=document.createElement('canvas');p.width=i.naturalWidth;p.height=i.naturalHeight;const ctx=p.getContext('2d',{willReadFrequently:true});ctx?.drawImage(i,0,0);pixels.current=p;setState('ready');requestAnimationFrame(()=>restoreOrFit(imageUrl))};
      i.onerror=()=>{setState('error');setError('The browser could not decode this preview image.')};i.src=revoked;
    }catch(e){if(!controller.signal.aborted){setState('error');setError(e instanceof Error?e.message:'Unable to load image')}}})();
    return()=>{controller.abort();if(revoked)URL.revokeObjectURL(revoked)};
- },[imageUrl,fit]);
+ },[imageUrl,restoreOrFit]);
 
  const paint=useCallback(()=>{
    const c=canvas.current,h=host.current;if(!c||!h)return;const r=h.getBoundingClientRect();if(r.width<2||r.height<2)return;const dpr=Math.min(window.devicePixelRatio||1,2);const w=Math.max(1,Math.round(r.width*dpr)),hh=Math.max(1,Math.round(r.height*dpr));if(c.width!==w||c.height!==hh){c.width=w;c.height=hh;c.style.width=`${r.width}px`;c.style.height=`${r.height}px`}
-   const ctx=c.getContext('2d');if(!ctx)return;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,r.width,r.height);
-   const bg=ctx.createRadialGradient(r.width*.50,r.height*.44,10,r.width*.50,r.height*.50,Math.max(r.width,r.height)*.75);bg.addColorStop(0,'#122236');bg.addColorStop(.52,'#07111c');bg.addColorStop(1,'#02060b');ctx.fillStyle=bg;ctx.fillRect(0,0,r.width,r.height);
-   ctx.save();ctx.strokeStyle='rgba(112,176,222,.035)';ctx.lineWidth=1;for(let x=0;x<r.width;x+=32){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,r.height);ctx.stroke()}for(let y=0;y<r.height;y+=32){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(r.width,y);ctx.stroke()}ctx.restore();
+   const ctx=c.getContext('2d');if(!ctx)return;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,r.width,r.height);ctx.fillStyle='#000000';ctx.fillRect(0,0,r.width,r.height);
    const i=source.current;if(!i||state!=='ready'){
      ctx.textAlign='center';ctx.fillStyle=state==='error'?'#ff8da0':'#87a1b6';ctx.font='600 13px Inter,system-ui';ctx.fillText(state==='loading'?'Loading inspection image…':state==='error'?'Image preview unavailable':'Select a lens to start inspection',r.width/2,r.height/2-4);if(state==='error'){ctx.fillStyle='#60798d';ctx.font='11px Inter,system-ui';ctx.fillText(error.slice(0,90),r.width/2,r.height/2+18)}return;
    }
@@ -58,9 +65,10 @@ export function InspectionCanvas({imageUrl,defects,selectedDefect=0,showDefects=
    if(showCrosshair){const cx=view.x+i.naturalWidth*view.scale/2,cy=view.y+i.naturalHeight*view.scale/2;ctx.save();ctx.strokeStyle='rgba(81,188,255,.78)';ctx.lineWidth=1;ctx.setLineDash([7,7]);ctx.beginPath();ctx.moveTo(cx-90,cy);ctx.lineTo(cx+90,cy);ctx.moveTo(cx,cy-90);ctx.lineTo(cx,cy+90);ctx.stroke();ctx.setLineDash([]);ctx.beginPath();ctx.arc(cx,cy,8,0,Math.PI*2);ctx.stroke();ctx.restore()}
  },[defects,error,selectedDefect,showCrosshair,showDefects,state,view]);
 
- useEffect(()=>{if(frame.current)cancelAnimationFrame(frame.current);frame.current=requestAnimationFrame(paint);return()=>{if(frame.current)cancelAnimationFrame(frame.current)}},[paint]);
- useEffect(()=>{const h=host.current;if(!h)return;const ro=new ResizeObserver(()=>{paint();if(state==='ready'&&source.current){}});ro.observe(h);return()=>ro.disconnect()},[paint,state]);
- useEffect(()=>{const onFull=()=>requestAnimationFrame(()=>requestAnimationFrame(fit));document.addEventListener('fullscreenchange',onFull);return()=>document.removeEventListener('fullscreenchange',onFull)},[state]);
+ useEffect(()=>{if(frame.current)cancelAnimationFrame(frame.current);frame.current=requestAnimationFrame(paint);return()=>{if(frame.current)cancelAnimationFrame(frame.current)}},[paint,expanded]);
+ useEffect(()=>{if(state!=='ready'||activeImage.current!==imageUrl)return;const timer=window.setTimeout(()=>{const h=host.current;if(!h)return;const r=h.getBoundingClientRect();const saved={scale:view.scale,centerX:(r.width/2-view.x)/view.scale,centerY:(r.height/2-view.y)/view.scale};try{const views=JSON.parse(localStorage.getItem(VIEW_STORAGE_KEY)||'{}');views[imageUrl]=saved;localStorage.setItem(VIEW_STORAGE_KEY,JSON.stringify(views))}catch{}},120);return()=>window.clearTimeout(timer)},[imageUrl,state,view]);
+ useEffect(()=>{const h=host.current;if(!h)return;let resizeFrame=0;const align=()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>requestAnimationFrame(()=>{const r=h.getBoundingClientRect(),previous=lastSize.current;if(state==='ready'&&source.current&&previous.width>0&&previous.height>0&&(Math.abs(r.width-previous.width)>1||Math.abs(r.height-previous.height)>1)){setView(v=>{const centerX=(previous.width/2-v.x)/v.scale,centerY=(previous.height/2-v.y)/v.scale;return{...v,x:r.width/2-centerX*v.scale,y:r.height/2-centerY*v.scale}})}lastSize.current={width:r.width,height:r.height}}))};const r=h.getBoundingClientRect(),previous=lastSize.current;if(previous.width>0&&previous.height>0&&state==='ready'){setView(v=>{const centerX=(previous.width/2-v.x)/v.scale,centerY=(previous.height/2-v.y)/v.scale;return{...v,x:r.width/2-centerX*v.scale,y:r.height/2-centerY*v.scale}})}lastSize.current={width:r.width,height:r.height};const ro=new ResizeObserver(align);ro.observe(h);window.addEventListener('resize',align);document.addEventListener('visibilitychange',align);return()=>{cancelAnimationFrame(resizeFrame);ro.disconnect();window.removeEventListener('resize',align);document.removeEventListener('visibilitychange',align)}},[state,expanded]);
+ useEffect(()=>{if(!expanded)return;const previous=document.body.style.overflow;document.body.style.overflow='hidden';const close=(e:KeyboardEvent)=>{if(e.key==='Escape')setExpanded(false)};window.addEventListener('keydown',close);return()=>{document.body.style.overflow=previous;window.removeEventListener('keydown',close)}},[expanded]);
 
  function zoomAt(factor:number,cx?:number,cy?:number){const h=host.current,i=source.current;if(!h||!i)return;const rect=h.getBoundingClientRect(),px=cx??rect.width/2,py=cy??rect.height/2;setView(v=>{const ns=Math.max(.025,Math.min(12,v.scale*factor));const ix=(px-v.x)/v.scale,iy=(py-v.y)/v.scale;return{scale:ns,x:px-ix*ns,y:py-iy*ns}})}
  function wheel(e:React.WheelEvent){e.preventDefault();const rect=e.currentTarget.getBoundingClientRect();zoomAt(e.deltaY<0?1.13:.885,e.clientX-rect.left,e.clientY-rect.top)}
@@ -69,11 +77,14 @@ export function InspectionCanvas({imageUrl,defects,selectedDefect=0,showDefects=
  function pointerMove(e:React.PointerEvent){if(drag)setView(v=>({...v,x:drag.vx+e.clientX-drag.sx,y:drag.vy+e.clientY-drag.sy}));updateProbe(e)}
  function oneToOne(){const h=host.current,i=source.current;if(!h||!i)return;const r=h.getBoundingClientRect();setView({scale:1,x:(r.width-i.naturalWidth)/2,y:(r.height-i.naturalHeight)/2})}
  function focusDefect(){const i=source.current,h=host.current,d=defects[selectedDefect];if(!i||!h||!d?.bbox_xywh_norm)return;const[x,y,w,hh]=d.bbox_xywh_norm,r=h.getBoundingClientRect();const targetW=Math.max(w*i.naturalWidth,60),targetH=Math.max(hh*i.naturalHeight,60),s=Math.min(r.width*.58/targetW,r.height*.58/targetH,8);const cx=(x+w/2)*i.naturalWidth,cy=(y+hh/2)*i.naturalHeight;setView({scale:s,x:r.width/2-cx*s,y:r.height/2-cy*s})}
- return <div className={`canvasHost canvas-${state}`} ref={host} onWheel={wheel} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={()=>setDrag(null)} onPointerCancel={()=>setDrag(null)} onPointerLeave={()=>setDrag(null)} onDoubleClick={fit}>
+ function toggleExpanded(){if(!expanded){const r=host.current?.getBoundingClientRect();if(r&&r.width>0&&r.height>0)setPopupAspect(Math.max(.55,Math.min(2.4,r.width/r.height)))}setExpanded(value=>!value)}
+ const canvasView=<div className={`canvasHost canvas-${state} ${expanded?'canvasPopupHost':''}`} ref={host} onWheel={wheel} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={()=>setDrag(null)} onPointerCancel={()=>setDrag(null)} onPointerLeave={()=>setDrag(null)} onDoubleClick={fit}>
    <canvas ref={canvas}/><div className="scanBeam" aria-hidden/>
-   <div className="canvasTools" onPointerDown={e=>e.stopPropagation()}><button onClick={()=>zoomAt(1.22)} title="Zoom in"><Plus/></button><button onClick={()=>zoomAt(.82)} title="Zoom out"><Minus/></button><button onClick={fit} title="Fit image"><RotateCcw/></button><button onClick={oneToOne} title="1:1 pixels"><ScanSearch/></button><button onClick={focusDefect} disabled={!defects[selectedDefect]?.bbox_xywh_norm} title="Focus selected defect"><Focus/></button><button onClick={()=>host.current?.requestFullscreen?.()} title="Fullscreen"><Maximize2/></button></div>
+   <div className="canvasTools" onPointerDown={e=>e.stopPropagation()}><button onClick={()=>zoomAt(1.22)} title="Zoom in"><Plus/></button><button onClick={()=>zoomAt(.82)} title="Zoom out"><Minus/></button><button onClick={fit} title="Fit image"><RotateCcw/></button><button onClick={oneToOne} title="1:1 pixels"><ScanSearch/></button><button onClick={focusDefect} disabled={!defects[selectedDefect]?.bbox_xywh_norm} title="Focus selected defect"><Focus/></button><button onClick={toggleExpanded} title={expanded?'Close expanded viewer':'Open expanded viewer'}>{expanded?<Minimize2/>:<Maximize2/>}</button></div>
    {probe&&<div className="pixelProbe"><MousePointer2/><b>X {probe.x}</b><b>Y {probe.y}</b><b>Gray {probe.gray??'—'}</b></div>}
    <div className="canvasHint"><Crosshair/> drag to pan · wheel to zoom · double click fit</div>
    {state==='ready'&&<div className="canvasScale"><span/><b>1 mm</b></div>}
- </div>
+ </div>;
+ if(expanded&&typeof document!=='undefined')return createPortal(<div className="canvasPopupBackdrop" role="dialog" aria-modal="true" aria-label="Expanded inspection image" onPointerDown={e=>{if(e.target===e.currentTarget)setExpanded(false)}}><div className="canvasPopupWindow" style={{'--canvas-popup-ratio':String(popupAspect)} as React.CSSProperties}><div className="canvasPopupHeader"><span><i/><span><b>Inspection Image</b><em>Precision viewer</em></span></span><small>Scroll to zoom · drag to inspect · double-click to fit · Esc to close</small><button onClick={()=>setExpanded(false)}><Minimize2/>Close</button></div><div className="canvasPopupStage"><i className="canvasCorner topLeft"/><i className="canvasCorner topRight"/><i className="canvasCorner bottomLeft"/><i className="canvasCorner bottomRight"/>{canvasView}</div></div></div>,document.body);
+ return canvasView
 }

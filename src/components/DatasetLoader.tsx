@@ -6,7 +6,7 @@ import {api} from '@/lib/api';
 
 export function DatasetLoader({open,onClose,onLoaded}:{open:boolean;onClose:()=>void;onLoaded:(id:string)=>void}){
   const[path,setPath]=useState('');
-  const[name,setName]=useState('OAKLIN inspection dataset');
+  const[name,setName]=useState('Inspection lot');
   const[busy,setBusy]=useState(false);
   const[err,setErr]=useState('');
   const inputRef=useRef<HTMLInputElement>(null);
@@ -48,7 +48,7 @@ export function DatasetLoader({open,onClose,onLoaded}:{open:boolean;onClose:()=>
       <div className="modalBadge"><FolderInput/></div>
       <span className="eyebrowText">IMAGE DATASET</span>
       <h2>Upload inspection image folder</h2>
-      <p>Select a complete folder from this computer or provide a path already available to the inspection server. After import, every dashboard panel switches to the uploaded dataset automatically.</p>
+      <p>Select a complete folder from this computer or provide a path available to the inspection server. Every upload creates a new lot in WT History. Automatic mode starts inference immediately after import.</p>
 
       <label>Dataset name
         <input value={name} onChange={e=>setName(e.target.value)}/>
@@ -56,7 +56,7 @@ export function DatasetLoader({open,onClose,onLoaded}:{open:boolean;onClose:()=>
 
       <label>Folder path on backend machine
         <div className="modalInline">
-          <input placeholder="/media/k/datasets/oklin" value={path} onChange={e=>setPath(e.target.value)}/>
+          <input placeholder="/media/k/ML-PROJECTS/OAKLIN-PROJECT/DATA/Multiple Class" value={path} onChange={e=>setPath(e.target.value)}/>
           <button onClick={loadPath} disabled={busy||!path}>{busy?<Loader2 className="spin"/>:<FolderInput/>}Load</button>
         </div>
       </label>
@@ -69,10 +69,10 @@ export function DatasetLoader({open,onClose,onLoaded}:{open:boolean;onClose:()=>
       {err&&<div className="errorBox">{err}</div>}
 
       <div className="formatLegend">
-        <span><b>.h.bmp</b> High Contrast</span>
-        <span><b>.d.bmp</b> Dark Field</span>
-        <span><b>.n.bmp</b> Diffuse</span>
-        <span><b>.p.bmp</b> Phase Contrast</span>
+        <span><b>BMP / TIF</b> Inspection images</span>
+        <span><b>#1–#4</b> Camera channels</span>
+        <span><b>Folders</b> Defect classes</span>
+        <span><b>16</b> Lens positions</span>
       </div>
     </div>
   </div>;

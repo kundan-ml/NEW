@@ -1,0 +1,171 @@
+{
+  "theme": "graphite",
+  "accent": "bronze",
+  "density": "compact",
+  "fontScale": 1,
+  "radius": 8,
+  "glass": 1,
+  "motion": true,
+  "glow": true,
+  "sidebarCollapsed": false,
+  "manualSkeleton": true,
+  "uiLocked": true,
+  "sidebarWidth": 76,
+  "headerHeight": 46,
+  "okColor": "#44df83",
+  "nokColor": "#ff4c5a",
+  "warnColor": "#ffc72f",
+  "idleColor": "#607889",
+  "okShape": "circle",
+  "nokShape": "circle",
+  "warnShape": "diamond",
+  "idleShape": "square",
+  "customBg": "#090311",
+  "customPanel": "#0d0d0d",
+  "customHeader": "#050505",
+  "customButton": "#1c1c1c",
+  "customCanvas": "",
+  "customBorder": "#4a4a4a",
+  "customText": "",
+  "customPrimary": "",
+  "customSecondary": "",
+  "customAccent": "#1f233d",
+  "gradientStart": "",
+  "gradientEnd": "",
+  "gradientDirection": "to-bottom-right",
+  "gradientIntensity": 1,
+  "layerGradients": {
+    "background": {
+      "enabled": false,
+      "angle": 135,
+      "stops": [
+        {
+          "color": "#106033",
+          "position": 57
+        },
+        {
+          "color": "#16212b",
+          "position": 100
+        }
+      ]
+    },
+    "surface": {
+      "enabled": false,
+      "angle": 160,
+      "stops": [
+        {
+          "color": "#1b2833",
+          "position": 0
+        },
+        {
+          "color": "#223442",
+          "position": 100
+        }
+      ]
+    },
+    "elevated": {
+      "enabled": false,
+      "angle": 135,
+      "stops": [
+        {
+          "color": "#223442",
+          "position": 0
+        },
+        {
+          "color": "#293e4e",
+          "position": 100
+        }
+      ]
+    },
+    "button": {
+      "enabled": false,
+      "angle": 135,
+      "stops": [
+        {
+          "color": "#293e4e",
+          "position": 0
+        },
+        {
+          "color": "#344a58",
+          "position": 100
+        }
+      ]
+    },
+    "primary": {
+      "enabled": true,
+      "angle": 150,
+      "stops": [
+        {
+          "color": "#213030",
+          "position": 0
+        },
+        {
+          "color": "#332b50",
+          "position": 95
+        }
+      ]
+    },
+    "secondary": {
+      "enabled": false,
+      "angle": 135,
+      "stops": [
+        {
+          "color": "#8178d7",
+          "position": 0
+        },
+        {
+          "color": "#c77dff",
+          "position": 100
+        }
+      ]
+    },
+    "accent": {
+      "enabled": false,
+      "angle": 135,
+      "stops": [
+        {
+          "color": "#42c7bd",
+          "position": 0
+        },
+        {
+          "color": "#55a9d6",
+          "position": 100
+        }
+      ]
+    },
+    "canvas": {
+      "enabled": false,
+      "angle": 135,
+      "stops": [
+        {
+          "color": "#000000",
+          "position": 0
+        },
+        {
+          "color": "#07101a",
+          "position": 100
+        }
+      ]
+    }
+  },
+  "historyWidth": 0.85,
+  "viewerWidth": 1.28,
+  "detailsWidth": 0.84,
+  "inspectionHistoryWidth": 520,
+  "inspectionControlWidth": 340,
+  "inspectionDetailsWidth": 340,
+  "trayHeight": 128,
+  "bottomHeight": 340,
+  "trendWidth": 1.43,
+  "logsWidth": 0.82,
+  "actionsWidth": 0.69,
+  "showHistory": true,
+  "showDetails": true,
+  "showCommandBar": false,
+  "showKpis": true,
+  "showTray": true,
+  "showWorkspace": true,
+  "showTrend": true,
+  "showLogs": true,
+  "showActions": true
+}

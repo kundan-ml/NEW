@@ -1,7 +1,5 @@
-import '../dashboard.css';
-import {AppShell} from '@/components/AppShell';
-import {InspectionDashboard} from '@/components/InspectionDashboard';
+import {redirect} from 'next/navigation';
 
 export default function InspectPage(){
-  return <AppShell><InspectionDashboard inspectionMode/></AppShell>;
+  redirect('/');
 }
