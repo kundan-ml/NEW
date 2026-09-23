@@ -6721,7 +6721,7 @@ html[data-ui-locked="true"] .oakHorizontalSplit {
 .inspectionWtGallery.images {
   padding: 5px;
   display: grid;
-  grid-template-columns: repeat(8, minmax(70px, 1fr));
+  grid-template-columns: repeat(var(--wt-grid-columns, 8), minmax(70px, 1fr));
   grid-template-rows: repeat(2, minmax(0, 1fr));
   grid-auto-flow: row;
   gap: 5px;
@@ -8726,4 +8726,82 @@ html[data-theme="premium-white"] .loginFields select {
   .canvasPositionNav button {
     height: 21px
   }
+}
+
+/* Status and defect visuals are sourced from backend/config/status-symbol-legend.json. */
+.oakWorkstationPage .matrixDot {
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px !important
+}
+
+.oakWorkstationPage .matrixDot span.configuredSymbol {
+  display: grid !important;
+  place-items: center !important;
+  width: 14px !important;
+  height: 14px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  outline: 0 !important;
+  transform: none !important;
+  background: var(--legend-color) !important;
+  color: #fff !important;
+  font-family: Arial, sans-serif !important;
+  font-size: 6px !important;
+  font-style: normal !important;
+  font-weight: 700 !important;
+  line-height: 14px !important;
+  text-align: center !important;
+  text-indent: 0 !important;
+  letter-spacing: 0 !important;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, .38) !important;
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--legend-color) 35%, transparent) !important
+}
+
+.oakWorkstationPage .matrixDot.selected span.configuredSymbol {
+  outline: 0 !important
+}
+
+.configuredLegendGrid i {
+  display: grid !important;
+  place-items: center !important;
+  color: #fff !important;
+  font-size: 8px !important;
+  font-style: normal !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .35)
+}
+
+.inspectionDefectList>button>i.configuredDefectSymbol,
+.oakDefectList .defectItem>i.configuredDefectSymbol {
+  display: grid !important;
+  place-items: center !important;
+  width: 10px !important;
+  height: 10px !important;
+  border-radius: 50% !important;
+  color: #fff !important;
+  font-size: 4px !important;
+  font-style: normal !important;
+  font-weight: 800 !important;
+  line-height: 1 !important
+}
+
+.oakDefectList .defectItem em.configuredDefectTag {
+  color: #fff !important;
+  font-style: normal !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .35) !important
+}
+
+.wtStatusDot.configuredWtStatus {
+  display: grid !important;
+  place-items: center !important;
+  color: #fff !important;
+  font-size: 8px !important;
+  font-style: normal !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+  border: 1px solid rgba(255, 255, 255, .6) !important;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, .45) !important
 }

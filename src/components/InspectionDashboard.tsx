@@ -41,6 +41,9 @@ import type {
   Job,
   LogRow,
   Sample,
+  Status,
+  StatusSymbol,
+  StatusSymbolLegend,
   SystemInfo,
   StorageRuntime,
 } from "@/types";
@@ -49,7 +52,7 @@ import { LensViewer } from "./LensViewer";
 import { StatusMatrix, type GlobalHistoryEntry } from "./StatusMatrix";
 import { TopBar } from "./TopBar";
 import { TrendChart } from "./TrendChart";
-import { useUI, type StatusShape } from "./UIProvider";
+import { useUI } from "./UIProvider";
 
 type WorkspaceTab = "quality" | "activity" | "control";
 type InspectionBottomTab = "messages" | "wt" | "trend";
@@ -60,7 +63,7 @@ export function InspectionDashboard({
 }: {
   inspectionMode?: boolean;
 }) {
-  const { prefs, set, patch } = useUI();
+  const { prefs, patch } = useUI();
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
   const [datasetId, setDatasetId] = useState("");
@@ -91,6 +94,7 @@ export function InspectionDashboard({
   >("all");
   const [focusMode, setFocusMode] = useState(false);
   const [showLegend, setShowLegend] = useState(false);
+  const [statusLegend, setStatusLegend] = useState<StatusSymbolLegend | null>(null);
   const [inspectionBottomTab, setInspectionBottomTab] =
     useState<InspectionBottomTab>("messages");
   const [wtViewMode, setWtViewMode] = useState<WtViewMode>("images");
@@ -104,19 +108,24 @@ export function InspectionDashboard({
   const [loginError, setLoginError] = useState("");
   const wsRef = useRef<WebSocket | null>(null);
   const runTokenRef = useRef(0);
+  const operationModeRef = useRef(operationMode);
   const wtCapacity = info?.settings.wt_capacity || 16;
 
   useEffect(() => {
     const saved = localStorage.getItem("lens-operation-mode");
     if (saved === "AUTO" || saved === "MANUAL") setOperationMode(saved);
   }, []);
+  useEffect(() => {
+    operationModeRef.current = operationMode;
+  }, [operationMode]);
 
   const refreshSystem = useCallback(async () => {
-    try {
-      const [i, s] = await Promise.all([api.system(), api.storageState()]);
-      setInfo(i);
-      setStorage(s);
-    } catch { }
+    const [systemResult, storageResult, legendResult] = await Promise.allSettled([
+      api.system(), api.storageState(), api.statusSymbolLegend(),
+    ]);
+    if (systemResult.status === "fulfilled") setInfo(systemResult.value);
+    if (storageResult.status === "fulfilled") setStorage(storageResult.value);
+    if (legendResult.status === "fulfilled") setStatusLegend(legendResult.value);
   }, []);
   useEffect(()=>{const refresh=()=>{void refreshSystem()};window.addEventListener('lens-system-changed',refresh);return()=>window.removeEventListener('lens-system-changed',refresh)},[refreshSystem]);
   const changeOperationMode = useCallback(async (next?: "AUTO" | "MANUAL") => {
@@ -216,6 +225,22 @@ export function InspectionDashboard({
     () => new Map(results.map((r) => [r.sample_id, r])),
     [results],
   );
+  const statusSymbols = useMemo(
+    () => Object.fromEntries((statusLegend?.statuses || []).map((item) => [item.key, item])) as Partial<Record<Status, StatusSymbol>>,
+    [statusLegend],
+  );
+  const statusSymbol = (status: Status): StatusSymbol => statusSymbols[status] || ({
+    OK: { key: "OK", label: "Inspection OK", color: "#35d982", symbol: "✓" },
+    NOK: { key: "NOK", label: "Not OK", color: "#f05262", symbol: "!" },
+    WARN: { key: "WARN", label: "Warning", color: "#f4b740", symbol: "▲" },
+    IDLE: { key: "IDLE", label: "Not inspected", color: "#718397", symbol: "·" },
+  } satisfies Record<Status, StatusSymbol>)[status];
+  const defectSymbol = (name: string): StatusSymbol => {
+    const normalized = name.toLowerCase();
+    return (statusLegend?.defects || []).find((item) =>
+      (item.match_terms || []).some((term) => normalized.includes(term.toLowerCase())),
+    ) || statusLegend?.fallback_defect || { key: "unknown-defect", label: "Unknown defect", color: statusSymbol("NOK").color, symbol: "i" };
+  };
   useEffect(() => {
     if (!datasetId) return;
     setGlobalHistory(previous => previous.map(entry => entry.datasetId === datasetId ? { ...entry, result: resultMap.get(entry.sample.id) || entry.result } : entry));
@@ -366,7 +391,14 @@ export function InspectionDashboard({
         if (latest.completed !== lastCompleted || terminal) {
           lastCompleted = latest.completed;
           const r = await api.results(did);
-          if (runTokenRef.current === token) setResults(r.items);
+          if (runTokenRef.current === token) {
+            setResults(r.items);
+            const newest = r.items.at(-1);
+            if (operationModeRef.current === "AUTO" && newest) {
+              setCurrent(newest.sample_id);
+              setSelectedDefect(-1);
+            }
+          }
         }
         if (terminal) {
           await refreshRunOutputs(did);
@@ -424,7 +456,7 @@ export function InspectionDashboard({
             ...prev.filter((x) => x.sample_id !== m.result.sample_id),
             m.result,
           ]);
-          if (!hold) {
+          if (operationModeRef.current === "AUTO") {
             setCurrent(m.result.sample_id);
             setSelectedDefect(-1);
           }
@@ -616,7 +648,7 @@ export function InspectionDashboard({
     const move = (ev: PointerEvent) => {
       const delta = ev.clientX - startX;
       if (kind === "history") {
-        const value = Math.max(240, Math.min(520, h0 + delta));
+        const value = Math.max(240, Math.min(570, h0 + delta));
         next = { ...next, inspectionHistoryWidth: value };
         root.style.setProperty("--inspection-history-width", `${value}px`);
       }
@@ -842,8 +874,9 @@ export function InspectionDashboard({
                 onPick={select}
                 history={globalHistory}
                 onHistoryPick={(entry) => { void selectHistoryEntry(entry) }}
-                maxRows={40}
+                maxRows={30}
                 capacity={wtCapacity}
+                legend={statusLegend}
                 onArchive={async (wt) => {
                   try {
                     const r = await api.archiveRing(datasetId, wt);
@@ -872,51 +905,14 @@ export function InspectionDashboard({
                     </div>
                     <button onClick={() => setShowLegend(false)}>×</button>
                   </div>
-                  <div className="inspectionLegendEditors">
-                    {(
-                      [
-                        ["Inspection OK", "ok", "okColor", "okShape"],
-                        ["Lens Not OK", "nok", "nokColor", "nokShape"],
-                        [
-                          "Warning / corrected",
-                          "warn",
-                          "warnColor",
-                          "warnShape",
-                        ],
-                        ["Not inspected", "idle", "idleColor", "idleShape"],
-                      ] as const
-                    ).map(([label, tone, colorKey, shapeKey]) => (
-                      <div key={tone}>
-                        <i className={tone} />
-                        <b>{label}</b>
-                        <input
-                          aria-label={`${label} color`}
-                          type="color"
-                          value={prefs[colorKey]}
-                          onChange={(e) => set(colorKey, e.target.value)}
-                        />
-                        <select
-                          aria-label={`${label} symbol`}
-                          value={prefs[shapeKey]}
-                          onChange={(e) =>
-                            set(shapeKey, e.target.value as StatusShape)
-                          }
-                        >
-                          <option value="circle">● Circle</option>
-                          <option value="square">■ Square</option>
-                          <option value="diamond">◆ Diamond</option>
-                          <option value="ring">○ Ring</option>
-                          <option value="plus">✚ Plus</option>
-                        </select>
-                      </div>
+                  <div className="inspectionLegendGrid configuredLegendGrid">
+                    {(["OK", "NOK", "WARN", "IDLE"] as Status[]).map((status) => {
+                      const item = statusSymbol(status);
+                      return <span key={item.key}><i style={{ backgroundColor: item.color }}>{item.symbol}</i>{item.label}</span>;
+                    })}
+                    {(statusLegend?.defects || []).map((item) => (
+                      <span key={item.key}><i style={{ backgroundColor: item.color }}>{item.symbol}</i>{item.label}</span>
                     ))}
-                  </div>
-                  <div className="inspectionLegendFixed">
-                    <span>
-                      <i className="camera" />
-                      Acquisition error
-                    </span>
-                    <span></span>
                   </div>
                 </div>
               )}
@@ -1089,13 +1085,13 @@ export function InspectionDashboard({
               </div>
               <div className="inspectionDefectList">
                 {visibleDefects.length ? (
-                  visibleDefects.map((d, i) => (
+                  visibleDefects.map((d, i) => { const configured = defectSymbol(d.name); return (
                     <button
                       className={i === (selectedDefect >= 0 ? selectedDefect : 0) ? "selected" : ""}
                       key={`${d.name}-${i}`}
                       onClick={() => toggleDefectFocus(i)}
                     >
-                      <i className={d.severity} />
+                      <i className="configuredDefectSymbol" style={{ backgroundColor: configured.color }}>{configured.symbol}</i>
                       <span>
                         <b>{d.name}</b>
                         <small>
@@ -1104,7 +1100,7 @@ export function InspectionDashboard({
                         </small>
                       </span>
                     </button>
-                  ))
+                  )})
                 ) : (
                   <div className="inspectionNoDefect">
                     <CircleAlert />
@@ -1225,9 +1221,10 @@ export function InspectionDashboard({
               )}
               {inspectionBottomTab === "wt" && (
                 <div className="inspectionWtView">
-                  <div className={`inspectionWtGallery ${wtViewMode}`}>
+                  <div className={`inspectionWtGallery ${wtViewMode}`} style={{'--wt-grid-columns': String(Math.ceil(wtCapacity / 2))} as React.CSSProperties}>
                     {wtChannelImages.map((item) => {
-                      const status = item.result?.status || "WAITING",
+                      const status = item.result?.status || "IDLE",
+                        configuredStatus = statusSymbol(status),
                         tone =
                           status === "OK"
                             ? "ok"
@@ -1265,9 +1262,10 @@ export function InspectionDashboard({
                                 )}
                                 <b>Position {item.position}</b>
                                 <i
-                                  className={`wtStatusDot ${tone}`}
-                                  title={status}
-                                />
+                                  className={`wtStatusDot ${tone} configuredWtStatus`}
+                                  style={{ backgroundColor: configuredStatus.color }}
+                                  title={configuredStatus.label}
+                                >{configuredStatus.symbol}</i>
                                 <em
                                   className="wtDefectChip"
                                   title={item.defect}
@@ -1277,11 +1275,7 @@ export function InspectionDashboard({
                               </div>
                               <span className="wtTileResult">
                                 <b>
-                                  {status === "WAITING"
-                                    ? "Not inspected"
-                                    : status === "NOK"
-                                      ? "Not OK"
-                                      : status}
+                                  {configuredStatus.label}
                                 </b>
                               </span>
                             </>
@@ -1292,7 +1286,7 @@ export function InspectionDashboard({
                               <small>
                                 {status} · {item.defect}
                               </small>
-                              <i className={`wtStatusDot ${tone}`} />
+                              <i className={`wtStatusDot ${tone} configuredWtStatus`} style={{ backgroundColor: configuredStatus.color }}>{configuredStatus.symbol}</i>
                             </div>
                           )}
                         </button>
@@ -1559,6 +1553,7 @@ export function InspectionDashboard({
                 }
               }}
               capacity={wtCapacity}
+              legend={statusLegend}
             />
           )}
           {showHistory && (
@@ -1679,7 +1674,7 @@ export function InspectionDashboard({
               </div>
               <div className="defectList productionDefectList oakDefectList">
                 {visibleDefects.length ? (
-                  visibleDefects.map((d, i) => (
+                  visibleDefects.map((d, i) => { const configured = defectSymbol(d.name); return (
                     <button
                       className={
                         i === (selectedDefect >= 0 ? selectedDefect : 0)
@@ -1689,7 +1684,7 @@ export function InspectionDashboard({
                       key={`${d.name}-${i}`}
                       onClick={() => toggleDefectFocus(i)}
                     >
-                      <i className={d.severity} />
+                      <i className="configuredDefectSymbol" style={{ backgroundColor: configured.color }}>{configured.symbol}</i>
                       <span>
                         <b>{d.name}</b>
                         <small>
@@ -1697,9 +1692,9 @@ export function InspectionDashboard({
                             `${d.tolerance || "AT"} · ${(d.confidence * 100).toFixed(1)}%`}
                         </small>
                       </span>
-                      <em className={d.severity}>{d.severity}</em>
+                      <em className="configuredDefectTag" style={{ backgroundColor: configured.color }}>{configured.label}</em>
                     </button>
-                  ))
+                  )})
                 ) : (
                   <div className="emptyState">
                     <CircleAlert />
@@ -1744,6 +1739,7 @@ export function InspectionDashboard({
                     </div>
                   );
                 const r = resultMap.get(s.id),
+                  configuredStatus = statusSymbol(r?.status || "IDLE"),
                   ch = s.images.h
                     ? "h"
                     : s.images.d
@@ -1755,11 +1751,11 @@ export function InspectionDashboard({
                     className={`oakTrayCell ${(r?.status || "idle").toLowerCase()} ${s.id === current ? "selected" : ""}`}
                     key={s.id}
                     onClick={() => select(s.id)}
-                    title={`Position ${s.position} · ${r?.status || "WAIT"}`}
+                    title={`Position ${s.position} · ${configuredStatus.label}`}
                   >
                     <b>{s.position}</b>
                     <img src={src} alt={`Lens position ${s.position}`} />
-                    <span>{r?.status || "WAIT"}</span>
+                    <span style={{ backgroundColor: configuredStatus.color }}>{configuredStatus.symbol} {configuredStatus.label}</span>
                   </button>
                 );
               })}

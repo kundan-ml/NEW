@@ -9,8 +9,9 @@ import {api} from '@/lib/api';
 export function CustomizationDrawer({open,onClose}:{open:boolean;onClose:()=>void}){
   const{prefs,canCustomize,set,patch,selectTheme,resetThemeColors,reset}=useUI();
   const[wtCapacity,setWtCapacity]=useState(16);
+  const[trayCapacities,setTrayCapacities]=useState<number[]>([12,14,16]);
   const[capacityNotice,setCapacityNotice]=useState('');
-  useEffect(()=>{if(open&&canCustomize)api.system().then(x=>setWtCapacity(x.settings.wt_capacity||16)).catch(()=>{})},[open,canCustomize]);
+  useEffect(()=>{if(open&&canCustomize)api.trayLayout().then(layout=>{setWtCapacity(layout.images_per_tray);setTrayCapacities(layout.supported_images_per_tray)}).catch(()=>{})},[open,canCustomize]);
   if(!open)return null;
 
   const themes=Object.values(THEMES);
@@ -44,7 +45,7 @@ export function CustomizationDrawer({open,onClose}:{open:boolean;onClose:()=>voi
 
         <section className="customSection">
           <div className="customTitle"><LayoutDashboard/><div><b>WT capacity</b><small>Number of sequential lens positions in each WT</small></div></div>
-          <Slider label="Positions per WT" value={wtCapacity} min={1} max={64} step={1} suffix={String(wtCapacity)} onChange={setWtCapacity}/>
+          <label className="customSlider"><span><b>Positions per WT</b><em>{wtCapacity}</em></span><select value={wtCapacity} onChange={event=>setWtCapacity(Number(event.target.value))}>{trayCapacities.map(capacity=><option key={capacity} value={capacity}>{capacity} images</option>)}</select></label>
           <button className="drawerPopout" onClick={async()=>{try{await api.setWtCapacity(wtCapacity);setCapacityNotice(`Saved ${wtCapacity} positions per WT`);window.dispatchEvent(new Event('lens-system-changed'))}catch(error){setCapacityNotice((error as Error).message)}}}>Save WT capacity</button>
           {capacityNotice&&<p className="lockNotice">{capacityNotice}</p>}
         </section>
@@ -149,7 +150,7 @@ export function CustomizationDrawer({open,onClose}:{open:boolean;onClose:()=>voi
           <Slider label="WT history width" value={prefs.historyWidth} min={.55} max={1.25} step={.01} suffix={prefs.historyWidth.toFixed(2)} onChange={v=>set('historyWidth',v)}/>
           <Slider label="Inspection viewer width" value={prefs.viewerWidth} min={.9} max={2.1} step={.01} suffix={prefs.viewerWidth.toFixed(2)} onChange={v=>set('viewerWidth',v)}/>
           <Slider label="Lens details width" value={prefs.detailsWidth} min={.55} max={1.25} step={.01} suffix={prefs.detailsWidth.toFixed(2)} onChange={v=>set('detailsWidth',v)}/>
-          <Slider label="Inspection history width" value={prefs.inspectionHistoryWidth} min={240} max={520} step={2} suffix={`${prefs.inspectionHistoryWidth}px`} onChange={v=>set('inspectionHistoryWidth',v)}/>
+          <Slider label="Inspection history width" value={prefs.inspectionHistoryWidth} min={240} max={570} step={2} suffix={`${prefs.inspectionHistoryWidth}px`} onChange={v=>set('inspectionHistoryWidth',v)}/>
           <Slider label="Inspection controls width" value={prefs.inspectionControlWidth} min={180} max={340} step={2} suffix={`${prefs.inspectionControlWidth}px`} onChange={v=>set('inspectionControlWidth',v)}/>
           <Slider label="Inspection details width" value={prefs.inspectionDetailsWidth} min={250} max={520} step={2} suffix={`${prefs.inspectionDetailsWidth}px`} onChange={v=>set('inspectionDetailsWidth',v)}/>
           <Slider label="Lens strip height" value={prefs.trayHeight} min={96} max={190} step={2} suffix={`${prefs.trayHeight}px`} onChange={v=>set('trayHeight',v)}/>
