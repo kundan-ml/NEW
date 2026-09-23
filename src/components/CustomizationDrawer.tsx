@@ -3,9 +3,14 @@
 import {Check,ChevronRight,ExternalLink,LayoutDashboard,MonitorCog,Palette,RotateCcw,Sparkles,X} from 'lucide-react';
 import {useUI,type Density,type StatusShape} from './UIProvider';
 import {GRADIENT_ANGLES,THEMES,type GradientDirection,type LayerGradient} from '@/lib/themes';
+import {useEffect,useState} from 'react';
+import {api} from '@/lib/api';
 
 export function CustomizationDrawer({open,onClose}:{open:boolean;onClose:()=>void}){
-  const{prefs,set,patch,selectTheme,resetThemeColors,reset}=useUI();
+  const{prefs,canCustomize,set,patch,selectTheme,resetThemeColors,reset}=useUI();
+  const[wtCapacity,setWtCapacity]=useState(16);
+  const[capacityNotice,setCapacityNotice]=useState('');
+  useEffect(()=>{if(open&&canCustomize)api.system().then(x=>setWtCapacity(x.settings.wt_capacity||16)).catch(()=>{})},[open,canCustomize]);
   if(!open)return null;
 
   const themes=Object.values(THEMES);
@@ -26,6 +31,8 @@ export function CustomizationDrawer({open,onClose}:{open:boolean;onClose:()=>voi
       </div>
 
       <div className="drawerScroll">
+        {!canCustomize&&<section className="customSection lockControlSection"><div className="customTitle"><MonitorCog/><div><b>Administrator access required</b><small>Sign in as an administrator to change the shared workstation interface.</small></div></div></section>}
+        <div style={!canCustomize?{pointerEvents:'none',opacity:.48}:undefined}>
         <section className="customSection lockControlSection">
           <div className="customTitle">
             <MonitorCog/>
@@ -33,6 +40,13 @@ export function CustomizationDrawer({open,onClose}:{open:boolean;onClose:()=>voi
           </div>
           <Toggle label={prefs.uiLocked?'Interface locked':'Interface unlocked'} hint={prefs.uiLocked?'Unlock to change layout, visibility or appearance':'Lock the approved layout for all users'} checked={prefs.uiLocked} onChange={v=>set('uiLocked',v)}/>
           <p className="lockNotice">{prefs.uiLocked?'Layout controls and drag handles are disabled. The saved interface remains active for every user.':'Adjust the workspace below, then lock it when the station layout is approved.'}</p>
+        </section>
+
+        <section className="customSection">
+          <div className="customTitle"><LayoutDashboard/><div><b>WT capacity</b><small>Number of sequential lens positions in each WT</small></div></div>
+          <Slider label="Positions per WT" value={wtCapacity} min={1} max={64} step={1} suffix={String(wtCapacity)} onChange={setWtCapacity}/>
+          <button className="drawerPopout" onClick={async()=>{try{await api.setWtCapacity(wtCapacity);setCapacityNotice(`Saved ${wtCapacity} positions per WT`);window.dispatchEvent(new Event('lens-system-changed'))}catch(error){setCapacityNotice((error as Error).message)}}}>Save WT capacity</button>
+          {capacityNotice&&<p className="lockNotice">{capacityNotice}</p>}
         </section>
 
         <section className="customSection">
@@ -167,6 +181,7 @@ export function CustomizationDrawer({open,onClose}:{open:boolean;onClose:()=>voi
           <Toggle label="System logs panel" checked={prefs.showLogs} onChange={v=>set('showLogs',v)}/>
           <Toggle label="Quick actions panel" checked={prefs.showActions} onChange={v=>set('showActions',v)}/>
         </section>
+        </div>
       </div>
 
       <div className="drawerFoot">

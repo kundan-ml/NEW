@@ -20,7 +20,7 @@ const commands=[
   {name:'General Settings',detail:'PLC, triggerbox, CSV, image format and timeouts',href:'/settings',icon:Settings,keys:'G G'},
   {name:'Access & Operation Mode',detail:'NoUser / Operator / Service / Administrator, AUTO / SETUP',href:'/',icon:ShieldCheck,keys:''},
   {name:'System Messages & Version',detail:'Logs, version information and capability status',href:'/system',icon:Wrench,keys:'G Y'},
-  {name:'Trigger Timeout Model',detail:'16-position processing deadline model',href:'/settings',icon:Clock3,keys:''},
+  {name:'Trigger Timeout Model',detail:'Admin-configured sequential WT processing model',href:'/settings',icon:Clock3,keys:''},
   {name:'Open OKLIN3 Manual',detail:'Open the supplied operating manual',href:'manual',icon:BookOpen,keys:''},
   {name:'Image Display Controls',detail:'Pan, zoom, 1:1, crosshair, gray probe and defect focus',href:'/',icon:SlidersHorizontal,keys:''}
 ];

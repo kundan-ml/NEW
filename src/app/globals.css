@@ -3800,7 +3800,7 @@ html[data-theme="arctic"] .sideRail {
 }
 
 .canvasScale span {
-  width: 58px;
+  width: var(--scale-bar-width, 58px);
   height: 5px;
   border-left: 1px solid #d6e9f6;
   border-right: 1px solid #d6e9f6;
@@ -6226,7 +6226,7 @@ body {
 }
 
 .viewerPanel .canvasScale span {
-  width: 52px
+  width: var(--scale-bar-width, 52px)
 }
 
 .viewerPanel.processing .scanBeam {
@@ -8324,7 +8324,7 @@ body {
 }
 
 .premiumViewer .canvasScale span {
-  width: 44px !important
+  width: var(--scale-bar-width, 44px) !important
 }
 
 .premiumViewer .processingBadge {

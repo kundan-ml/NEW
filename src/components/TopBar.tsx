@@ -3,7 +3,7 @@
 import {useEffect,useMemo,useState} from 'react';
 import {Activity,ChevronDown,CircleUserRound,Database,FolderUp,LogIn,Palette,RefreshCw,Settings2,ShieldCheck} from 'lucide-react';
 import {api} from '@/lib/api';
-import type {Role,SystemInfo} from '@/types';
+import type {SystemInfo} from '@/types';
 
 type DashboardStats={yieldPct:number;total:number;nokRate:number;evaluated:number};
 type Props={info:SystemInfo|null;onRefresh:()=>void;stats?:DashboardStats;workstation?:boolean;demo?:boolean;onUpload?:()=>void;onLayout?:()=>void;operationMode?:'AUTO'|'MANUAL';onOperationMode?:()=>void};
@@ -15,16 +15,16 @@ export function TopBar({info,onRefresh,stats,workstation=false,demo=false,onUplo
   const[notice,setNotice]=useState('');
   const[previewMode,setPreviewMode]=useState<'AUTO'|'SETUP'>('AUTO');
   const[user,setUser]=useState(info?.session.username||'service.dev');
-  const[role,setRole]=useState<Role>(info?.session.role||'Administrator');
+  const[password,setPassword]=useState('');
   useEffect(()=>{const t=setInterval(()=>setNow(new Date()),1000);return()=>clearInterval(t)},[]);
-  useEffect(()=>{if(info){setUser(info.session.username);setRole(info.session.role)}},[info]);
+  useEffect(()=>{if(info)setUser(info.session.username)},[info]);
   const internalMode=demo?previewMode:(info?.mode||'SETUP');
   const mode=operationMode||(internalMode==='AUTO'?'AUTO':'MANUAL');
   const yieldPct=Math.max(0,Math.min(100,stats?.yieldPct||0));
   const halconOnline=useMemo(()=>!!info?.bridge&&!/offline|unavailable|none|disconnected/i.test(info.bridge),[info?.bridge]);
 
   async function toggle(){if(onOperationMode){onOperationMode();return}if(demo){setPreviewMode(internalMode==='AUTO'?'SETUP':'AUTO');return}setBusy(true);setNotice('');try{await api.setMode(internalMode==='AUTO'?'SETUP':'AUTO');onRefresh()}catch(e){setNotice((e as Error).message)}finally{setBusy(false)}}
-  async function login(){setBusy(true);setNotice('');try{await api.login(user,role);setOpen(false);onRefresh()}catch(e){setNotice((e as Error).message)}finally{setBusy(false)}}
+  async function login(){setBusy(true);setNotice('');try{await api.login(user,password);setPassword('');setOpen(false);window.dispatchEvent(new Event('lens-auth-changed'));onRefresh()}catch(e){setNotice((e as Error).message)}finally{setBusy(false)}}
 
   if(workstation){
     return <header className="oakMachineHeader referenceMachineHeader">
@@ -42,7 +42,7 @@ export function TopBar({info,onRefresh,stats,workstation=false,demo=false,onUplo
           <div className="popoverTitle"><ShieldCheck/> User & workstation</div>
           <p className="popoverHint">Development identity. Production should obtain role/permissions from the authenticated backend.</p>
           <label>User<input value={user} onChange={e=>setUser(e.target.value)}/></label>
-          <label>Role<select value={role} onChange={e=>setRole(e.target.value as Role)}><option>NoUser</option><option>Operator</option><option>Service</option><option>Administrator</option></select></label>
+          <label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)}/></label>
           <button onClick={login}><LogIn/> Apply user</button>
           <div className="userUtilityRow"><button onClick={()=>{setOpen(false);window.dispatchEvent(new Event('lens-open-customizer'))}}><Palette/>Interface Studio</button><button onClick={()=>{setOpen(false);onRefresh()}}><RefreshCw/>Refresh</button></div>
         </div>}
@@ -54,7 +54,7 @@ export function TopBar({info,onRefresh,stats,workstation=false,demo=false,onUplo
   return <header className="topBar productionTopBar premiumTopBar">
     <div className="titleGroup productionTitle premiumTitleGroup"><div className="titleIcon emageHeaderMark"><img src="/brand/emage-mark.png" alt="Emage Group"/></div><div className="premiumTitleText"><div className="premiumTitleLine"><h1>Lens Inspection Control Center</h1><span>Dashboard</span></div><p>Emage Group · Optical Quality Inspection</p></div></div>
     <div className="premiumHeaderCenter"><div className="premiumMachineContext"><span><small>LINE</small><b>{info?.settings.line_name||'GDL6BV2'}</b></span><i/><span><small>STATION</small><b>{info?.settings.station_name||'Station 2'}</b></span></div><button className={`modePill productionMode premiumMode ${mode.toLowerCase()}`} onClick={toggle} disabled={busy}><i/><span><b>{mode}</b><small>{mode==='AUTO'?'Automatic':'Manual'}</small></span></button><div className="connectionPill productionConnection premiumConnection" title="Backend / bridge status"><i/><span><b>{info?'Connected':'Unknown'}</b><small><Database/> API / HALCON</small></span></div></div>
-    <div className="topStatus productionStatus premiumHeaderRight">{stats&&<><div className="premiumHeaderMetric yield"><small>YIELD</small><b>{yieldPct.toFixed(1)}%</b><em>{stats.evaluated} evaluated</em></div><div className="premiumHeaderMetric total"><small>LENSES</small><b>{stats.total.toLocaleString()}</b><em className={stats.nokRate>5?'dangerText':''}>{stats.nokRate.toFixed(1)}% NOK</em></div></>}<div className="premiumHeaderMetric clock"><small>{now.toLocaleDateString(undefined,{month:'short',day:'2-digit'})}</small><b>{now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</b><em>{now.toLocaleDateString(undefined,{weekday:'short'})}</em></div><div className="userMenu"><button className="userButton productionUser premiumUser" onClick={()=>setOpen(v=>!v)}><CircleUserRound/><span><b>{info?.session.username||'Operator'}</b><small>{info?.session.role||'Production'}</small></span><ChevronDown/></button>{open&&<div className="userPopover premiumUserPopover"><div className="popoverTitle"><ShieldCheck/> User & workstation</div><p className="popoverHint">Development identity. Production can be replaced with Active Directory / 5-2-1 authentication.</p><label>User<input value={user} onChange={e=>setUser(e.target.value)}/></label><label>Role<select value={role} onChange={e=>setRole(e.target.value as Role)}><option>NoUser</option><option>Operator</option><option>Service</option><option>Administrator</option></select></label><button onClick={login}><LogIn/> Apply user</button><div className="userUtilityRow"><button onClick={()=>{setOpen(false);window.dispatchEvent(new Event('lens-open-customizer'))}}><Palette/>Customize UI</button><button onClick={()=>{setOpen(false);onRefresh()}}><RefreshCw/>Refresh</button></div></div>}</div></div>
+    <div className="topStatus productionStatus premiumHeaderRight">{stats&&<><div className="premiumHeaderMetric yield"><small>YIELD</small><b>{yieldPct.toFixed(1)}%</b><em>{stats.evaluated} evaluated</em></div><div className="premiumHeaderMetric total"><small>LENSES</small><b>{stats.total.toLocaleString()}</b><em className={stats.nokRate>5?'dangerText':''}>{stats.nokRate.toFixed(1)}% NOK</em></div></>}<div className="premiumHeaderMetric clock"><small>{now.toLocaleDateString(undefined,{month:'short',day:'2-digit'})}</small><b>{now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</b><em>{now.toLocaleDateString(undefined,{weekday:'short'})}</em></div><div className="userMenu"><button className="userButton productionUser premiumUser" onClick={()=>setOpen(v=>!v)}><CircleUserRound/><span><b>{info?.session.username||'Operator'}</b><small>{info?.session.role||'Production'}</small></span><ChevronDown/></button>{open&&<div className="userPopover premiumUserPopover"><div className="popoverTitle"><ShieldCheck/> User & workstation</div><p className="popoverHint">Authenticated workstation access.</p><label>User<input value={user} onChange={e=>setUser(e.target.value)}/></label><label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)}/></label><button onClick={login}><LogIn/> Sign in</button><div className="userUtilityRow"><button disabled={info?.session.role!=='Administrator'} onClick={()=>{setOpen(false);window.dispatchEvent(new Event('lens-open-customizer'))}}><Palette/>Customize UI</button><button onClick={()=>{setOpen(false);onRefresh()}}><RefreshCw/>Refresh</button></div></div>}</div></div>
     {notice&&<button className="oakHeaderNotice legacy" onClick={()=>setNotice('')}>{notice}</button>}
   </header>
 }

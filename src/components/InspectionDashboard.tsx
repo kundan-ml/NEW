@@ -40,7 +40,6 @@ import type {
   InspectionResult,
   Job,
   LogRow,
-  Role,
   Sample,
   SystemInfo,
   StorageRuntime,
@@ -99,12 +98,11 @@ export function InspectionDashboard({
   const [loginUser, setLoginUser] = useState(
     info?.session.username || "operator",
   );
-  const [loginRole, setLoginRole] = useState<Role>(
-    info?.session.role || "Operator",
-  );
+  const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const wsRef = useRef<WebSocket | null>(null);
   const runTokenRef = useRef(0);
+  const wtCapacity = info?.settings.wt_capacity || 16;
 
   useEffect(() => {
     const saved = localStorage.getItem("lens-operation-mode");
@@ -118,6 +116,7 @@ export function InspectionDashboard({
       setStorage(s);
     } catch { }
   }, []);
+  useEffect(()=>{const refresh=()=>{void refreshSystem()};window.addEventListener('lens-system-changed',refresh);return()=>window.removeEventListener('lens-system-changed',refresh)},[refreshSystem]);
   const changeOperationMode = useCallback(async (next?: "AUTO" | "MANUAL") => {
     const target = next || (operationMode === "AUTO" ? "MANUAL" : "AUTO");
     setOperationMode(target);
@@ -140,11 +139,12 @@ export function InspectionDashboard({
           .map(sample => ({ datasetId: dataset.id, sample, result: resultBySample.get(sample.id) }));
       } catch { return [] }
     }));
-    const flat = loaded.flat().map((entry, index) => ({ ...entry, wt: Math.floor(index / 16) + 1, position: index % 16 + 1 }));
+    const flat = loaded.flat().map((entry, index) => ({ ...entry, wt: Math.floor(index / wtCapacity) + 1, position: index % wtCapacity + 1 }));
     setGlobalHistory(flat);
-    const newestWt = flat.length ? Math.ceil(flat.length / 16) : null;
+    const newestWt = flat.length ? Math.ceil(flat.length / wtCapacity) : null;
     setSelectedGlobalWt(currentWt => currentWt && newestWt && currentWt <= newestWt ? currentWt : newestWt);
   }
+  useEffect(()=>{if(datasets.length)void rebuildGlobalHistory(datasets)},[wtCapacity]);
   async function refreshDatasets(prefer?: string) {
     try {
       const ds = await api.datasets();
@@ -223,6 +223,13 @@ export function InspectionDashboard({
     [samples, current],
   );
   const currentResult = current ? resultMap.get(current) : undefined;
+  const dataset = datasets.find((item) => item.id === datasetId);
+  const currentChannelResult = currentResult?.channels.find(
+    (item) => item.channel === channel,
+  ) || currentResult?.channels[0];
+  const measurementEntries = Object.entries(
+    currentChannelResult?.measurements || {},
+  );
   const visibleDefects = useMemo(
     () =>
       errorMode === "none"
@@ -246,11 +253,21 @@ export function InspectionDashboard({
   const yieldPct = results.length ? (counts.OK / results.length) * 100 : 0;
   const nokRate = results.length ? (counts.NOK / results.length) * 100 : 0;
   const activeGlobalWt = selectedGlobalWt || globalHistory.find(entry => entry.datasetId === datasetId && entry.sample.id === current)?.wt || 1;
+  const inspectionIdentifiers = useMemo(() => {
+    const filename = sample?.images[channel]?.filename || Object.values(sample?.images || {})[0]?.filename || "";
+    const trayMatch = filename.match(/(?:^|_)CV[._-]?(\d{1,8})(?:_|$)/i);
+    const positionMatch = filename.match(/(?:^|_)Position(\d{1,2})(?:_|$)/i);
+    return {
+      ctNumber: `CV-${activeGlobalWt}`,
+      shuttleNumber: positionMatch?.[1] || (sample ? String(sample.position) : "—"),
+      curingTray: trayMatch ? `CT.${trayMatch[1]}` : sample?.metadata.tail_code || "—",
+    };
+  }, [activeGlobalWt, channel, sample]);
   const wtEntries = useMemo(() => globalHistory.filter(entry => entry.wt === activeGlobalWt), [globalHistory, activeGlobalWt]);
   const wtSamples = useMemo(() => wtEntries.map(entry => entry.sample), [wtEntries]);
   const wtChannelImages = useMemo(
     () =>
-      Array.from({ length: 16 }, (_, i) => {
+      Array.from({ length: wtCapacity }, (_, i) => {
         const position = i + 1,
           entry = wtEntries.find((row) => row.position === position),
           s = entry?.sample,
@@ -493,8 +510,10 @@ export function InspectionDashboard({
     setBusy(true);
     setLoginError("");
     try {
-      await api.login(loginUser, loginRole);
+      await api.login(loginUser, loginPassword);
       await refreshSystem();
+      window.dispatchEvent(new Event("lens-auth-changed"));
+      setLoginPassword("");
       setLoginOpen(false);
       setToast(`Signed in as ${loginUser}`);
     } catch (e) {
@@ -687,7 +706,7 @@ export function InspectionDashboard({
             <button
               onClick={() => {
                 setLoginUser(info?.session.username || "operator");
-                setLoginRole(info?.session.role || "Operator");
+                setLoginPassword("");
                 setLoginOpen(true);
               }}
             >
@@ -821,6 +840,7 @@ export function InspectionDashboard({
                 history={globalHistory}
                 onHistoryPick={(entry) => { void selectHistoryEntry(entry) }}
                 maxRows={40}
+                capacity={wtCapacity}
                 onArchive={async (wt) => {
                   try {
                     const r = await api.archiveRing(datasetId, wt);
@@ -952,25 +972,23 @@ export function InspectionDashboard({
                 <h2>Current WT</h2>
                 <InfoRow
                   label="CT No."
-                  value={
-                    sample?.metadata.io_code || `CV-${sample?.wt_index || "—"}`
-                  }
+                  value={inspectionIdentifiers.ctNumber}
                 />
                 <InfoRow
                   label="Shuttle Nr."
-                  value={sample?.metadata.event_id || sample?.wt_index}
+                  value={inspectionIdentifiers.shuttleNumber}
                 />
                 <InfoRow
                   label="Curing Tray Nr."
-                  value={sample?.metadata.tail_code || "CT.3150"}
+                  value={inspectionIdentifiers.curingTray}
                 />
                 <InfoRow
                   label="Oven Nr."
-                  value={sample?.metadata.machine || "8"}
+                  value={sample?.metadata.machine || "—"}
                 />
                 <InfoRow
                   label="EM Tray Nr."
-                  value={sample?.metadata.u_index || "DT02536"}
+                  value={sample?.metadata.u_index || "—"}
                 />
               </div>
               {/* <div className="inspectionMachineActions"><button onClick={()=>setLoader(true)}><FolderOpen/>Upload dataset</button><button onClick={()=>window.dispatchEvent(new Event('lens-open-customizer'))}><LayoutDashboard/>Layout settings</button></div> */}
@@ -996,6 +1014,7 @@ export function InspectionDashboard({
               selectedDefect={selectedDefect}
               onProbe={setProbe}
               processing={isRunning}
+              capacity={wtCapacity}
               availablePositions={wtEntries.map((entry) => entry.position)}
               onPosition={(position) => {
                 const entry = wtEntries.find((item) => item.position === position);
@@ -1023,20 +1042,24 @@ export function InspectionDashboard({
                 </div>
               </div>
               <div className="inspectionCurrentFields">
-                <InfoRow label="Lot Nr." value="N4262524" />
+                <InfoRow label="Dataset" value={dataset?.name || "—"} />
                 <InfoRow
                   label="Lens ID"
                   value={sample?.metadata.code || sample?.base_name}
                 />
-                <InfoRow label="Cavity Nr." value={sample?.position} />
-                <InfoRow label="Target axis" value="90°" />
+                <InfoRow label="CT No." value={inspectionIdentifiers.ctNumber} />
+                <InfoRow label="Shuttle Nr." value={inspectionIdentifiers.shuttleNumber} />
+                <InfoRow label="Curing Tray Nr." value={inspectionIdentifiers.curingTray} />
+                <InfoRow label="Position" value={sample ? `${sample.position} / ${wtCapacity}` : "—"} />
+                <InfoRow label="Image channel" value={channelLabels[channel] || channel} />
                 <InfoRow
                   label="Result"
                   value={currentResult?.status || "WAITING"}
                   status={currentResult?.status}
                 />
-                <InfoRow label="Diameter (mm)" value="14.773" />
-                <InfoRow label="Diameter (px)" value="1453.540" />
+                {measurementEntries.map(([key, value]) => (
+                  <InfoRow key={key} label={measurementLabel(key)} value={formatMeasurement(key, value)} />
+                ))}
               </div>
               <div className="inspectionDefectTitle">
                 <h3>Detected defects</h3>
@@ -1073,7 +1096,7 @@ export function InspectionDashboard({
                       <span>
                         <b>{d.name}</b>
                         <small>
-                          {d.position_text ||
+                          {defectLocationLabel(d) ||
                             `${Math.round(d.confidence * 100)}% confidence`}
                         </small>
                       </span>
@@ -1086,14 +1109,14 @@ export function InspectionDashboard({
                   </div>
                 )}
               </div>
-              <div className="inspectionDetailBox">
+              {/* <div className="inspectionDetailBox">
                 <small>Defect details</small>
                 <p>
                   {visibleDefects[selectedDefect]?.name
                     ? `${visibleDefects[selectedDefect].name} detected on ${channelLabels[visibleDefects[selectedDefect].channel || channel] || channel}.`
                     : "Select a detected defect to inspect its details."}
                 </p>
-              </div>
+              </div> */}
               <div className="inspectionLensActions">
                 <button onClick={snap} disabled={!sample}>
                   <Camera />
@@ -1141,7 +1164,7 @@ export function InspectionDashboard({
                         `WT-${String(activeGlobalWt).padStart(4, "0")}`}
                     </b>
                     <small>
-                      {channelLabels[channel] || channel.toUpperCase()} · 16
+                      {channelLabels[channel] || channel.toUpperCase()} · {wtCapacity}
                       positions
                     </small>
                     <em>
@@ -1374,16 +1397,8 @@ export function InspectionDashboard({
                   />
                 </label>
                 <label>
-                  <span>Permission level</span>
-                  <select
-                    value={loginRole}
-                    onChange={(e) => setLoginRole(e.target.value as Role)}
-                  >
-                    <option value="NoUser">No user</option>
-                    <option value="Operator">Operator</option>
-                    <option value="Service">Service</option>
-                    <option value="Administrator">Administrator</option>
-                  </select>
+                  <span>Password</span>
+                  <input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} placeholder="Enter password" onKeyDown={(e) => { if (e.key === "Enter") void switchUser() }} />
                 </label>
               </div>
               {loginError && <p className="loginError">{loginError}</p>}
@@ -1392,7 +1407,7 @@ export function InspectionDashboard({
                 <button
                   className="primary"
                   onClick={switchUser}
-                  disabled={busy || !loginUser.trim()}
+                  disabled={busy || !loginUser.trim() || !loginPassword}
                 >
                   {busy ? "Signing in…" : "Apply user"}
                 </button>
@@ -1540,6 +1555,7 @@ export function InspectionDashboard({
                   setToast((e as Error).message);
                 }
               }}
+              capacity={wtCapacity}
             />
           )}
           {showHistory && (
@@ -1564,6 +1580,7 @@ export function InspectionDashboard({
             selectedDefect={selectedDefect}
             onProbe={setProbe}
             processing={job?.status === "running"}
+            capacity={wtCapacity}
             availablePositions={wtEntries.map((entry) => entry.position)}
             onPosition={(position) => {
               const entry = wtEntries.find((item) => item.position === position);
@@ -1598,17 +1615,15 @@ export function InspectionDashboard({
                     label="Lens ID"
                     value={sample?.metadata.code || sample?.base_name}
                   />
-                  <InfoRow label="Lot Nr." value="N4262524" />
+                  <InfoRow label="Dataset" value={dataset?.name || "—"} />
                   <InfoRow
                     label="CT No."
-                    value={
-                      sample?.metadata.io_code ||
-                      `CV-${sample?.wt_index || "—"}`
-                    }
+                    value={inspectionIdentifiers.ctNumber}
                   />
+                  <InfoRow label="Shuttle Nr." value={inspectionIdentifiers.shuttleNumber} />
                   <InfoRow
                     label="Position"
-                    value={sample ? `${sample.position} / 16` : "—"}
+                    value={sample ? `${sample.position} / ${wtCapacity}` : "—"}
                   />
                   <InfoRow
                     label="Result"
@@ -1616,13 +1631,13 @@ export function InspectionDashboard({
                     status={currentResult?.status}
                   />
                   <i />
-                  <InfoRow label="Diameter (mm)" value="14.773" />
-                  <InfoRow label="Thickness (µm)" value="1453.540" />
-                  <InfoRow label="Axis / Orientation" value="7°" />
+                  {measurementEntries.map(([key, value]) => (
+                    <InfoRow key={key} label={measurementLabel(key)} value={formatMeasurement(key, value)} />
+                  ))}
                   <InfoRow label="Lens Type" value={sample?.category} />
                   <InfoRow
                     label="Curing Tray Nr."
-                    value={sample?.metadata.machine}
+                    value={inspectionIdentifiers.curingTray}
                   />
                 </div>
                 <div className="referenceLensPreview">
@@ -1675,7 +1690,7 @@ export function InspectionDashboard({
                       <span>
                         <b>{d.name}</b>
                         <small>
-                          {d.position_text ||
+                          {defectLocationLabel(d) ||
                             `${d.tolerance || "AT"} · ${(d.confidence * 100).toFixed(1)}%`}
                         </small>
                       </span>
@@ -1700,7 +1715,7 @@ export function InspectionDashboard({
                 Lens Thumbnails{" "}
                 <span>
                   (Current WT:{" "}
-                  {sample?.metadata.io_code || `CV-${sample?.wt_index || "—"}`})
+                  {inspectionIdentifiers.ctNumber})
                 </span>
               </h2>
               <div>
@@ -1716,7 +1731,7 @@ export function InspectionDashboard({
               </div>
             </div>
             <div className="oakTrayStrip">
-              {Array.from({ length: 16 }, (_, i) => {
+              {Array.from({ length: wtCapacity }, (_, i) => {
                 const s = wtSamples.find((x) => x.position === i + 1);
                 if (!s)
                   return (
@@ -1979,4 +1994,29 @@ function InfoRow({
       )}
     </div>
   );
+}
+
+function measurementLabel(key: string) {
+  return key
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function formatMeasurement(key: string, value: string | number) {
+  const unit = key.endsWith("_px") ? " px" : key.endsWith("_ms") ? " ms" : "";
+  return `${typeof value === "number" ? Number(value.toFixed(3)) : value}${unit}`;
+}
+
+function defectLocationLabel(defect: {position_text?:string;bbox_xywh_norm?:number[]}) {
+  const base = defect.position_text || "";
+  if (!defect.bbox_xywh_norm || defect.bbox_xywh_norm.length < 4) return base;
+  const [x, y, width, height] = defect.bbox_xywh_norm;
+  const dx = x + width / 2 - .5, dy = y + height / 2 - .5;
+  const centered = Math.hypot(dx, dy) < .12;
+  const tooLarge = width > .35 || height > .35 || width * height > .12;
+  if (centered || tooLarge) return base.replace(/\s*\(\d+ o'clock\)/i, "");
+  if (/o'clock/i.test(base)) return base;
+  let hour = Math.round(Math.atan2(dx, -dy) * 6 / Math.PI);
+  if (hour <= 0) hour += 12;
+  return base ? `${base} (${hour} o'clock)` : `${hour} o'clock`;
 }

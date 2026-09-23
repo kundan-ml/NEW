@@ -72,7 +72,7 @@ export function DatasetLoader({open,onClose,onLoaded}:{open:boolean;onClose:()=>
         <span><b>BMP / TIF</b> Inspection images</span>
         <span><b>#1–#4</b> Camera channels</span>
         <span><b>Folders</b> Defect classes</span>
-        <span><b>16</b> Lens positions</span>
+        <span><b>WT</b> Admin-configured positions</span>
       </div>
     </div>
   </div>;

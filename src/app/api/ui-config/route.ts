@@ -20,6 +20,10 @@ export async function GET(){
 
 export async function PUT(request:Request){
   try{
+    const backend=process.env.NEXT_PUBLIC_API_URL||'http://localhost:8000/api/v1';
+    const sessionResponse=await fetch(`${backend}/auth/current`,{cache:'no-store'});
+    const session=sessionResponse.ok?await sessionResponse.json():null;
+    if(session?.role!=='Administrator')return NextResponse.json({error:'Administrator permission required.'},{status:403});
     const preferences=await request.json();
     if(!preferences||typeof preferences!=='object'||Array.isArray(preferences)){
       return NextResponse.json({error:'UI configuration must be an object.'},{status:400});
