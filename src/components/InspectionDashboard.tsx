@@ -75,7 +75,9 @@ export function InspectionDashboard({
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
   const [hold, setHold] = useState(false);
-  const [selectedDefect, setSelectedDefect] = useState(0);
+  // -1 is the all-defects canvas overview. The panel still highlights its
+  // first row until an operator explicitly focuses a defect.
+  const [selectedDefect, setSelectedDefect] = useState(-1);
   const [probe, setProbe] = useState<{
     x: number;
     y: number;
@@ -239,6 +241,7 @@ export function InspectionDashboard({
         ),
     [currentResult, errorMode],
   );
+  const toggleDefectFocus = (index: number) => setSelectedDefect(current => current === index ? -1 : index);
   const counts = useMemo(
     () =>
       results.reduce(
@@ -423,7 +426,7 @@ export function InspectionDashboard({
           ]);
           if (!hold) {
             setCurrent(m.result.sample_id);
-            setSelectedDefect(0);
+            setSelectedDefect(-1);
           }
         }
         if (["completed", "failed", "cancelled"].includes(m.type)) {
@@ -471,7 +474,7 @@ export function InspectionDashboard({
     try {
       const r = await api.inspectOne(datasetId, sample.id);
       setResults((p) => [...p.filter((x) => x.sample_id !== r.sample_id), r]);
-      setSelectedDefect(0);
+      setSelectedDefect(-1);
       await api.storageState().then(setStorage);
     } catch (e) {
       setToast((e as Error).message);
@@ -524,7 +527,7 @@ export function InspectionDashboard({
   }
   function select(id: string) {
     setCurrent(id);
-    setSelectedDefect(0);
+    setSelectedDefect(-1);
     const s = samples.find((x) => x.id === id);
     const historyEntry = globalHistory.find(entry => entry.datasetId === datasetId && entry.sample.id === id);
     if (historyEntry) setSelectedGlobalWt(historyEntry.wt);
@@ -540,7 +543,7 @@ export function InspectionDashboard({
       await loadDataset(entry.datasetId);
     }
     setCurrent(entry.sample.id);
-    setSelectedDefect(0);
+    setSelectedDefect(-1);
     const available = entry.sample.images;
     if (!available[channel]) setChannel(available.h ? "h" : available.d ? "d" : Object.keys(available)[0] || "h");
   }
@@ -1088,9 +1091,9 @@ export function InspectionDashboard({
                 {visibleDefects.length ? (
                   visibleDefects.map((d, i) => (
                     <button
-                      className={i === selectedDefect ? "selected" : ""}
+                      className={i === (selectedDefect >= 0 ? selectedDefect : 0) ? "selected" : ""}
                       key={`${d.name}-${i}`}
-                      onClick={() => setSelectedDefect(i)}
+                      onClick={() => toggleDefectFocus(i)}
                     >
                       <i className={d.severity} />
                       <span>
@@ -1679,12 +1682,12 @@ export function InspectionDashboard({
                   visibleDefects.map((d, i) => (
                     <button
                       className={
-                        i === selectedDefect
+                        i === (selectedDefect >= 0 ? selectedDefect : 0)
                           ? "defectItem selected"
                           : "defectItem"
                       }
                       key={`${d.name}-${i}`}
-                      onClick={() => setSelectedDefect(i)}
+                      onClick={() => toggleDefectFocus(i)}
                     >
                       <i className={d.severity} />
                       <span>
