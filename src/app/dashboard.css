@@ -2513,6 +2513,262 @@ html[data-density="comfortable"] .oakTraySurface {
   }
 }
 
+/* Modern UI · expandable navigation, neutral scrollbars and upload modal */
+@media (min-width:821px) {
+  html[data-workspace="modern"] .appShell:not(.manualSkeletonShell) {
+    grid-template-columns:clamp(176px,calc(var(--shell-sidebar-width,76px) * 2.15),224px) minmax(0,1fr) !important;
+    transition:grid-template-columns .24s cubic-bezier(.2,.75,.25,1)
+  }
+
+  html[data-workspace="modern"] .appShell.sidebarCollapsed:not(.manualSkeletonShell) {
+    grid-template-columns:62px minmax(0,1fr) !important
+  }
+
+  html[data-workspace="modern"] .productionRail {
+    align-items:stretch !important
+  }
+
+  html[data-workspace="modern"] .productionRail .productionNav {
+    padding:8px 7px !important;
+    gap:3px !important
+  }
+
+  html[data-workspace="modern"] .productionRail .sideNav {
+    width:auto !important;
+    height:48px !important;
+    min-height:48px !important;
+    margin:0 !important;
+    padding:0 12px !important;
+    display:flex !important;
+    flex-direction:row !important;
+    align-items:center !important;
+    justify-content:flex-start !important;
+    gap:11px !important;
+    border:1px solid transparent !important;
+    border-radius:9px !important;
+    color:var(--text-muted) !important
+  }
+
+  html[data-workspace="modern"] .productionRail .sideNav svg {
+    width:15px !important;
+    height:15px !important;
+    min-width:15px;
+    stroke-width:1.75 !important
+  }
+
+  html[data-workspace="modern"] .productionRail .sideNav span {
+    display:block !important;
+    min-width:0;
+    overflow:hidden;
+    color:inherit;
+    font-size:10px !important;
+    font-weight:600 !important;
+    line-height:1 !important;
+    letter-spacing:.01em !important;
+    white-space:nowrap !important;
+    text-overflow:ellipsis;
+    text-align:left !important
+  }
+
+  html[data-workspace="modern"] .productionRail .sideNav:hover {
+    color:var(--text-primary) !important;
+    background:color-mix(in srgb,var(--surface-hover) 82%,var(--primary) 8%) !important;
+    border-color:color-mix(in srgb,var(--border) 78%,transparent) !important;
+    transform:translateX(2px) !important
+  }
+
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .productionRail .sideNav.active {
+    color:var(--text-primary) !important;
+    background:linear-gradient(90deg,color-mix(in srgb,var(--primary) 10%,var(--surface-elevated)),color-mix(in srgb,var(--surface-hover) 48%,var(--surface))) !important;
+    border-color:color-mix(in srgb,var(--primary) 22%,var(--border)) !important;
+    box-shadow:inset 0 1px color-mix(in srgb,#fff 5%,transparent),0 7px 18px color-mix(in srgb,#000 18%,transparent) !important;
+    transform:none !important
+  }
+
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .productionRail .sideNav.active:before {
+    left:-1px;
+    width:2px;
+    height:22px;
+    border-radius:0 3px 3px 0;
+    background:var(--primary);
+    box-shadow:0 0 8px color-mix(in srgb,var(--primary) 45%,transparent)
+  }
+
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .productionRail .sideNav.active svg {
+    color:var(--primary) !important;
+    filter:none !important
+  }
+
+  html[data-workspace="modern"] .productionRailFoot {
+    padding:7px !important;
+    gap:4px !important
+  }
+
+  html[data-workspace="modern"] .productionRailFoot .utilityNav {
+    height:42px !important;
+    min-height:42px !important
+  }
+
+  html[data-workspace="modern"] .productionRailFoot .collapseRail {
+    width:100% !important;
+    height:34px !important;
+    margin:0 !important;
+    padding:0 10px !important;
+    display:flex !important;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    border:1px solid var(--border) !important;
+    border-radius:8px !important;
+    background:color-mix(in srgb,var(--surface-hover) 72%,var(--surface)) !important;
+    color:var(--text-secondary) !important
+  }
+
+  html[data-workspace="modern"] .productionRailFoot .collapseRail svg {
+    width:14px;
+    height:14px
+  }
+
+  html[data-workspace="modern"] .productionRailFoot .collapseRail span {
+    font-size:9px;
+    font-weight:650
+  }
+
+  html[data-workspace="modern"] .appShell.sidebarCollapsed .productionBrand {
+    height:58px !important;
+    min-height:58px !important
+  }
+
+  html[data-workspace="modern"] .appShell.sidebarCollapsed .emageMark {
+    width:34px;
+    height:34px
+  }
+
+  html[data-workspace="modern"] .appShell.sidebarCollapsed .productionNav {
+    padding-inline:5px !important
+  }
+
+  html[data-workspace="modern"] .appShell.sidebarCollapsed .productionRail .sideNav {
+    height:47px !important;
+    min-height:47px !important;
+    padding:0 !important;
+    justify-content:center !important;
+    gap:0 !important
+  }
+
+  html[data-workspace="modern"] .appShell.sidebarCollapsed .productionRail .sideNav span,
+  html[data-workspace="modern"] .appShell.sidebarCollapsed .railOnline span,
+  html[data-workspace="modern"] .appShell.sidebarCollapsed .collapseRail span,
+  html[data-workspace="modern"] .appShell.sidebarCollapsed .buildLabel {
+    display:none !important
+  }
+
+  html[data-workspace="modern"] .appShell.sidebarCollapsed .productionRailFoot {
+    padding-inline:5px !important
+  }
+
+  html[data-workspace="modern"] .appShell.sidebarCollapsed .productionRailFoot .collapseRail {
+    padding:0 !important
+  }
+}
+
+html[data-workspace="modern"] *,
+html[data-workspace="modern"] {
+  scrollbar-width:thin;
+  scrollbar-color:#3a3a3a #0b0b0c !important
+}
+
+html[data-workspace="modern"] *::-webkit-scrollbar {
+  width:7px;
+  height:7px
+}
+
+html[data-workspace="modern"] *::-webkit-scrollbar-track {
+  background:#0b0b0c !important
+}
+
+html[data-workspace="modern"] *::-webkit-scrollbar-thumb {
+  min-height:30px;
+  border:2px solid #0b0b0c;
+  border-radius:999px;
+  background:#3a3a3a !important
+}
+
+html[data-workspace="modern"] *::-webkit-scrollbar-thumb:hover {
+  background:#505050 !important
+}
+
+html[data-workspace="modern"] .uploadModalBack {
+  z-index:1000;
+  padding:24px;
+  background:rgba(0,0,0,.76);
+  backdrop-filter:blur(15px) saturate(.72);
+  animation:uploadBackdropIn .2s ease both
+}
+
+html[data-workspace="modern"] .uploadModalWindow {
+  width:min(680px,calc(100vw - 40px));
+  max-height:calc(100dvh - 48px);
+  overflow-y:auto;
+  padding:28px !important;
+  border:1px solid color-mix(in srgb,var(--primary) 28%,var(--border)) !important;
+  border-radius:18px !important;
+  background:
+    radial-gradient(circle at 4% 0%,color-mix(in srgb,var(--primary) 13%,transparent),transparent 34%),
+    linear-gradient(155deg,color-mix(in srgb,var(--surface-elevated) 92%,#fff 2%),var(--surface)) !important;
+  box-shadow:0 34px 100px rgba(0,0,0,.68),inset 0 1px color-mix(in srgb,#fff 7%,transparent) !important;
+  animation:uploadWindowIn .24s cubic-bezier(.2,.78,.25,1) both
+}
+
+html[data-workspace="modern"] .uploadModalWindow:before {
+  content:"";
+  position:absolute;
+  inset:0 0 auto;
+  height:3px;
+  border-radius:18px 18px 0 0;
+  background:var(--gradient-primary)
+}
+
+html[data-workspace="modern"] .uploadModalWindow :is(h2,input,button) {
+  font-family:var(--font-ui)
+}
+
+html[data-workspace="modern"] .uploadModalWindow h2 {
+  color:var(--text-primary)
+}
+
+html[data-workspace="modern"] .uploadModalWindow>p,
+html[data-workspace="modern"] .uploadModalWindow>label {
+  color:var(--text-muted)
+}
+
+html[data-workspace="modern"] .uploadModalWindow input {
+  border-color:var(--border);
+  background:color-mix(in srgb,var(--background) 78%,var(--surface));
+  color:var(--text-primary)
+}
+
+html[data-workspace="modern"] .uploadModalWindow :is(.modalInline button,.uploadFolder) {
+  border-color:color-mix(in srgb,var(--primary) 42%,var(--border));
+  background:var(--fill-primary,var(--gradient-primary));
+  color:#fff;
+  box-shadow:0 8px 22px color-mix(in srgb,var(--primary) 18%,transparent)
+}
+
+html[data-workspace="modern"] .uploadModalWindow .formatLegend span {
+  border-color:var(--border);
+  background:color-mix(in srgb,var(--surface-hover) 62%,var(--surface));
+  color:var(--text-secondary)
+}
+
+html[data-workspace="modern"] .uploadModalWindow .formatLegend b,
+html[data-workspace="modern"] .uploadModalWindow .modalBadge {
+  color:var(--primary)
+}
+
+@keyframes uploadBackdropIn {from{opacity:0}to{opacity:1}}
+@keyframes uploadWindowIn {from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:none}}
+
 @media (min-width:2200px) {
   .oakMainGrid {
     grid-template-columns: minmax(300px, var(--history-fr)) 7px minmax(700px, var(--viewer-fr)) 7px minmax(330px, var(--details-fr)) !important
@@ -10145,8 +10401,23 @@ html[data-motion="on"][data-workspace="modern"]:not([data-theme="premium-white"]
     font-size:12px
   }
 
-  html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTrendKpis :is(.miniYieldRing small,div>small) {
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTrendKpis :is(.miniYieldRing small,div>small) {
     margin-top:1px;
     font-size:6px
+  }
+}
+
+/* Keep the Modern navigation selection restrained after all legacy layers. */
+@media (min-width:821px) {
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .appShell .productionRail .sideNav.active {
+    color:var(--text-primary) !important;
+    background:linear-gradient(90deg,color-mix(in srgb,var(--primary) 10%,var(--surface-elevated)),color-mix(in srgb,var(--surface-hover) 48%,var(--surface))) !important;
+    border-color:color-mix(in srgb,var(--primary) 22%,var(--border)) !important;
+    box-shadow:inset 0 1px color-mix(in srgb,#fff 5%,transparent),0 7px 18px color-mix(in srgb,#000 18%,transparent) !important
+  }
+
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .appShell .productionRail .sideNav.active svg {
+    color:var(--primary) !important;
+    filter:none !important
   }
 }

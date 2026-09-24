@@ -1,6 +1,6 @@
 'use client';
 
-import {useRef,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {FolderInput,FolderUp,Loader2,X} from 'lucide-react';
 import {api} from '@/lib/api';
 
@@ -10,6 +10,13 @@ export function DatasetLoader({open,onClose,onLoaded}:{open:boolean;onClose:()=>
   const[busy,setBusy]=useState(false);
   const[err,setErr]=useState('');
   const inputRef=useRef<HTMLInputElement>(null);
+
+  useEffect(()=>{
+    if(!open)return;
+    const close=(event:KeyboardEvent)=>{if(event.key==='Escape'&&!busy)onClose()};
+    window.addEventListener('keydown',close);
+    return()=>window.removeEventListener('keydown',close);
+  },[open,busy,onClose]);
 
   if(!open)return null;
 
@@ -42,12 +49,12 @@ export function DatasetLoader({open,onClose,onLoaded}:{open:boolean;onClose:()=>
 
   const dirProps={webkitdirectory:'',directory:''} as any;
 
-  return <div className="modalBack">
-    <div className="modernModal">
-      <button className="modalClose" onClick={onClose}><X/></button>
+  return <div className="modalBack uploadModalBack" onMouseDown={()=>{if(!busy)onClose()}}>
+    <div className="modernModal uploadModalWindow" role="dialog" aria-modal="true" aria-labelledby="upload-folder-title" onMouseDown={event=>event.stopPropagation()}>
+      <button className="modalClose" onClick={onClose} aria-label="Close upload folder"><X/></button>
       <div className="modalBadge"><FolderInput/></div>
       <span className="eyebrowText">IMAGE DATASET</span>
-      <h2>Upload inspection image folder</h2>
+      <h2 id="upload-folder-title">Upload inspection image folder</h2>
       <p>Select a complete folder from this computer or provide a path available to the inspection server. Every upload creates a new lot in WT History. Automatic mode starts inference immediately after import.</p>
 
       <label>Dataset name

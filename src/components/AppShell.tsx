@@ -89,8 +89,10 @@ function ShellInner({children}:{children:React.ReactNode}){
           className="collapseRail"
           onClick={()=>set('sidebarCollapsed',!prefs.sidebarCollapsed)}
           title={prefs.sidebarCollapsed?'Expand navigation':'Collapse navigation'}
+          aria-expanded={!prefs.sidebarCollapsed}
         >
           {prefs.sidebarCollapsed?<ChevronsRight/>:<ChevronsLeft/>}
+          <span>{prefs.sidebarCollapsed?'Expand':'Collapse'}</span>
         </button>
         <span className="buildLabel">EMAGE · v7.4</span>
       </div>
