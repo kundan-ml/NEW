@@ -128,6 +128,7 @@ export function InspectionDashboard({
     if (legendResult.status === "fulfilled") setStatusLegend(legendResult.value);
   }, []);
   useEffect(()=>{const refresh=()=>{void refreshSystem()};window.addEventListener('lens-system-changed',refresh);return()=>window.removeEventListener('lens-system-changed',refresh)},[refreshSystem]);
+  useEffect(()=>{const refresh=()=>{void api.statusSymbolLegend().then(setStatusLegend).catch(()=>{})};const storage=(event:StorageEvent)=>{if(event.key==='lens-status-legend-version')refresh()};window.addEventListener('lens-status-legend-changed',refresh);window.addEventListener('storage',storage);window.addEventListener('focus',refresh);return()=>{window.removeEventListener('lens-status-legend-changed',refresh);window.removeEventListener('storage',storage);window.removeEventListener('focus',refresh)}},[]);
   const changeOperationMode = useCallback(async (next?: "AUTO" | "MANUAL") => {
     const target = next || (operationMode === "AUTO" ? "MANUAL" : "AUTO");
     setOperationMode(target);
@@ -731,10 +732,10 @@ export function InspectionDashboard({
           ? "noDetails"
           : "";
 
-  if (inspectionMode)
+  if (inspectionMode && prefs.manualSkeleton)
     return (
       <div
-        className={`premiumDashboardPage oakWorkstationPage inspectionReferencePage ${prefs.manualSkeleton ? "pdfSkeletonMode" : ""}`}
+        className={`premiumDashboardPage oakWorkstationPage inspectionReferencePage ${prefs.manualSkeleton ? "pdfSkeletonMode" : ""} ${!prefs.showHistory ? "studioHideHistory" : ""} ${!prefs.showDetails ? "studioHideDetails" : ""} ${!prefs.showWorkspace ? "studioHideWorkspace" : ""}`}
       >
         {prefs.manualSkeleton ? (
           <div className="pdfMenuStrip">
@@ -1429,7 +1430,7 @@ export function InspectionDashboard({
 
   return (
     <div
-      className={`premiumDashboardPage oakWorkstationPage ${focusMode ? "focusMode" : ""}`}
+      className={`premiumDashboardPage oakWorkstationPage modernDashboardPage ${focusMode ? "focusMode" : ""}`}
     >
       <TopBar
         workstation
@@ -1464,6 +1465,14 @@ export function InspectionDashboard({
           </button>
           <button onClick={() => refreshDatasets()} title="Refresh datasets">
             <RefreshCw />
+          </button>
+          <button
+            className={`oakStorageState ${storage?.active ? "active" : ""}`}
+            onClick={toggleStorage}
+            title={storage?.active ? "Stop image storage" : "Start image storage"}
+          >
+            <Camera />
+            <span>{storage?.active ? "Recording" : "Storage"}</span>
           </button>
         </div>
         <div className="oakDeckGroup" aria-label="Dashboard modules">
@@ -1623,6 +1632,7 @@ export function InspectionDashboard({
                     label="Position"
                     value={sample ? `${sample.position} / ${wtCapacity}` : "—"}
                   />
+                  <InfoRow label="Image channel" value={channelLabels[channel] || channel} />
                   <InfoRow
                     label="Result"
                     value={currentResult?.status || "WAITING"}
@@ -1637,6 +1647,8 @@ export function InspectionDashboard({
                     label="Curing Tray Nr."
                     value={inspectionIdentifiers.curingTray}
                   />
+                  <InfoRow label="Oven Nr." value={sample?.metadata.machine || "—"} />
+                  <InfoRow label="EM Tray Nr." value={sample?.metadata.u_index || "—"} />
                 </div>
                 <div className="referenceLensPreview">
                   <div className="referencePreviewImage">
@@ -1671,6 +1683,11 @@ export function InspectionDashboard({
               </div>
               <div className="oakDefectHead">
                 <h3>Detected Defects ({visibleDefects.length})</h3>
+                <div className="compactFilter" aria-label="Defect visibility">
+                  <button className={errorMode === "none" ? "active" : ""} onClick={() => setErrorMode("none")}>None</button>
+                  <button className={errorMode === "at" ? "active" : ""} onClick={() => setErrorMode("at")}>AT only</button>
+                  <button className={errorMode === "all" ? "active" : ""} onClick={() => setErrorMode("all")}>All</button>
+                </div>
               </div>
               <div className="defectList productionDefectList oakDefectList">
                 {visibleDefects.length ? (
@@ -1717,6 +1734,12 @@ export function InspectionDashboard({
                 </span>
               </h2>
               <div>
+                <button onClick={archiveCurrentWt} title="Archive current WT">
+                  <Archive />
+                </button>
+                <button onClick={() => setShowLegend((value) => !value)} title="Status symbol legend">
+                  <CircleAlert />
+                </button>
                 <button onClick={() => relative(-1)}>
                   <ChevronLeft />
                 </button>
@@ -1728,6 +1751,15 @@ export function InspectionDashboard({
                 </button>
               </div>
             </div>
+            {showLegend && (
+              <div className="modernLegendPopover">
+                <div className="inspectionLegendHead"><span><b>Status symbols</b><small>Inspection and HALCON results</small></span><button onClick={() => setShowLegend(false)}>×</button></div>
+                <div className="inspectionLegendGrid configuredLegendGrid">
+                  {(["OK", "NOK", "WARN", "IDLE"] as Status[]).map((status) => { const item = statusSymbol(status); return <span key={item.key}><i style={{ backgroundColor: item.color }}>{item.symbol}</i>{item.label}</span> })}
+                  {(statusLegend?.defects || []).map((item) => <span key={item.key}><i style={{ backgroundColor: item.color }}>{item.symbol}</i>{item.label}</span>)}
+                </div>
+              </div>
+            )}
             <div className="oakTrayStrip">
               {Array.from({ length: wtCapacity }, (_, i) => {
                 const s = wtSamples.find((x) => x.position === i + 1);
@@ -1795,7 +1827,7 @@ export function InspectionDashboard({
                       />
                       <span>
                         <b>{displayYield.toFixed(1)}%</b>
-                        <small></small>
+                        <small>WT Yield</small>
                       </span>
                     </div>
                     <div>
@@ -1829,7 +1861,7 @@ export function InspectionDashboard({
                   <button onClick={() => setLogFilter("system")}>System</button>
                 </div>
                 <div className="referenceLogs">
-                  {filteredLogs.slice(0, 7).map((l, i) => (
+                  {filteredLogs.slice(0, 16).map((l, i) => (
                     <div key={`${l.time}-${i}`}>
                       <time>
                         {l.time.includes("T")

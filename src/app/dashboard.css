@@ -7462,7 +7462,7 @@ html[data-idle-shape="plus"] .wtStatusDot.idle {
   color: #fff9ed !important
 }
 
-/* Charcoal workstation surfaces shared by modern and PDF skeleton modes. */
+/* Charcoal workstation surfaces shared by Modern UI and Classic UI. */
 .oakWorkstationPage,
 .inspectionReferencePage {
   background: radial-gradient(circle at 50% -18%, #292e32, transparent 34%), linear-gradient(180deg, #121619, #090b0d) !important
@@ -7782,7 +7782,7 @@ html[data-idle-shape="plus"] .wtStatusDot.idle {
   border-color: var(--control-border) !important
 }
 
-/* Premium classic treatment for the reference/PDF skeleton workspace. */
+/* Premium treatment for the Classic UI workspace. */
 .pdfSkeletonMode {
   --pdf-gap: 8px;
   background: var(--control-bg) !important;
@@ -8366,7 +8366,7 @@ html[data-idle-shape="plus"] .wtStatusDot.idle {
   object-fit: contain
 }
 
-/* Premium PDF Skeleton visual language ---------------------------------- */
+/* Premium Classic UI visual language ------------------------------------ */
 html[data-theme="pdf-skeleton"] .pdfSkeletonMode {
   position: relative;
   background: var(--background) !important
@@ -8804,4 +8804,1349 @@ html[data-theme="premium-white"] .loginFields select {
   line-height: 1 !important;
   border: 1px solid rgba(255, 255, 255, .6) !important;
   box-shadow: 0 2px 7px rgba(0, 0, 0, .45) !important
+}
+
+/* Final surface bindings for live Interface Studio controls. */
+html[data-theme] .inspectionHistoryColumn,html[data-theme] .oakMainGrid>.matrixPanel{background:var(--studio-history-fill)!important;border-color:var(--studio-history-border)!important;border-radius:var(--studio-history-radius)!important;box-shadow:var(--studio-history-shadow)!important}
+.inspectionHistoryColumn>.matrixPanel,.inspectionHistoryColumn .matrixScroller,.oakMainGrid>.matrixPanel .matrixScroller{background:transparent!important}
+html[data-theme] .inspectionMachinePanel{background:var(--studio-machine-fill)!important;border-color:var(--studio-machine-border)!important;border-radius:var(--studio-machine-radius)!important;box-shadow:var(--studio-machine-shadow)!important}
+html[data-theme] .inspectionReferenceGrid>.viewerPanel,html[data-theme] .oakMainGrid>.viewerPanel{background:var(--studio-viewer-fill)!important;border-color:var(--studio-viewer-border)!important;border-radius:var(--studio-viewer-radius)!important;box-shadow:var(--studio-viewer-shadow)!important}
+html[data-theme] .inspectionCurrentPanel,html[data-theme] .oakMainGrid>.currentLensPanel{background:var(--studio-details-fill)!important;border-color:var(--studio-details-border)!important;border-radius:var(--studio-details-radius)!important;box-shadow:var(--studio-details-shadow)!important}
+html[data-theme] .inspectionLogPanel,html[data-theme] .referenceBottomPanel{background:var(--studio-logs-fill)!important;border-color:var(--studio-logs-border)!important;border-radius:var(--studio-logs-radius)!important;box-shadow:var(--studio-logs-shadow)!important}
+html[data-theme] .inspectionWtGallery>button,html[data-theme] .oakTrayCell{background:var(--studio-wtView-fill)!important;border-color:var(--studio-wtView-border)!important;border-radius:var(--studio-wtView-radius)!important;box-shadow:var(--studio-wtView-shadow)!important}
+html[data-theme] .topBar,html[data-theme] .referenceMachineHeader,html[data-theme] .pdfMenuStrip,html[data-theme] .inspectionSourceBar{background:var(--studio-header-fill)!important;border-color:var(--studio-header-border)!important;border-radius:var(--studio-header-radius)!important;box-shadow:var(--studio-header-shadow)!important}
+html[data-theme] .sideRail,html[data-theme] .productionRail{background:var(--studio-sidebar-fill)!important;border-color:var(--studio-sidebar-border)!important;border-radius:var(--studio-sidebar-radius)!important;box-shadow:var(--studio-sidebar-shadow)!important}
+.oakWorkstationPage :is(.inspectionHistoryColumn,.inspectionMachinePanel,.inspectionCurrentPanel,.inspectionLogPanel,.viewerPanel,.referenceBottomPanel){border-color:var(--studio-border,var(--border))}
+
+/* Keep the inspection grid compact when modules are hidden from Interface Studio. */
+.inspectionReferencePage.studioHideHistory .inspectionHistoryColumn,.inspectionReferencePage.studioHideHistory .historySplit,.inspectionReferencePage.studioHideDetails .inspectionCurrentPanel,.inspectionReferencePage.studioHideDetails .detailsSplit,.inspectionReferencePage.studioHideWorkspace .inspectionHorizontalSplit,.inspectionReferencePage.studioHideWorkspace .inspectionLogPanel{display:none!important}
+.inspectionReferencePage.studioHideHistory .inspectionReferenceGrid{grid-template-columns:0 0 minmax(180px,var(--inspection-control-width)) 7px minmax(420px,1fr) 7px minmax(0,var(--inspection-details-width))!important}
+.inspectionReferencePage.studioHideDetails .inspectionReferenceGrid{grid-template-columns:minmax(240px,var(--inspection-history-width)) 7px minmax(180px,var(--inspection-control-width)) 7px minmax(420px,1fr) 0 0!important}
+.inspectionReferencePage.studioHideHistory.studioHideDetails .inspectionReferenceGrid{grid-template-columns:0 0 minmax(180px,var(--inspection-control-width)) 7px minmax(420px,1fr) 0 0!important}
+.inspectionReferencePage.studioHideWorkspace .inspectionReferenceGrid{grid-template-rows:minmax(360px,1fr) 0 0!important}
+.inspectionReferencePage.pdfSkeletonMode.studioHideHistory .inspectionReferenceGrid{column-gap:var(--pdf-gap,4px)}
+html[data-theme] .premiumMatrixHead{background:var(--studio-matrixHead-fill)!important;border-color:var(--studio-matrixHead-border)!important;border-radius:var(--studio-matrixHead-radius)!important;box-shadow:var(--studio-matrixHead-shadow)!important}
+html[data-theme] .viewerCompactHeader,html[data-theme] .viewerToolbar{background:var(--studio-viewerToolbar-fill)!important;border-color:var(--studio-viewerToolbar-border)!important;border-radius:var(--studio-viewerToolbar-radius)!important;box-shadow:var(--studio-viewerToolbar-shadow)!important}
+html[data-theme] .inspectionLogTabs,html[data-theme] .referencePanelTabs{background:var(--studio-bottomTabs-fill)!important;border-color:var(--studio-bottomTabs-border)!important;border-radius:var(--studio-bottomTabs-radius)!important;box-shadow:var(--studio-bottomTabs-shadow)!important}
+html[data-theme] .inspectionHistoryActions button,html[data-theme] .inspectionLayoutButton,html[data-theme] .inspectionMachinePanel>.inspectionStorageButton{background:var(--studio-actionButtons-fill)!important;border-color:var(--studio-actionButtons-border)!important;border-radius:var(--studio-actionButtons-radius)!important;box-shadow:var(--studio-actionButtons-shadow)!important}
+html[data-theme] .canvasHost,html[data-theme] .canvasFrame,html[data-theme] .premiumCanvasFrame{background:var(--studio-canvas-fill)!important;border-color:var(--studio-canvas-border)!important;border-radius:var(--studio-canvas-radius)!important;box-shadow:var(--studio-canvas-shadow)!important}
+
+/* Porcelain document treatment for Premium White in Classic UI. */
+html[data-theme="premium-white"] .pdfSkeletonMode {
+  color: var(--text-primary) !important;
+  background: var(--fill-background, var(--background)) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode .inspectionReferenceViewport {
+  background:
+    radial-gradient(circle at 7% 0%, color-mix(in srgb, var(--accent) 11%, transparent), transparent 31%),
+    radial-gradient(circle at 96% 96%, color-mix(in srgb, var(--primary) 8%, transparent), transparent 31%),
+    var(--fill-background, var(--background)) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode .pdfMenuStrip {
+  background: var(--studio-header-fill) !important;
+  border-bottom: 1px solid var(--studio-header-border) !important;
+  box-shadow: 0 2px 0 var(--primary) inset, var(--studio-header-shadow) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode .pdfMenuStrip:before {
+  color: var(--primary) !important;
+  border-color: var(--studio-header-border) !important;
+  font-size: 11px;
+  letter-spacing: .08em
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode .pdfMenuStrip:after {
+  content: "OPTICAL INSPECTION  /  WORKSTATION";
+  margin-left: auto;
+  padding-right: 10px;
+  color: var(--text-muted);
+  font: 700 7px var(--font-mono);
+  letter-spacing: .13em
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode .pdfMenuStrip button {
+  color: var(--text-secondary) !important;
+  font-size: 9px;
+  font-weight: 700
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode .pdfMenuStrip button:hover,
+html[data-theme="premium-white"] .pdfSkeletonMode .pdfMenuStrip button:focus-visible {
+  color: var(--primary) !important;
+  background: color-mix(in srgb, var(--primary) 11%, var(--surface-hover)) !important;
+  border-color: color-mix(in srgb, var(--primary) 25%, var(--border)) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode :is(.premiumMatrixHead,.inspectionPanelTitle,.inspectionStationName,.viewerCompactHeader,.inspectionLogTabs) {
+  color: var(--text-primary) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode :is(.premiumMatrixHead,.inspectionPanelTitle,.viewerCompactHeader):after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  bottom: -1px;
+  width: 56px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--gradient-primary);
+  opacity: var(--gradient-intensity, .9)
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode :is(.premiumMatrixHead h2,.inspectionPanelTitle h2,.viewerTitleInline h2,.inspectionStationName b,.inspectionDefectTitle h3) {
+  color: var(--text-primary) !important;
+  font-weight: 750 !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode :is(.inspectionControlBlock h2,.inspectionWtCard h2) {
+  color: var(--text-secondary) !important;
+  font-size: 9px !important;
+  font-weight: 750 !important;
+  letter-spacing: .02em
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode .matrixScroller {
+  background: transparent !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode .historyTable th {
+  background: color-mix(in srgb, var(--surface-elevated) 78%, var(--surface)) !important;
+  color: var(--text-muted) !important;
+  border-bottom: 1px solid var(--border) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode .historyTable td {
+  background: color-mix(in srgb, var(--surface) 92%, var(--background)) !important;
+  border-color: color-mix(in srgb, var(--border) 64%, transparent) !important;
+  color: var(--text-primary) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode .historyTable tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--surface-elevated) 20%, var(--surface)) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode .historyTable tr:hover td {
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface)) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode .inspectionHistoryActions,
+html[data-theme="premium-white"] .pdfSkeletonMode .inspectionDefectTitle {
+  background: var(--fill-elevated) !important;
+  border-color: var(--studio-border) !important;
+  color: var(--text-primary) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode :is(.inspectionLensActions button,.inspectionDefectTitle button,.premiumChannelTabs button:not(.active),.inspectionLogTabs button:not(.active)) {
+  background: var(--fill-button) !important;
+  color: var(--text-secondary) !important;
+  border-color: var(--border) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode .inspectionHistoryActions button {
+  background: var(--studio-actionButtons-fill) !important;
+  border-color: var(--studio-actionButtons-border) !important;
+  color: var(--text-secondary) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode :is(.inspectionHistoryActions button,.inspectionLensActions button,.inspectionDefectTitle button,.premiumChannelTabs button,.inspectionLogTabs button):hover {
+  color: var(--primary) !important;
+  border-color: color-mix(in srgb, var(--primary) 42%, var(--border)) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode :is(.inspectionDefectTitle button.active,.premiumChannelTabs button.active,.inspectionLogTabs button.active) {
+  background: var(--fill-primary, var(--gradient-primary)) !important;
+  color: white !important;
+  border-color: transparent !important;
+  box-shadow: 0 5px 15px color-mix(in srgb, var(--primary) 20%, transparent) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode .inspectionControlBlock,
+html[data-theme="premium-white"] .pdfSkeletonMode .inspectionCurrentFields .referenceInfoRow {
+  border-color: var(--studio-border) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode :is(.inspectionWtCard,.inspectionDetailBox,.inspectionCurrentFields .referenceInfoRow) {
+  background: color-mix(in srgb, var(--surface) 85%, var(--surface-elevated)) !important;
+  border-color: var(--border) !important;
+  color: var(--text-primary) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode :is(.referenceInfoRow b,.inspectionStorageButton b,.inspectionDefectList b,.inspectionDetailBox p) {
+  color: var(--text-primary) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode .referenceInfoRow>b {
+  font-weight: 650 !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode :is(.referenceInfoRow span,.inspectionStorageButton small,.inspectionDefectList small,.inspectionNoDefect,.inspectionDetailBox small) {
+  color: var(--text-muted) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode .inspectionStorageButton {
+  color: var(--text-secondary) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode .inspectionDefectList>button {
+  color: var(--text-secondary) !important;
+  border-color: var(--border) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode .inspectionDefectList>button.selected {
+  background: color-mix(in srgb, var(--primary) 9%, var(--surface)) !important;
+  color: var(--text-primary) !important;
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--border)) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode :is(.inspectionLogRows,.inspectionWtView) {
+  background: var(--fill-surface) !important;
+  color: var(--text-primary) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode .inspectionLogRows>div {
+  border-color: color-mix(in srgb, var(--border) 64%, transparent) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode .inspectionLogRows :is(time,b) {
+  color: var(--text-muted) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode .inspectionLogRows span {
+  color: var(--text-secondary) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode .inspectionWtGallery>button {
+  color: var(--text-primary) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode .inspectionStatusBar {
+  background: var(--fill-elevated) !important;
+  border-color: var(--border) !important;
+  color: var(--text-secondary) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode .inspectionLegendPopover {
+  background: var(--fill-surface) !important;
+  border-color: var(--border) !important;
+  box-shadow: var(--shadow-lg) !important;
+  color: var(--text-primary) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode .inspectionLegendHead,
+html[data-theme="premium-white"] .pdfSkeletonMode .inspectionLegendGrid span {
+  background: var(--fill-elevated) !important;
+  border-color: var(--border) !important;
+  color: var(--text-secondary) !important
+}
+
+html[data-theme="premium-white"] .pdfSkeletonMode .canvasFrame {
+  background: var(--studio-canvas-fill, #000) !important;
+  border-color: var(--studio-canvas-border) !important;
+  box-shadow: var(--studio-canvas-shadow) !important
+}
+
+/* Modern UI · dark workstation ----------------------------------------- */
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .appShell {
+  background: var(--fill-background, var(--background)) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .productionRail {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-elevated) 92%, var(--primary) 8%), var(--surface) 38%, var(--background)) !important;
+  border-right: 1px solid color-mix(in srgb, var(--primary) 18%, var(--border)) !important;
+  box-shadow: 12px 0 45px color-mix(in srgb, #000 32%, transparent) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .productionBrand {
+  background: transparent !important;
+  border-bottom-color: color-mix(in srgb, var(--primary) 18%, var(--border)) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .emageMark {
+  border-radius: 12px;
+  box-shadow: 0 8px 24px color-mix(in srgb, #000 36%, transparent), 0 0 0 1px color-mix(in srgb, var(--primary) 22%, transparent)
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .productionRail .sideNav {
+  position: relative;
+  margin: 2px 7px;
+  border: 1px solid transparent !important;
+  border-radius: 10px !important;
+  color: var(--text-muted) !important;
+  transition: color .2s ease, background .2s ease, border-color .2s ease, transform .2s ease
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .productionRail .sideNav:hover {
+  color: var(--text-primary) !important;
+  background: color-mix(in srgb, var(--primary) 9%, var(--surface-hover)) !important;
+  border-color: color-mix(in srgb, var(--primary) 18%, var(--border)) !important;
+  transform: translateX(2px)
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .productionRail .sideNav.active {
+  color: #fff !important;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--gradient-start) 75%, var(--surface)), color-mix(in srgb, var(--gradient-end) 55%, var(--surface))) !important;
+  border-color: color-mix(in srgb, var(--primary) 60%, white 8%) !important;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--gradient-start) 22%, transparent), inset 0 1px rgba(255,255,255,.12)
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .productionRail .sideNav.active:before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  width: 3px;
+  height: 26px;
+  border-radius: 0 4px 4px 0;
+  background: var(--accent);
+  box-shadow: 0 0 13px var(--accent)
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .railOnline {
+  color: var(--text-secondary) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .collapseRail {
+  border-color: var(--border) !important;
+  background: var(--fill-button) !important;
+  color: var(--text-secondary) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .modernDashboardPage {
+  --modern-line: color-mix(in srgb, var(--border) 78%, transparent);
+  --modern-soft-line: color-mix(in srgb, var(--border) 46%, transparent);
+  --modern-glow: color-mix(in srgb, var(--primary) 16%, transparent);
+  background: var(--fill-background, var(--background)) !important;
+  color: var(--text-primary) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .modernDashboardPage:before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 37% -12%, color-mix(in srgb, var(--primary) 13%, transparent), transparent 32%),
+    radial-gradient(circle at 94% 12%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 29%);
+  opacity: .9
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .modernDashboardPage>* {
+  position: relative;
+  z-index: 1
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .modernDashboardPage .referenceMachineHeader {
+  height: 68px !important;
+  min-height: 68px !important;
+  background: var(--studio-header-fill) !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--primary) 22%, var(--studio-header-border)) !important;
+  box-shadow: 0 12px 38px color-mix(in srgb, #000 22%, transparent) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .modernDashboardPage .referenceMachineHeader:after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gradient-start) 24%, var(--gradient-end) 67%, transparent);
+  opacity: .65
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTitle {
+  min-width: 292px;
+  padding: 0 14px;
+  border-color: var(--modern-soft-line) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTitle b {
+  color: var(--text-primary) !important;
+  font-size: 17px;
+  letter-spacing: -.02em
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTitle small,
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceContextCard b,
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceClock small,
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceYield small,
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTotal small {
+  color: var(--text-muted) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTitleActions button,
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .lensNav button,
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakTrayHead button {
+  border: 1px solid var(--modern-line) !important;
+  background: var(--fill-button) !important;
+  color: var(--text-secondary) !important;
+  border-radius: 8px !important;
+  transition: .18s ease
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) :is(.referenceTitleActions button,.lensNav button,.oakTrayHead button):hover {
+  color: var(--text-primary) !important;
+  border-color: color-mix(in srgb, var(--primary) 55%, var(--border)) !important;
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface-hover)) !important;
+  transform: translateY(-1px)
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceContextCard,
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceMode,
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceConnection,
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceYield,
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTotal,
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceClock {
+  border-color: var(--modern-soft-line) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceContextCard {
+  width: 78px;
+  padding: 0 10px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceMode {
+  width: 150px !important;
+  padding: 0 11px !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceMode>svg {
+  width: 32px;
+  height: 32px;
+  color: var(--status-ok);
+  background: color-mix(in srgb, var(--status-ok) 17%, var(--surface-hover));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--status-ok) 30%, transparent)
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceMode b {
+  color: var(--status-ok) !important;
+  font-size: 12px !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceConnection {
+  width: 134px;
+  padding: 0 11px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceConnection b {
+  color: var(--status-ok) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceYield {
+  min-width: 162px;
+  padding: 0 12px;
+  gap: 10px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceYield>i {
+  width: 39px;
+  height: 39px;
+  background: conic-gradient(var(--status-ok) var(--yield), color-mix(in srgb, var(--border) 48%, transparent) 0)
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceYield>i:after {
+  background: var(--surface) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceYield b,
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTotal b,
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceClock b,
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceUser b {
+  color: var(--text-primary) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTotal {
+  min-width: 116px;
+  padding: 0 12px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceClock {
+  min-width: 118px;
+  padding: 0 12px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceUser {
+  min-width: 142px !important;
+  padding: 0 12px !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceUser:hover {
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface-hover)) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakCommandDeck.visible {
+  height: 44px !important;
+  min-height: 44px !important;
+  margin: 7px 9px 0;
+  padding: 0 8px !important;
+  border: 1px solid var(--modern-line) !important;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent) !important;
+  box-shadow: var(--shadow-sm) !important;
+  backdrop-filter: blur(18px)
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .modernDashboardPage :is(h1,h2,h3),
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .modernDashboardPage :is(.premiumMatrixHead,.oakPanelHead,.referenceBottomPanel)>h2 {
+  font-family: var(--font-ui) !important;
+  font-weight: 700 !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakSourceControl .oakStorageState {
+  border-left-color: var(--modern-line) !important;
+  color: var(--text-secondary) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakSourceControl .oakStorageState.active {
+  color: var(--status-ok) !important;
+  background: color-mix(in srgb, var(--status-ok) 10%, var(--surface-hover)) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakSourceControl .oakStorageState.active svg {
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--status-ok) 50%, transparent))
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDashboardViewport {
+  grid-template-rows: minmax(330px, 1fr) var(--dashboard-tray-height) 5px var(--dashboard-bottom-height) !important;
+  gap: 8px !important;
+  padding: 9px !important;
+  background: transparent !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDashboardViewport.withoutTray {
+  grid-template-rows: minmax(330px,1fr) 5px var(--dashboard-bottom-height) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDashboardViewport.withoutWorkspace {
+  grid-template-rows: minmax(330px,1fr) var(--dashboard-tray-height) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDashboardViewport.withoutTray.withoutWorkspace {
+  grid-template-rows: minmax(330px,1fr) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakMainGrid {
+  grid-template-columns: minmax(300px,var(--history-fr)) 8px minmax(440px,var(--viewer-fr)) 8px minmax(310px,var(--details-fr)) !important;
+  gap: 0 !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakMainGrid.noHistory {
+  grid-template-columns: minmax(0,var(--viewer-fr)) 8px minmax(310px,var(--details-fr)) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakMainGrid.noDetails {
+  grid-template-columns: minmax(300px,var(--history-fr)) 8px minmax(0,var(--viewer-fr)) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakMainGrid.viewerOnly {
+  grid-template-columns: 1fr !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakMainGrid>.oakSplit,
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakHorizontalSplit {
+  background: transparent !important;
+  color: var(--text-muted) !important;
+  border: 0 !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakMainGrid>.oakSplit:after,
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakHorizontalSplit:after {
+  content: "";
+  width: 2px;
+  height: 38px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--primary) 30%, var(--border));
+  transition: .18s ease
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakHorizontalSplit:after {
+  width: 44px;
+  height: 2px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) :is(.oakMainGrid>.oakSplit,.oakHorizontalSplit):hover:after {
+  background: var(--accent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 55%, transparent)
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakMainGrid>.oakSplit svg,
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakHorizontalSplit svg {
+  display: none
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakMainGrid>.matrixPanel,
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakMainGrid>.viewerPanel,
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakMainGrid>.currentLensPanel,
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakTraySurface,
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakBottomWorkspace {
+  border-color: var(--modern-line) !important;
+  overflow: hidden !important;
+  backdrop-filter: blur(16px)
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakWorkstationPage :is(.premiumMatrixHead,.productionPanelHead),
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakViewer .viewerCompactHeader,
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakPanelHead {
+  height: 44px !important;
+  min-height: 44px !important;
+  padding: 0 12px !important;
+  border-bottom: 1px solid var(--modern-line) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakWorkstationPage :is(.premiumMatrixHead,.oakPanelHead) {
+  position: relative
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakWorkstationPage :is(.premiumMatrixHead,.oakPanelHead):after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  bottom: -1px;
+  width: 48px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--gradient-primary)
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakWorkstationPage :is(.premiumMatrixHead h2,.productionPanelHead h2,.oakPanelHead h2) {
+  color: var(--text-primary) !important;
+  font-size: 12px !important;
+  letter-spacing: .01em
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakWorkstationPage .liveTag {
+  border-color: color-mix(in srgb, var(--status-ok) 32%, var(--border)) !important;
+  background: color-mix(in srgb, var(--status-ok) 11%, var(--surface-hover)) !important;
+  color: var(--status-ok) !important;
+  border-radius: 12px !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakWorkstationPage .matrixScroller {
+  background: transparent !important;
+  padding: 2px 8px 7px !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakWorkstationPage .historyTable th {
+  height: 28px !important;
+  background: color-mix(in srgb, var(--surface-elevated) 78%, var(--surface)) !important;
+  color: var(--text-muted) !important;
+  border-color: var(--modern-soft-line) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakWorkstationPage .historyTable td {
+  height: 24px !important;
+  background: color-mix(in srgb, var(--surface) 92%, var(--surface-elevated)) !important;
+  border-color: var(--modern-soft-line) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakWorkstationPage .historyTable tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--surface-elevated) 23%, var(--surface)) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakWorkstationPage .historyTable tr:hover td {
+  background: color-mix(in srgb, var(--primary) 10%, var(--surface)) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakWorkstationPage .historyTable td:first-child {
+  color: var(--text-secondary) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakViewer .viewerCompactHeader {
+  height: 50px !important;
+  min-height: 50px !important;
+  display: flex !important;
+  align-items: center !important;
+  padding: 7px 10px !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakViewer .premiumChannelTabs {
+  width: 100%;
+  height: 36px !important;
+  display: grid !important;
+  grid-template-columns: repeat(4,minmax(0,1fr));
+  gap: 5px !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakViewer .premiumChannelTabs button {
+  min-width: 0 !important;
+  max-width: none !important;
+  height: 34px !important;
+  padding: 0 10px !important;
+  border: 1px solid var(--modern-line) !important;
+  border-radius: 9px !important;
+  background: var(--fill-button) !important;
+  color: var(--text-secondary) !important;
+  transition: transform .18s ease, border-color .18s ease, color .18s ease
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakViewer .premiumChannelTabs button:hover {
+  color: var(--text-primary) !important;
+  border-color: color-mix(in srgb, var(--primary) 44%, var(--border)) !important;
+  transform: translateY(-1px)
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakViewer .premiumChannelTabs button.active {
+  background: var(--fill-primary, var(--gradient-primary)) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+  box-shadow: 0 7px 20px color-mix(in srgb, var(--gradient-start) 25%, transparent) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakViewer .premiumCanvasFrame {
+  margin: 8px !important;
+  border: 1px solid var(--studio-canvas-border) !important;
+  border-radius: 11px !important;
+  box-shadow: inset 0 0 70px rgba(0,0,0,.5), 0 0 0 1px color-mix(in srgb, var(--primary) 8%, transparent) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakWorkstationPage .canvasTools {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--border)) !important;
+  background: color-mix(in srgb, var(--surface) 88%, transparent) !important;
+  box-shadow: var(--shadow-md) !important;
+  backdrop-filter: blur(15px)
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDetailsPanel {
+  grid-template-rows: 44px minmax(260px,1fr) 38px minmax(100px,.55fr) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceLensInfo {
+  border-color: var(--modern-line) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceLensData {
+  padding: 7px 12px;
+  border-color: var(--modern-line) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceInfoRow {
+  height: 23px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceInfoRow>span,
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDefectList .defectItem small {
+  color: var(--text-muted) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceInfoRow>b,
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDefectList .defectItem b {
+  color: var(--text-primary) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceLensData>i {
+  background: var(--modern-line) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceLensPreview {
+  padding: 8px;
+  gap: 6px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referencePreviewImage {
+  height: 104px;
+  border-color: var(--modern-line) !important;
+  border-radius: 9px;
+  box-shadow: 0 8px 22px rgba(0,0,0,.24)
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceLensPreview button {
+  min-height: 27px;
+  border: 1px solid var(--modern-line) !important;
+  border-radius: 7px !important;
+  background: var(--fill-button) !important;
+  color: var(--text-secondary) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceLensPreview button.primary {
+  background: var(--fill-primary, var(--gradient-primary)) !important;
+  border-color: transparent !important;
+  color: white !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDefectHead {
+  min-height: 38px;
+  padding: 0 9px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  border-color: var(--modern-line) !important;
+  background: var(--fill-elevated) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDefectHead h3 {
+  font-size: 9px;
+  white-space: nowrap
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDefectHead .compactFilter {
+  display: flex;
+  padding: 2px;
+  border: 1px solid var(--modern-line) !important;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--background) 55%, var(--surface)) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDefectHead .compactFilter button {
+  height: 22px;
+  padding: 0 6px;
+  border: 0 !important;
+  border-radius: 5px;
+  background: transparent !important;
+  color: var(--text-muted) !important;
+  font-size: 6px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDefectHead .compactFilter button.active {
+  color: #fff !important;
+  background: var(--fill-primary, var(--gradient-primary)) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDefectList {
+  background: transparent !important;
+  padding: 5px 7px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDefectList .defectItem {
+  margin-bottom: 4px;
+  border: 1px solid var(--modern-soft-line) !important;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-elevated) 24%, var(--surface)) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDefectList .defectItem:hover,
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDefectList .defectItem.selected {
+  border-color: color-mix(in srgb, var(--primary) 46%, var(--border)) !important;
+  background: color-mix(in srgb, var(--primary) 9%, var(--surface)) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakTraySurface {
+  position: relative;
+  background: var(--studio-logs-fill) !important;
+  border-radius: var(--studio-logs-radius) !important;
+  box-shadow: var(--studio-logs-shadow) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakTrayHead {
+  height: 36px;
+  padding: 0 10px;
+  border-color: var(--modern-line) !important;
+  background: var(--fill-elevated) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakTrayHead h2 {
+  color: var(--text-primary) !important;
+  font-size: 10px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakTrayHead h2 span {
+  color: var(--text-muted) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakTrayHead button {
+  height: 25px;
+  min-width: 27px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakTrayHead button svg {
+  width: 12px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakTrayStrip {
+  padding: 6px 8px 8px;
+  gap: 6px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakTrayCell {
+  border-color: var(--modern-line) !important;
+  border-radius: var(--studio-wtView-radius) !important;
+  background: var(--studio-wtView-fill) !important;
+  box-shadow: var(--studio-wtView-shadow) !important;
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakTrayCell:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--primary) 48%, var(--border)) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakTrayCell.selected {
+  border-color: var(--accent) !important;
+  box-shadow: inset 0 0 0 1px var(--accent), 0 7px 20px color-mix(in srgb, var(--accent) 18%, transparent) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .modernLegendPopover {
+  position: absolute;
+  z-index: 30;
+  right: 8px;
+  bottom: calc(100% - 32px);
+  width: 330px;
+  border: 1px solid var(--modern-line);
+  border-radius: 11px;
+  background: var(--fill-surface);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  backdrop-filter: blur(20px)
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .modernLegendPopover .inspectionLegendHead,
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .modernLegendPopover .inspectionLegendGrid span {
+  border-color: var(--modern-line) !important;
+  background: var(--fill-elevated) !important;
+  color: var(--text-secondary) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .modernLegendPopover .inspectionLegendHead span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .modernLegendPopover .inspectionLegendHead small {
+  color: var(--text-muted);
+  font-size: 7px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakBottomWorkspace {
+  display: grid !important;
+  grid-template-columns: var(--bottom-columns) !important;
+  gap: 0 !important;
+  background: var(--studio-logs-fill) !important;
+  border-radius: var(--studio-logs-radius) !important;
+  box-shadow: var(--studio-logs-shadow) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceBottomPanel {
+  min-width: 0;
+  border-color: var(--modern-line) !important;
+  background: transparent !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceBottomPanel>h2 {
+  height: 34px;
+  padding: 0 11px;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--modern-line);
+  color: var(--text-primary) !important;
+  font-size: 10px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referencePanelTabs {
+  min-height: 30px;
+  padding: 4px 7px 0;
+  border-color: var(--modern-line) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referencePanelTabs button {
+  border-color: var(--modern-line) !important;
+  background: var(--fill-button) !important;
+  color: var(--text-muted) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referencePanelTabs button.active {
+  background: var(--fill-primary, var(--gradient-primary)) !important;
+  color: #fff !important;
+  border-color: transparent !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceLogs {
+  background: transparent !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceLogs>div {
+  border-color: var(--modern-soft-line) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceLogs :is(time,span) {
+  color: var(--text-secondary) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceActions button {
+  border-color: var(--modern-line) !important;
+  border-radius: 8px !important;
+  background: var(--fill-button) !important;
+  color: var(--text-secondary) !important;
+  transition: transform .18s ease, border-color .18s ease, color .18s ease
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceActions button:hover:not(:disabled) {
+  color: var(--text-primary) !important;
+  border-color: color-mix(in srgb, var(--primary) 48%, var(--border)) !important;
+  transform: translateY(-1px)
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceActions button.start {
+  background: color-mix(in srgb, var(--status-ok) 12%, var(--surface-hover)) !important;
+  border-color: color-mix(in srgb, var(--status-ok) 38%, var(--border)) !important;
+  color: var(--status-ok) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceActions button.stop {
+  background: color-mix(in srgb, var(--status-nok) 10%, var(--surface-hover)) !important;
+  border-color: color-mix(in srgb, var(--status-nok) 35%, var(--border)) !important;
+  color: var(--status-nok) !important
+}
+
+/* Modern UI · clarity and collision pass -------------------------------- */
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .modernDashboardPage .referenceMachineHeader {
+  overflow: hidden
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTitle {
+  flex: 1 1 340px;
+  min-width: 320px;
+  max-width: 440px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceContextCard {
+  flex: 0 0 88px;
+  width: 88px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceMode {
+  flex: 0 0 164px;
+  width: 164px !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceConnection {
+  flex: 0 0 148px;
+  width: 148px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceYield {
+  flex: 0 0 176px;
+  min-width: 176px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTotal {
+  flex: 0 0 128px;
+  min-width: 128px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceClock {
+  flex: 0 0 136px;
+  min-width: 136px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .modernDashboardPage .oakUserMenu {
+  flex: 1 1 160px;
+  min-width: 150px;
+  margin-left: 0
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceUser {
+  width: 100% !important;
+  min-width: 0 !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakSourceControl,
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDeckGroup {
+  border-color: var(--modern-line) !important;
+  background: color-mix(in srgb, var(--surface-elevated) 82%, var(--surface)) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakSourceControl>svg {
+  color: var(--primary) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) :is(.oakSourceControl button,.oakDeckGroup>button) {
+  border-color: var(--modern-line) !important;
+  color: var(--text-secondary) !important;
+  background: transparent !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) :is(.oakSourceControl button,.oakDeckGroup>button):hover {
+  color: var(--text-primary) !important;
+  background: color-mix(in srgb, var(--primary) 11%, var(--surface-hover)) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) :is(.oakDeckGroup>button.active,.oakDensity button.active,.oakFocusButton.active) {
+  color: #fff !important;
+  background: var(--fill-primary, var(--gradient-primary)) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #fff 12%, transparent) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDeckGroup>button.active svg {
+  color: #fff !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDensity {
+  border-color: var(--modern-line) !important;
+  background: color-mix(in srgb, var(--background) 45%, var(--surface-elevated)) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDashboardViewport {
+  grid-template-rows: minmax(250px,1fr) var(--dashboard-tray-height) 5px var(--dashboard-bottom-height) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDashboardViewport.withoutTray {
+  grid-template-rows: minmax(250px,1fr) 5px var(--dashboard-bottom-height) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDashboardViewport.withoutWorkspace {
+  grid-template-rows: minmax(250px,1fr) var(--dashboard-tray-height) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDashboardViewport.withoutTray.withoutWorkspace {
+  grid-template-rows: minmax(250px,1fr) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) :is(.oakMainGrid>.matrixPanel,.oakMainGrid>.viewerPanel,.oakMainGrid>.currentLensPanel,.oakTraySurface,.referenceBottomPanel) {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 5%, transparent),
+    0 12px 30px color-mix(in srgb, #000 22%, transparent) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDetailsPanel {
+  grid-template-rows: 44px minmax(0,1.55fr) 38px minmax(64px,.65fr) !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceLensInfo {
+  min-height: 0;
+  overflow: hidden !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) :is(.referenceLensData,.referenceLensPreview) {
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--primary) 50%, var(--border)) transparent
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDefectList {
+  min-height: 0;
+  overflow-y: auto !important
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTrendBody {
+  min-height: 0;
+  overflow: hidden;
+  grid-template-rows: minmax(0,1fr);
+  background:
+    radial-gradient(circle at 25% 12%, color-mix(in srgb, var(--primary) 8%, transparent), transparent 42%),
+    color-mix(in srgb, var(--surface) 94%, var(--background))
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTrendBody>.productionTrend {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0,1fr) 18px;
+  padding: 18px 12px 5px !important;
+  overflow: hidden
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTrendBody>.productionTrend svg {
+  width: 100%;
+  height: 100% !important;
+  min-height: 0;
+  margin: 0 !important;
+  overflow: visible
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .productionTrend .chartLegend {
+  top: 6px;
+  right: 14px;
+  color: var(--text-secondary) !important;
+  font-size: 7px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .productionTrend .chartAxis {
+  align-items: end;
+  padding: 4px 4px 0;
+  color: var(--text-muted) !important;
+  font-size: 7px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .productionTrend .chartGrid {
+  stroke: color-mix(in srgb, var(--border-strong) 28%, transparent)
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .productionTrend .chartLabel {
+  fill: var(--text-muted) !important;
+  font-size: 7px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .productionTrend .yieldBar {
+  fill: var(--primary);
+  opacity: .68
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .productionTrend .yieldLine {
+  stroke: var(--status-ok)
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .productionTrend .yieldPoint {
+  fill: var(--status-ok);
+  stroke: var(--surface);
+  stroke-width: 1.5
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTrendKpis {
+  min-width: 0;
+  min-height: 0;
+  padding: 8px 10px;
+  border-color: var(--modern-line) !important;
+  background: color-mix(in srgb, var(--surface-elevated) 52%, var(--surface));
+  justify-content: center;
+  gap: 6px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTrendKpis>div {
+  width: 100%;
+  min-height: 30px;
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border: 1px solid var(--modern-soft-line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 74%, transparent)
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTrendKpis>.miniYieldRing {
+  min-height: 42px;
+  height: auto;
+  margin-top: 0;
+  flex-direction: row;
+  align-items: center;
+  place-items: initial;
+  gap: 9px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 74%, transparent)
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTrendKpis>.miniYieldRing:after {
+  display: none
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTrendKpis .miniYieldRing>i {
+  width: 34px;
+  height: 34px;
+  background: conic-gradient(var(--status-ok) var(--yield), color-mix(in srgb, var(--border) 48%, transparent) 0)
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTrendKpis .miniYieldRing>i:after {
+  inset: 6px;
+  background: var(--surface)
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTrendKpis :is(.miniYieldRing b,div>b) {
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTrendKpis :is(.miniYieldRing small,div>small) {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 7px
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceLogs {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--primary) 45%, var(--border)) transparent
+}
+
+html[data-workspace="modern"]:not([data-theme="premium-white"]) .modernDashboardPage button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 78%, #fff);
+  outline-offset: -2px
+}
+
+html[data-motion="on"][data-workspace="modern"]:not([data-theme="premium-white"]) .modernDashboardPage :is(.oakMainGrid>.matrixPanel,.oakMainGrid>.viewerPanel,.oakMainGrid>.currentLensPanel,.oakTraySurface,.oakBottomWorkspace) {
+  animation: modernPanelReveal .32s cubic-bezier(.2,.75,.25,1) both
+}
+
+html[data-motion="on"][data-workspace="modern"]:not([data-theme="premium-white"]) .modernDashboardPage .oakMainGrid>.viewerPanel {animation-delay:.04s}
+html[data-motion="on"][data-workspace="modern"]:not([data-theme="premium-white"]) .modernDashboardPage .oakMainGrid>.currentLensPanel {animation-delay:.08s}
+html[data-motion="on"][data-workspace="modern"]:not([data-theme="premium-white"]) .modernDashboardPage .oakTraySurface {animation-delay:.1s}
+html[data-motion="on"][data-workspace="modern"]:not([data-theme="premium-white"]) .modernDashboardPage .oakBottomWorkspace {animation-delay:.14s}
+
+@keyframes modernPanelReveal {
+  from {opacity:0;transform:translateY(7px)}
+  to {opacity:1;transform:translateY(0)}
+}
+
+@media (max-width:1500px) {
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTitle {
+    flex-basis:385px;
+    min-width:385px;
+    max-width:410px
+  }
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTitle small {display:none}
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceConnection {display:none}
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceContextCard {flex-basis:78px;width:78px}
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceMode {flex-basis:150px;width:150px!important}
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceYield {flex-basis:150px;min-width:150px}
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTotal {flex-basis:112px;min-width:112px}
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceClock {flex-basis:125px;min-width:125px}
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .modernDashboardPage .oakUserMenu {min-width:135px}
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceUser {min-width:0!important}
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakMainGrid {grid-template-columns:minmax(280px,var(--history-fr)) 7px minmax(390px,var(--viewer-fr)) 7px minmax(285px,var(--details-fr))!important}
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakMainGrid.noDetails {grid-template-columns:minmax(280px,var(--history-fr)) 7px minmax(0,var(--viewer-fr))!important}
+}
+
+@media (max-width:1180px) {
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceContextCard,
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTotal {display:none}
+}
+
+@media (max-height:820px) and (min-width:1060px) {
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .modernDashboardPage .referenceMachineHeader {
+    height: 64px !important;
+    min-height: 64px !important
+  }
+
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDashboardViewport {
+    grid-template-rows:minmax(238px,1fr) min(var(--dashboard-tray-height),110px) 5px min(var(--dashboard-bottom-height),190px) !important;
+    gap:6px !important;
+    padding:7px !important
+  }
+
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDashboardViewport.withoutTray {
+    grid-template-rows:minmax(238px,1fr) 5px min(var(--dashboard-bottom-height),190px) !important
+  }
+
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDashboardViewport.withoutWorkspace {
+    grid-template-rows:minmax(238px,1fr) min(var(--dashboard-tray-height),110px) !important
+  }
+
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakDashboardViewport.withoutTray.withoutWorkspace {
+    grid-template-rows:minmax(238px,1fr) !important
+  }
+
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .referencePreviewImage {
+    height:84px
+  }
+
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTrendKpis {
+    padding:4px 6px;
+    gap:3px
+  }
+
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTrendKpis>div {
+    min-height:25px;
+    padding:2px 5px;
+    border-radius:6px
+  }
+
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTrendKpis>.miniYieldRing {
+    min-height:34px
+  }
+
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTrendKpis .miniYieldRing>i {
+    width:28px;
+    height:28px
+  }
+
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTrendKpis :is(.miniYieldRing b,div>b) {
+    font-size:12px
+  }
+
+  html[data-workspace="modern"]:not([data-theme="premium-white"]) .referenceTrendKpis :is(.miniYieldRing small,div>small) {
+    margin-top:1px;
+    font-size:6px
+  }
 }
