@@ -24,7 +24,7 @@ async function readInitialPreferences():Promise<Partial<UiPreferences>>{
 }
 
 export const metadata={
-  title:'Emage Group · Lens Inspection Control Center',
+  title:'Emage Group · DSM BV 4Cam Inspection System',
   description:'Emage Group optical contact lens inspection workstation'
 };
 

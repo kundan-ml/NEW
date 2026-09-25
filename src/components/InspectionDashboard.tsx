@@ -385,7 +385,7 @@ export function InspectionDashboard({
     : 0;
 
   function closeApplication() {
-    if (!window.confirm("Close Lens Inspection Control Center?")) return;
+    if (!window.confirm("Close DSM BV 4Cam Inspection System?")) return;
     window.close();
     window.setTimeout(() => {
       if (!window.closed) setToast("Your browser prevented this tab from closing. You can close it manually.");

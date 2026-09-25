@@ -122,7 +122,7 @@ function ShellInner({children}:{children:React.ReactNode}){
         onUi={()=>setCustomize(true)}
       />}
       {!prefs.manualSkeleton&&sharedChrome&&<header className="sharedModernHeader">
-        <div className="sharedHeaderBrand"><img src="/brand/emage-mark.png" alt="Emage Group"/><span><b>Lens Inspection Control Center</b><small>{pageName} · Emage Group</small></span></div>
+        <div className="sharedHeaderBrand"><img src="/brand/emage-mark.png" alt="Emage Group"/><span><b>DSM BV 4Cam Inspection System</b><small>{pageName} · Emage Group</small></span></div>
         <div className="sharedHeaderContext"><span><small>LINE</small><b>{system?.settings.line_name||'—'}</b></span><span><small>STATION</small><b>{system?.settings.station_name||'—'}</b></span></div>
         <div className="sharedHeaderState"><i/><span><b>Connected</b><small>{system?.bridge||'Backend service'}</small></span></div>
         <div className="sharedHeaderClock"><small>{now.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})}</small><b>{now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</b></div>

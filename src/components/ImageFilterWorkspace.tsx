@@ -83,7 +83,7 @@ export function ImageFilterWorkspace({modal=false,onClose}:{modal?:boolean;onClo
   const workspace=<div className={`imageFilterPage ${modal?"imageFilterDialogPage":""}`}>
     {modal&&<div className="imageFilterDialogTitle"><span><SlidersHorizontal/><b>Image Filter Configuration</b><small>Optimization image rules</small></span><button onClick={onClose} aria-label="Close image filter"><X/></button></div>}
     <header className="filterHero">
-      <div className="filterHeroTitle"><img src="/brand/emage-mark.png" alt="Emage Group"/><span><small><SlidersHorizontal/> Lens Inspection Control Center</small><h1>Image Filter & Storage</h1><p>Optimization capture · Operation 3.2.3</p></span></div>
+      <div className="filterHeroTitle"><img src="/brand/emage-mark.png" alt="Emage Group"/><span><small><SlidersHorizontal/> DSM BV 4Cam Inspection System</small><h1>Image Filter & Storage</h1><p>Optimization capture · Operation 3.2.3</p></span></div>
       <div className="filterHeroStatus">
         <span className={runtime?.active?"recording":"ready"}><i/>{runtime?.active?"Storage active":"System ready"}</span>
         <span><small>Line</small><b>{system?.settings.line_name||"—"}</b></span>

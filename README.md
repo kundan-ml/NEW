@@ -1,4 +1,4 @@
-# Lens Inspection Control Center — Frontend V6
+# DSM BV 4Cam Inspection System — Frontend V6
 
 Compact premium Next.js workstation UI for the OKLIN3-inspired optical contact-lens inspection workflow.
 
@@ -82,7 +82,7 @@ Create `.env.local`:
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
 BACKEND_API_URL=http://localhost:8000/api/v1
-NEXT_PUBLIC_APP_NAME=Lens Inspection Control Center
+NEXT_PUBLIC_APP_NAME=DSM BV 4Cam Inspection System
 ```
 
 `BACKEND_API_URL` is used by the Next.js image proxy so the HTML5 canvas receives a same-origin image and can safely inspect pixels.
