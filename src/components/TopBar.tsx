@@ -33,8 +33,64 @@ export function TopBar({info,onRefresh,stats,workstation=false,demo=false,onUplo
       <div className="referenceContextCard"><small>Station 2</small><b>Inspection</b></div>
       <button className={`oakMode referenceMode ${mode.toLowerCase()}`} onClick={toggle} disabled={busy}><Activity/><span><b>{mode}</b><small>{mode==='AUTO'?'Automatic Operation':'Manual Operation'}</small></span></button>
       <div className="referenceConnection" title={halconOnline?'All inspection services online':'Preview connection'}><i/><span><b>Connected</b><small><Database/> PLC / Camera / DB</small></span></div>
-      {stats&&<div className="referenceYield"><i style={{'--yield':`${yieldPct*3.6}deg`} as React.CSSProperties}/><span><small>Yield (Current WT)</small><b>{yieldPct.toFixed(1)}%</b><em>{stats.evaluated.toLocaleString()} / 1,153</em></span></div>}
-      {stats&&<div className="referenceTotal"><small>Total Lenses Today</small><b>{stats.total.toLocaleString()}</b><em>NOK: {stats.nokRate.toFixed(1)}%</em></div>}
+{stats && (
+  <div className="referenceYield">
+    <i
+      style={{
+        '--yield': `${yieldPct * 3.6}deg`,
+      } as React.CSSProperties}
+    />
+
+    <div className="flex flex-col justify-center">
+      <small>
+        Yield (Current WT)
+      </small>
+
+      <div
+        className="flex flex-row items-center gap-2 whitespace-nowrap"
+        style={{ marginTop: '8px' }}
+      >
+        <b
+          className="whitespace-nowrap"
+          style={{ marginTop: 0 }}
+        >
+          {yieldPct.toFixed(1)}%
+        </b>
+
+        <em
+          className="whitespace-nowrap not-italic"
+          style={{ marginTop: 0 }}
+        >
+          -  ({stats.evaluated.toLocaleString()} / 1,153)
+        </em>
+      </div>
+    </div>
+  </div>
+)}
+{stats && (
+  <div className="referenceTotal">
+    <small>Total Lenses Today</small>
+
+    <div
+      className="flex flex-row items-center gap-2 whitespace-nowrap"
+      style={{ marginTop: '8px' }}
+    >
+      <b
+        className="whitespace-nowrap"
+        style={{ marginTop: 0 }}
+      >
+        {stats.total.toLocaleString()}
+      </b>
+
+      <em
+        className="whitespace-nowrap not-italic"
+        style={{ marginTop: 0 }}
+      >
+       <span>   -   ( NOK: {stats.nokRate.toFixed(1)}% ) </span>
+      </em>
+    </div>
+  </div>
+)}
       <div className="referenceClock"><small>{now.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric'})}</small><b>{now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</b></div>
       <div className="userMenu oakUserMenu">
         <button className="oakUser referenceUser" onClick={()=>setOpen(v=>!v)} title="User & workstation"><CircleUserRound/><span><b>{info?.session.username||'Operator'}</b><small>{info?.session.role||'Production'}</small></span><ChevronDown/></button>

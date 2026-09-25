@@ -26,8 +26,10 @@ import {
   Loader2,
   Maximize2,
   Minimize2,
+  MoreHorizontal,
   Pause,
   Play,
+  Power,
   RefreshCw,
   RotateCcw,
   Square,
@@ -48,6 +50,7 @@ import type {
   StorageRuntime,
 } from "@/types";
 import { DatasetLoader } from "./DatasetLoader";
+import { ClassicHeader } from "./ClassicHeader";
 import { LensViewer } from "./LensViewer";
 import { StatusMatrix, type GlobalHistoryEntry } from "./StatusMatrix";
 import { TopBar } from "./TopBar";
@@ -57,13 +60,14 @@ import { useUI } from "./UIProvider";
 type WorkspaceTab = "quality" | "activity" | "control";
 type InspectionBottomTab = "messages" | "wt" | "trend";
 type WtViewMode = "images" | "names";
+type BottomWidthKey = "trendWidth" | "logsWidth" | "actionsWidth";
 
 export function InspectionDashboard({
   inspectionMode = false,
 }: {
   inspectionMode?: boolean;
 }) {
-  const { prefs, patch } = useUI();
+  const { prefs, patch, canCustomize } = useUI();
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
   const [datasetId, setDatasetId] = useState("");
@@ -78,6 +82,7 @@ export function InspectionDashboard({
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
   const [hold, setHold] = useState(false);
+  const [moreActionsOpen, setMoreActionsOpen] = useState(false);
   // -1 is the all-defects canvas overview. The panel still highlights its
   // first row until an operator explicitly focuses a defect.
   const [selectedDefect, setSelectedDefect] = useState(-1);
@@ -114,6 +119,11 @@ export function InspectionDashboard({
   useEffect(() => {
     const saved = localStorage.getItem("lens-operation-mode");
     if (saved === "AUTO" || saved === "MANUAL") setOperationMode(saved);
+    const query = new URLSearchParams(window.location.search);
+    if (query.get("login") === "1") setLoginOpen(true);
+    if (query.get("dataset") === "1") setLoader(true);
+    if (query.has("login") || query.has("dataset"))
+      window.history.replaceState({}, "", window.location.pathname);
   }, []);
   useEffect(() => {
     operationModeRef.current = operationMode;
@@ -240,7 +250,7 @@ export function InspectionDashboard({
     const normalized = name.toLowerCase();
     return (statusLegend?.defects || []).find((item) =>
       (item.match_terms || []).some((term) => normalized.includes(term.toLowerCase())),
-    ) || statusLegend?.fallback_defect || { key: "unknown-defect", label: "Unknown defect", color: statusSymbol("NOK").color, symbol: "i" };
+    ) || statusLegend?.fallback_defect || { key: "unknown-defect", label: "NOK", color: statusSymbol("NOK").color, symbol: "i" };
   };
   useEffect(() => {
     if (!datasetId) return;
@@ -281,6 +291,12 @@ export function InspectionDashboard({
   );
   const yieldPct = results.length ? (counts.OK / results.length) * 100 : 0;
   const nokRate = results.length ? (counts.NOK / results.length) * 100 : 0;
+  const warnRate = results.length ? (counts.WARN / results.length) * 100 : 0;
+  const totalDefects = useMemo(() => results.reduce((total, item) => total + (item.defects?.length || 0), 0), [results]);
+  const averageCycleMs = useMemo(() => {
+    const times = results.flatMap(item => item.channels || []).map(item => item.elapsed_ms).filter(value => Number.isFinite(value) && value >= 0);
+    return times.length ? times.reduce((total, value) => total + value, 0) / times.length : 0;
+  }, [results]);
   const activeGlobalWt = selectedGlobalWt || globalHistory.find(entry => entry.datasetId === datasetId && entry.sample.id === current)?.wt || 1;
   const inspectionIdentifiers = useMemo(() => {
     const filename = sample?.images[channel]?.filename || Object.values(sample?.images || {})[0]?.filename || "";
@@ -358,13 +374,23 @@ export function InspectionDashboard({
   const showDetails = prefs.showDetails;
   const showTray = prefs.showTray && !focusMode;
   const showWorkspace = prefs.showWorkspace && !focusMode;
+  const bottomLayoutEditing = canCustomize && !prefs.uiLocked;
   const displayYield = yieldPct;
   const displayNok = nokRate;
   const isRunning =
     busy || job?.status === "queued" || job?.status === "running";
+  const halconOnline = Boolean(info?.bridge && !/offline|unavailable|none|disconnected/i.test(info.bridge));
   const jobProgress = job?.total
     ? Math.min(100, (job.completed / job.total) * 100)
     : 0;
+
+  function closeApplication() {
+    if (!window.confirm("Close Lens Inspection Control Center?")) return;
+    window.close();
+    window.setTimeout(() => {
+      if (!window.closed) setToast("Your browser prevented this tab from closing. You can close it manually.");
+    }, 250);
+  }
 
   async function refreshRunOutputs(did: string) {
     const [r, l, s] = await Promise.allSettled([
@@ -708,6 +734,44 @@ export function InspectionDashboard({
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up, { once: true });
   }
+  function beginBottomSectionResize(
+    leftKey: BottomWidthKey,
+    rightKey: BottomWidthKey,
+    e: ReactPointerEvent<HTMLButtonElement>,
+  ) {
+    if (!bottomLayoutEditing || window.innerWidth < 1060) return;
+    e.preventDefault();
+    const splitter = e.currentTarget,
+      left = splitter.previousElementSibling as HTMLElement | null,
+      right = splitter.nextElementSibling as HTMLElement | null;
+    if (!left || !right) return;
+    const startX = e.clientX,
+      leftWidth = left.getBoundingClientRect().width,
+      rightWidth = right.getBoundingClientRect().width,
+      pairWidth = leftWidth + rightWidth,
+      totalWeight = prefs[leftKey] + prefs[rightKey],
+      minimum = Math.min(180, pairWidth * 0.34);
+    let nextLeft = prefs[leftKey], nextRight = prefs[rightKey];
+    document.body.classList.add("is-resizing-dashboard");
+    const move = (event: PointerEvent) => {
+      const nextLeftWidth = Math.max(
+        minimum,
+        Math.min(pairWidth - minimum, leftWidth + event.clientX - startX),
+      );
+      nextLeft = totalWeight * (nextLeftWidth / pairWidth);
+      nextRight = totalWeight - nextLeft;
+      left.style.flexGrow = String(nextLeft);
+      right.style.flexGrow = String(nextRight);
+    };
+    const up = () => {
+      document.body.classList.remove("is-resizing-dashboard");
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      patch({ [leftKey]: nextLeft, [rightKey]: nextRight });
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up, { once: true });
+  }
   function resetLayout() {
     setFocusMode(false);
     patch({
@@ -738,60 +802,14 @@ export function InspectionDashboard({
         className={`premiumDashboardPage oakWorkstationPage inspectionReferencePage ${prefs.manualSkeleton ? "pdfSkeletonMode" : ""} ${!prefs.showHistory ? "studioHideHistory" : ""} ${!prefs.showDetails ? "studioHideDetails" : ""} ${!prefs.showWorkspace ? "studioHideWorkspace" : ""}`}
       >
         {prefs.manualSkeleton ? (
-          <div className="pdfMenuStrip">
-            <button
-              onClick={() => {
-                setLoginUser(info?.session.username || "operator");
-                setLoginPassword("");
-                setLoginOpen(true);
-              }}
-            >
-              Switch User
-            </button>
-            <button onClick={() => (window.location.href = "/storage")}>
-              Image Filter
-            </button>
-            <button onClick={() => (window.location.href = "/registration")}>
-              Registration
-            </button>
-            <button onClick={() => (window.location.href = "/focus")}>
-              Focus
-            </button>
-            <button onClick={() => (window.location.href = "/settings")}>
-              Settings
-            </button>
-            <button onClick={() => (window.location.href = "/bv-test")}>
-              BV Test
-            </button>
-            <button
-              onClick={() =>
-                setToast(`OKLIN3 · Version ${info?.version || "7.4.0"}`)
-              }
-            >
-              Info
-            </button>
-            {/* <button
-              onClick={() => setToast("Open the operator manual for help")}
-            >
-              Help
-            </button> */}
-            <button
-              onClick={() =>
-                setToast("Exit is disabled in the browser interface")
-              }
-            >
-              Exit
-            </button>
-            <span />
-            <button onClick={() => setLoader(true)}>Dataset</button>
-            <button
-              onClick={() =>
-                window.dispatchEvent(new Event("lens-open-customizer"))
-              }
-            >
-              UI
-            </button>
-          </div>
+          <ClassicHeader
+            onSwitchUser={()=>{setLoginUser(info?.session.username||"operator");setLoginPassword("");setLoginOpen(true)}}
+            onImageFilter={()=>window.dispatchEvent(new Event("lens-open-image-filter"))}
+            onDataset={()=>setLoader(true)}
+            onInfo={()=>setToast(`OKLIN3 · Version ${info?.version||"7.4.0"}`)}
+            onExit={()=>setToast("Exit is disabled in the browser interface")}
+            onUi={()=>window.dispatchEvent(new Event("lens-open-customizer"))}
+          />
         ) : (
           <TopBar
             workstation
@@ -1214,7 +1232,7 @@ export function InspectionDashboard({
                 <div className="inspectionLogRows referenceMessageRows">
                   {filteredLogs.map((l, i) => (
                     <div className={l.level} key={`${l.time}-${i}`}>
-                      <time>{l.time}</time>
+                      <time>{l.time.includes("T") ? new Date(l.time).toLocaleTimeString() : l.time}</time>
                       <span>{l.message}</span>
                     </div>
                   ))}
@@ -1475,7 +1493,7 @@ export function InspectionDashboard({
             <span>{storage?.active ? "Recording" : "Storage"}</span>
           </button>
         </div>
-        <div className="oakDeckGroup" aria-label="Dashboard modules">
+        <div className="oakDeckGroup oakModuleToggles" aria-label="Dashboard modules">
           <button
             className={prefs.showHistory ? "active" : ""}
             onClick={() => patch({ showHistory: !prefs.showHistory })}
@@ -1725,32 +1743,7 @@ export function InspectionDashboard({
 
         {showTray && (
           <section className="oakTraySurface">
-            <div className="oakTrayHead">
-              <h2>
-                Lens Thumbnails{" "}
-                <span>
-                  (Current WT:{" "}
-                  {inspectionIdentifiers.ctNumber})
-                </span>
-              </h2>
-              <div>
-                <button onClick={archiveCurrentWt} title="Archive current WT">
-                  <Archive />
-                </button>
-                <button onClick={() => setShowLegend((value) => !value)} title="Status symbol legend">
-                  <CircleAlert />
-                </button>
-                <button onClick={() => relative(-1)}>
-                  <ChevronLeft />
-                </button>
-                <button onClick={() => relative(1)}>
-                  <ChevronRight />
-                </button>
-                <button className="showAll" onClick={() => setFocusMode(false)}>
-                  Show All
-                </button>
-              </div>
-            </div>
+
             {showLegend && (
               <div className="modernLegendPopover">
                 <div className="inspectionLegendHead"><span><b>Status symbols</b><small>Inspection and HALCON results</small></span><button onClick={() => setShowLegend(false)}>×</button></div>
@@ -1805,11 +1798,10 @@ export function InspectionDashboard({
           </button>
         )}
         {showWorkspace && (
-          <section className="oakBottomWorkspace referenceBottomWorkspace">
+          <section className={`oakBottomWorkspace referenceBottomWorkspace ${bottomLayoutEditing ? "bottomAdjustable" : ""}`}>
             {prefs.showTrend && (
-              <div className="referenceBottomPanel referenceTrendPanel">
-                <h2>Yield &amp; Trend</h2>
-                <div className="referencePanelTabs">
+              <div className="referenceBottomPanel referenceTrendPanel" aria-label="Yield and trend" style={{flexGrow:prefs.trendWidth}}>
+                <div className="referencePanelTabs" aria-label="Trend views">
                   <button className="active">Yield Trend</button>
                   <button>Defect Types</button>
                   <button>Station Comparison</button>
@@ -1844,10 +1836,17 @@ export function InspectionDashboard({
                 </div>
               </div>
             )}
+            {bottomLayoutEditing && prefs.showTrend && (prefs.showLogs || prefs.showActions) && (
+              <button
+                className="bottomSectionSplit"
+                onPointerDown={(event)=>beginBottomSectionResize("trendWidth",prefs.showLogs?"logsWidth":"actionsWidth",event)}
+                title="Drag to resize bottom sections"
+                aria-label="Resize yield and adjacent section"
+              ><GripVertical/></button>
+            )}
             {prefs.showLogs && (
-              <div className="referenceBottomPanel referenceLogsPanel">
-                <h2>System Logs</h2>
-                <div className="referencePanelTabs">
+              <div className="referenceBottomPanel referenceLogsPanel" aria-label="System logs" style={{flexGrow:prefs.logsWidth}}>
+                <div className="referencePanelTabs" aria-label="System log filters">
                   <button
                     className="active"
                     onClick={() => setLogFilter("all")}
@@ -1875,58 +1874,81 @@ export function InspectionDashboard({
                 </div>
               </div>
             )}
+            {bottomLayoutEditing && prefs.showLogs && prefs.showActions && (
+              <button
+                className="bottomSectionSplit"
+                onPointerDown={(event)=>beginBottomSectionResize("logsWidth","actionsWidth",event)}
+                title="Drag to resize bottom sections"
+                aria-label="Resize logs and quick actions"
+              ><GripVertical/></button>
+            )}
             {prefs.showActions && (
-              <div className="referenceBottomPanel referenceActionsPanel">
-                <h2>Quick Actions</h2>
-                <div className="referenceActions">
-                  {job && (
-                    <div className={`referenceRunStatus ${job.status}`}>
-                      <span>
-                        <b>
-                          {job.status === "completed"
-                            ? "Run complete"
-                            : job.status === "failed"
-                              ? "Run failed"
-                              : job.status === "cancelled"
-                                ? "Run stopped"
-                                : "Inspecting dataset"}
-                        </b>
-                        <small>
-                          {job.completed} / {job.total} lenses
-                        </small>
-                      </span>
-                      <i>
-                        <em style={{ width: `${jobProgress}%` }} />
-                      </i>
+              <div className="referenceBottomPanel referenceActionsPanel" aria-label="Quick actions" style={{flexGrow:prefs.actionsWidth}}>
+                <div className="referenceActions inspectionControlPanel">
+                  <div className="inspectionOverviewChart">
+                    <div className="inspectionOverviewHead">
+                      <span><small>OVERALL INSPECTION</small><b>Status distribution</b></span>
+                      <div className="inspectionOverviewStats">
+                        <span><b>{results.length}</b><small>Inspected</small></span>
+                        <span><b>{totalDefects}</b><small>Defects</small></span>
+                        <span><b>{averageCycleMs ? `${Math.round(averageCycleMs)}ms` : "—"}</b><small>Avg cycle</small></span>
+                      </div>
                     </div>
-                  )}
+                    <div className="inspectionStackedBar" aria-label={`OK ${yieldPct.toFixed(1)}%, NOK ${nokRate.toFixed(1)}%, warning ${warnRate.toFixed(1)}%`}>
+                      <i className="ok" style={{width:`${yieldPct}%`}}/>
+                      <i className="nok" style={{width:`${nokRate}%`}}/>
+                      <i className="warn" style={{width:`${warnRate}%`}}/>
+                    </div>
+                    <div className="inspectionBarRows">
+                      <div className="ok"><span><i/>OK <b>{counts.OK}</b></span><em><i style={{width:`${yieldPct}%`}}/></em><strong>{yieldPct.toFixed(1)}%</strong></div>
+                      <div className="nok"><span><i/>NOK <b>{counts.NOK}</b></span><em><i style={{width:`${nokRate}%`}}/></em><strong>{nokRate.toFixed(1)}%</strong></div>
+                      <div className="warn"><span><i/>Warning <b>{counts.WARN}</b></span><em><i style={{width:`${warnRate}%`}}/></em><strong>{warnRate.toFixed(1)}%</strong></div>
+                    </div>
+                    <div className="inspectionRuntimeFacts">
+                      <span><small>Batch</small><b>{results.length}/{samples.length || 0}</b></span>
+                      <span><small>Active WT</small><b>{sample ? `WT-${String(sample.wt_index).padStart(2,"0")}` : "—"}</b></span>
+                      <span><small>Channel</small><b>{currentPreviewChannel.toUpperCase()}</b></span>
+                      <span><small>Mode</small><b>{operationMode}</b></span>
+                    </div>
+                    <div className="inspectionConnections" aria-label="Inspection system connections">
+                      <span className={info ? "online" : "offline"}><i/><b>Camera</b><small>{info ? "Ready" : "Offline"}</small></span>
+                      <span className={info ? "online" : "offline"}><i/><b>PLC</b><small>{info ? "Linked" : "Offline"}</small></span>
+                      <span className={info ? "online" : "offline"}><i/><b>Database</b><small>{info ? "Active" : "Offline"}</small></span>
+                      <span className={halconOnline ? "online" : "offline"}><i/><b>HALCON</b><small>{halconOnline ? "Ready" : "Offline"}</small></span>
+                    </div>
+                  </div>
+                  <div className="inspectionPrimaryActions">
                   <button
-                    className="start"
-                    onClick={() => run()}
-                    disabled={isRunning || !samples.length}
+                    className="closeApplication primaryCommand"
+                    onClick={closeApplication}
                   >
-                    {isRunning ? <Loader2 className="spin" /> : <Play />}
-                    <span>
-                      {isRunning
-                        ? `Running ${job?.completed || 0}/${job?.total || samples.length}`
-                        : "Run All"}
-                    </span>
+                    <Power />
+                    <span>Close Application</span>
                   </button>
                   <button
-                    className="stop"
+                    className="stop commandIcon"
                     onClick={stop}
                     disabled={
                       !job || !["queued", "running"].includes(job.status)
                     }
+                    title="Stop inspection"
+                    aria-label="Stop inspection"
                   >
                     <Square />
-                    <span>Stop</span>
                   </button>
-                  <button onClick={() => setHold((v) => !v)}>
+                  <button className={`commandIcon ${hold ? "active" : ""}`} onClick={() => setHold((v) => !v)} title={hold ? "Resume live view" : "Pause live view"} aria-label={hold ? "Resume live view" : "Pause live view"}>
                     <Pause />
-                    <span>Pause</span>
                   </button>
-                  <button onClick={() => setLoader(true)}>
+                  <button className={`more commandIcon ${moreActionsOpen ? "active" : ""}`} onClick={() => setMoreActionsOpen(v=>!v)} aria-expanded={moreActionsOpen} title="More inspection actions" aria-label="More inspection actions">
+                    <MoreHorizontal />
+                  </button>
+                  </div>
+                  {moreActionsOpen && <div className="inspectionMoreActions">
+                  <button onClick={() => {void run();setMoreActionsOpen(false)}} disabled={isRunning || !samples.length}>
+                    {isRunning ? <Loader2 className="spin"/> : <Play/>}
+                    <span>{isRunning ? "Inspection running" : "Run All"}</span>
+                  </button>
+                  <button onClick={() => {setLoader(true);setMoreActionsOpen(false)}}>
                     <FolderOpen />
                     <span>Upload Folder</span>
                   </button>
@@ -1954,6 +1976,7 @@ export function InspectionDashboard({
                     <FolderArchive />
                     <span>Maintenance</span>
                   </button>
+                  </div>}
                 </div>
               </div>
             )}

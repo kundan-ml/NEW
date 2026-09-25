@@ -20,6 +20,10 @@ import {
 import {useUI} from './UIProvider';
 import {CustomizationDrawer} from './CustomizationDrawer';
 import {CommandPalette} from './CommandPalette';
+import {ClassicHeader} from './ClassicHeader';
+import {ImageFilterWorkspace} from './ImageFilterWorkspace';
+import {api} from '@/lib/api';
+import type {SystemInfo} from '@/types';
 
 const items=[
   ['/','Inspection',Microscope],
@@ -42,6 +46,13 @@ function ShellInner({children}:{children:React.ReactNode}){
   const{prefs,set}=useUI();
   const[customize,setCustomize]=useState(false);
   const[palette,setPalette]=useState(false);
+  const[imageFilterOpen,setImageFilterOpen]=useState(false);
+  const[system,setSystem]=useState<SystemInfo|null>(null);
+  const[now,setNow]=useState(()=>new Date());
+  const sharedChrome=path!=="/";
+  const pageName=items.find(([href])=>href===path)?.[1]||'Lens Inspection';
+
+  useEffect(()=>{if(!sharedChrome)return;void api.system().then(setSystem).catch(()=>{});const timer=window.setInterval(()=>setNow(new Date()),1000);return()=>window.clearInterval(timer)},[sharedChrome,path]);
 
   useEffect(()=>{
     function key(e:KeyboardEvent){
@@ -56,17 +67,20 @@ function ShellInner({children}:{children:React.ReactNode}){
     }
     function custom(){setCustomize(true)}
     function command(){setPalette(true)}
+    function imageFilter(){setImageFilterOpen(true)}
     window.addEventListener('keydown',key);
     window.addEventListener('lens-open-customizer',custom);
     window.addEventListener('lens-open-command',command);
+    window.addEventListener('lens-open-image-filter',imageFilter);
     return()=>{
       window.removeEventListener('keydown',key);
       window.removeEventListener('lens-open-customizer',custom);
       window.removeEventListener('lens-open-command',command);
+      window.removeEventListener('lens-open-image-filter',imageFilter);
     };
   },[]);
 
-  return <div className={`appShell ${prefs.sidebarCollapsed?'sidebarCollapsed':''} ${prefs.manualSkeleton?'manualSkeletonShell':''}`}>
+  return <div className={`appShell ${prefs.sidebarCollapsed?'sidebarCollapsed':''} ${prefs.manualSkeleton?'manualSkeletonShell pdfSkeletonMode':''}`}>
     {!prefs.manualSkeleton&&<aside className="sideRail productionRail">
       <button className="brandArea productionBrand emageRailBrand" onClick={()=>setCustomize(true)} title="Emage Group interface settings" aria-label="Open interface settings">
         <span className="emageMark"><img src="/brand/emage-mark.png" alt="Emage Group"/></span>
@@ -98,9 +112,28 @@ function ShellInner({children}:{children:React.ReactNode}){
       </div>
     </aside>}
 
-    <main className="appMain">{children}</main>
+    <main className={`appMain ${sharedChrome?'withSharedChrome':''}`}>
+      {prefs.manualSkeleton&&path!=="/"&&<ClassicHeader
+        onSwitchUser={()=>window.location.assign('/?login=1')}
+        onImageFilter={()=>setImageFilterOpen(true)}
+        onDataset={()=>window.location.assign('/?dataset=1')}
+        onInfo={()=>window.location.assign('/system')}
+        onExit={()=>window.location.assign('/')}
+        onUi={()=>setCustomize(true)}
+      />}
+      {!prefs.manualSkeleton&&sharedChrome&&<header className="sharedModernHeader">
+        <div className="sharedHeaderBrand"><img src="/brand/emage-mark.png" alt="Emage Group"/><span><b>Lens Inspection Control Center</b><small>{pageName} · Emage Group</small></span></div>
+        <div className="sharedHeaderContext"><span><small>LINE</small><b>{system?.settings.line_name||'—'}</b></span><span><small>STATION</small><b>{system?.settings.station_name||'—'}</b></span></div>
+        <div className="sharedHeaderState"><i/><span><b>Connected</b><small>{system?.bridge||'Backend service'}</small></span></div>
+        <div className="sharedHeaderClock"><small>{now.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})}</small><b>{now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</b></div>
+        <div className="sharedHeaderUser"><span><b>{system?.session.username||'Operator'}</b><small>{system?.session.role||'Production'}</small></span></div>
+      </header>}
+      <div className="sharedPageBody">{children}</div>
+      {sharedChrome&&<footer className="sharedAppFooter"><span><i/>System ready</span><span>{pageName}</span><span>{system?.mode==='AUTO'?'Automatic operation':'Setup operation'}</span><span>{system?.version?`v${system.version}`:'Emage Group'}</span></footer>}
+    </main>
 
     <CustomizationDrawer open={customize} onClose={()=>setCustomize(false)}/>
+    {imageFilterOpen&&<ImageFilterWorkspace modal onClose={()=>setImageFilterOpen(false)}/>}
     <CommandPalette
       open={palette}
       onClose={()=>setPalette(false)}

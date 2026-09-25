@@ -1,6 +1,7 @@
 'use client';
 
 import {useEffect,useRef,useState} from 'react';
+import {createPortal} from 'react-dom';
 import {FolderInput,FolderUp,Loader2,X} from 'lucide-react';
 import {api} from '@/lib/api';
 
@@ -18,7 +19,7 @@ export function DatasetLoader({open,onClose,onLoaded}:{open:boolean;onClose:()=>
     return()=>window.removeEventListener('keydown',close);
   },[open,busy,onClose]);
 
-  if(!open)return null;
+  if(!open||typeof document==='undefined')return null;
 
   async function loadPath(){
     setBusy(true);setErr('');
@@ -49,7 +50,7 @@ export function DatasetLoader({open,onClose,onLoaded}:{open:boolean;onClose:()=>
 
   const dirProps={webkitdirectory:'',directory:''} as any;
 
-  return <div className="modalBack uploadModalBack" onMouseDown={()=>{if(!busy)onClose()}}>
+  return createPortal(<div className="modalBack uploadModalBack" onMouseDown={()=>{if(!busy)onClose()}}>
     <div className="modernModal uploadModalWindow" role="dialog" aria-modal="true" aria-labelledby="upload-folder-title" onMouseDown={event=>event.stopPropagation()}>
       <button className="modalClose" onClick={onClose} aria-label="Close upload folder"><X/></button>
       <div className="modalBadge"><FolderInput/></div>
@@ -82,5 +83,5 @@ export function DatasetLoader({open,onClose,onLoaded}:{open:boolean;onClose:()=>
         <span><b>WT</b> Admin-configured positions</span>
       </div>
     </div>
-  </div>;
+  </div>,document.body);
 }
