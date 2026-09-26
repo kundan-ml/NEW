@@ -1,4 +1,5 @@
 import type {DatasetSummary,InspectionResult,Job,LogRow,Sample,StatusSymbolLegend,SystemInfo,StorageRuntime} from '@/types';
+import {resolvedPreviewUrl} from './preview-cache';
 export const API=process.env.NEXT_PUBLIC_API_URL||'http://localhost:8000/api/v1';
 export const WS_API=API.replace(/^http/,'ws');
 async function request<T>(path:string,init?:RequestInit):Promise<T>{
@@ -15,6 +16,7 @@ async function request<T>(path:string,init?:RequestInit):Promise<T>{
 export const api={
  system:()=>request<SystemInfo>('/system/info'),capabilities:()=>request<any[]>('/system/capabilities'),setMode:(mode:'AUTO'|'SETUP')=>request<any>('/system/mode',{method:'POST',body:JSON.stringify({mode})}),
  login:(username:string,password:string)=>request<any>('/auth/login',{method:'POST',body:JSON.stringify({username,password})}),logout:()=>request<any>('/auth/logout',{method:'POST'}),
+ createUser:(username:string,password:string,role:'Operator'|'Tester')=>request<{username:string;role:string}>('/auth/users',{method:'POST',body:JSON.stringify({username,password,role})}),
  version:()=>request<any>('/system/version'),timeoutTable:()=>request<any>('/system/timeout-table'),folderStructure:()=>request<any>('/system/folder-structure'),
  trayLayout:()=>request<{images_per_tray:number;supported_images_per_tray:number[]}>('/system/tray-layout'),setWtCapacity:(capacity:number)=>request<{capacity:number;supported:number[]}>('/system/wt-capacity',{method:'PUT',body:JSON.stringify({capacity})}),
  datasets:()=>request<DatasetSummary[]>('/datasets'),samples:(id:string)=>request<{total:number;items:Sample[]}>(`/datasets/${id}/samples?limit=1000`),results:(id:string)=>request<{items:InspectionResult[]}>(`/results/${id}?limit=1000`),
@@ -30,7 +32,7 @@ export const api={
  bvScripts:()=>request<any>('/bv/scripts')
 };
 export const previewUrl=(did:string,sid:string,ch:string)=>`/api/image?datasetId=${encodeURIComponent(did)}&sampleId=${encodeURIComponent(sid)}&channel=${encodeURIComponent(ch)}`;
-export const samplePreviewUrl=(did:string,sample:Sample,ch:string)=>sample.images[ch]?.relative_path?.startsWith('demo:')?sample.images[ch].relative_path:previewUrl(did,sample.id,ch);
+export const samplePreviewUrl=(did:string,sample:Sample,ch:string)=>sample.images[ch]?.relative_path?.startsWith('demo:')?sample.images[ch].relative_path:resolvedPreviewUrl(previewUrl(did,sample.id,ch));
 export const archiveUrl=(did:string)=>`${API}/actions/archive/${did}`;
 export const manualUrl=()=>`${API}/system/manual`;
 export const focusValuesUrl=(did:string,sid:string,ch:string,tab:string)=>`${API}/setup/focus/save-values`; // POST endpoint; use api helper if needed

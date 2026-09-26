@@ -17,15 +17,15 @@ function readSavedView(imageUrl:string):SavedView|null{
 }
 
 export function InspectionCanvas({imageUrl,defects,selectedDefect=-1,showDefects=true,showCrosshair=true,onProbe}:Props){
- const host=useRef<HTMLDivElement>(null);const canvas=useRef<HTMLCanvasElement>(null);const source=useRef<HTMLImageElement|null>(null);const pixels=useRef<HTMLCanvasElement|null>(null);const frame=useRef<number|null>(null);const activeImage=useRef('');const lastSize=useRef({width:0,height:0});
+ const host=useRef<HTMLDivElement>(null);const canvas=useRef<HTMLCanvasElement>(null);const source=useRef<HTMLImageElement|null>(null);const pixels=useRef<HTMLCanvasElement|null>(null);const frame=useRef<number|null>(null);const activeImage=useRef('');const loadSequence=useRef(0);const lastSize=useRef({width:0,height:0});
  const[view,setView]=useState<View>({scale:1,x:0,y:0});const[drag,setDrag]=useState<{sx:number;sy:number;vx:number;vy:number}|null>(null);const[state,setState]=useState<'idle'|'loading'|'ready'|'error'>('idle');const[error,setError]=useState('');const[probe,setProbe]=useState<Probe|null>(null);const[expanded,setExpanded]=useState(false);const[popupAspect,setPopupAspect]=useState(16/9);
 
  const fit=useCallback(()=>{const h=host.current,i=source.current;if(!h||!i||!i.naturalWidth)return;const r=h.getBoundingClientRect();const padding=Math.max(28,Math.min(r.width,r.height)*.055);const s=Math.max(.01,Math.min((r.width-padding*2)/i.naturalWidth,(r.height-padding*2)/i.naturalHeight));setView({scale:s,x:(r.width-i.naturalWidth*s)/2,y:(r.height-i.naturalHeight*s)/2})},[]);
  const restoreOrFit=useCallback((url:string)=>{const h=host.current,i=source.current;if(!h||!i)return;const r=h.getBoundingClientRect(),saved=readSavedView(url);lastSize.current={width:r.width,height:r.height};activeImage.current=url;if(saved){const scale=Math.max(.025,Math.min(12,saved.scale));setView({scale,x:r.width/2-saved.centerX*scale,y:r.height/2-saved.centerY*scale})}else fit()},[fit]);
 
  useEffect(()=>{
-   let revoked='';activeImage.current='';setProbe(null);setError('');
-   if(!imageUrl){source.current=null;pixels.current=null;setState('idle');return}
+   const requestId=++loadSequence.current;let revoked='';setProbe(null);setError('');
+   if(!imageUrl){activeImage.current='';source.current=null;pixels.current=null;setState('idle');return}
    setState('loading');
    if(imageUrl.startsWith('demo:')){
      const parts=imageUrl.split(':'),position=Number(parts[3]||7),channel=parts[4]||'h',status=parts[5]||'OK';
@@ -41,29 +41,30 @@ export function InspectionCanvas({imageUrl,defects,selectedDefect=-1,showDefects
        if(status!=='OK'){ctx.strokeStyle=status==='NOK'?'#ff2f8f':'#f2b94b';ctx.lineWidth=6;ctx.lineCap='round';[[.78,.24,.89,.33],[.75,.72,.86,.68],[.22,.71,.27,.75]].slice(0,status==='NOK'?3:1).forEach(([x1,y1,x2,y2])=>{ctx.beginPath();ctx.moveTo(x1*900,y1*900);ctx.quadraticCurveTo((x1+x2)*450+12,y1*900-18,x2*900,y2*900);ctx.stroke()})}
        ctx.strokeStyle='rgba(255,255,255,.88)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(430,450);ctx.lineTo(470,450);ctx.moveTo(450,430);ctx.lineTo(450,470);ctx.stroke();
      }
-     const i=new Image();i.decoding='async';i.onload=()=>{source.current=i;pixels.current=p;setState('ready');requestAnimationFrame(()=>restoreOrFit(imageUrl))};i.src=p.toDataURL('image/png');
+     const i=new Image();i.decoding='async';i.onload=()=>{if(requestId!==loadSequence.current)return;source.current=i;pixels.current=p;setState('ready');requestAnimationFrame(()=>restoreOrFit(imageUrl))};i.src=p.toDataURL('image/png');
      return;
    }
    const controller=new AbortController();
    (async()=>{try{
      const res=await fetch(imageUrl,{cache:'no-store',signal:controller.signal});if(!res.ok)throw new Error(`Image request failed (${res.status})`);
      const blob=await res.blob();revoked=URL.createObjectURL(blob);const i=new Image();i.decoding='async';
-     i.onload=()=>{source.current=i;const p=document.createElement('canvas');p.width=i.naturalWidth;p.height=i.naturalHeight;const ctx=p.getContext('2d',{willReadFrequently:true});ctx?.drawImage(i,0,0);pixels.current=p;setState('ready');requestAnimationFrame(()=>restoreOrFit(imageUrl))};
-     i.onerror=()=>{setState('error');setError('The browser could not decode this preview image.')};i.src=revoked;
-   }catch(e){if(!controller.signal.aborted){setState('error');setError(e instanceof Error?e.message:'Unable to load image')}}})();
+     i.onload=()=>{if(requestId!==loadSequence.current)return;source.current=i;const p=document.createElement('canvas');p.width=i.naturalWidth;p.height=i.naturalHeight;const ctx=p.getContext('2d',{willReadFrequently:true});ctx?.drawImage(i,0,0);pixels.current=p;setState('ready');requestAnimationFrame(()=>restoreOrFit(imageUrl))};
+     i.onerror=()=>{if(requestId!==loadSequence.current)return;setError('The browser could not decode this preview image.');setState(source.current?'ready':'error')};i.src=revoked;
+   }catch(e){if(!controller.signal.aborted&&requestId===loadSequence.current){setError(e instanceof Error?e.message:'Unable to load image');setState(source.current?'ready':'error')}}})();
    return()=>{controller.abort();if(revoked)URL.revokeObjectURL(revoked)};
  },[imageUrl,restoreOrFit]);
 
  const paint=useCallback(()=>{
    const c=canvas.current,h=host.current;if(!c||!h)return;const r=h.getBoundingClientRect();if(r.width<2||r.height<2)return;const dpr=Math.min(window.devicePixelRatio||1,2);const w=Math.max(1,Math.round(r.width*dpr)),hh=Math.max(1,Math.round(r.height*dpr));if(c.width!==w||c.height!==hh){c.width=w;c.height=hh;c.style.width=`${r.width}px`;c.style.height=`${r.height}px`}
    const ctx=c.getContext('2d');if(!ctx)return;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,r.width,r.height);ctx.fillStyle='#000000';ctx.fillRect(0,0,r.width,r.height);
-   const i=source.current;if(!i||state!=='ready'){
+   const i=source.current;if(!i){
      ctx.textAlign='center';ctx.fillStyle=state==='error'?'#ff8da0':'#87a1b6';ctx.font='600 13px Inter,system-ui';ctx.fillText(state==='loading'?'Loading inspection image…':state==='error'?'Image preview unavailable':'Select a lens to start inspection',r.width/2,r.height/2-4);if(state==='error'){ctx.fillStyle='#60798d';ctx.font='11px Inter,system-ui';ctx.fillText(error.slice(0,90),r.width/2,r.height/2+18)}return;
    }
    ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.drawImage(i,view.x,view.y,i.naturalWidth*view.scale,i.naturalHeight*view.scale);
-   if(showDefects){const focused=selectedDefect>=0;defects.forEach((d,index)=>{if(!d.bbox_xywh_norm)return;const[x,y,bw,bh]=d.bbox_xywh_norm;const rx=view.x+x*i.naturalWidth*view.scale,ry=view.y+y*i.naturalHeight*view.scale,rw=bw*i.naturalWidth*view.scale,rh=bh*i.naturalHeight*view.scale;const selected=focused&&index===selectedDefect;const defectColor=d.overlay_color|| (d.severity==='critical'?'#ff4968':d.severity==='major'?'#ff6b57':'#ffbd4a');const color=focused&&!selected?'rgba(164,174,182,.72)':defectColor;ctx.save();ctx.strokeStyle=color;ctx.lineWidth=selected?3:(focused?1:1.8);ctx.setLineDash(focused&&!selected?[4,5]:[]);ctx.shadowColor=color;ctx.shadowBlur=selected?12:0;ctx.strokeRect(rx,ry,rw,rh);if(!focused||selected){ctx.shadowBlur=4;const label=`${d.name} · ${Math.round(d.confidence*100)}%`;ctx.font='600 11px Inter,system-ui';ctx.fillStyle=defectColor;ctx.fillText(label,rx+4,Math.max(15,ry-9))}ctx.restore()})}
+   const showingRequestedFrame=state==='ready'&&activeImage.current===imageUrl;
+   if(showDefects&&showingRequestedFrame){const focused=selectedDefect>=0;defects.forEach((d,index)=>{if(!d.bbox_xywh_norm)return;const[x,y,bw,bh]=d.bbox_xywh_norm;const rx=view.x+x*i.naturalWidth*view.scale,ry=view.y+y*i.naturalHeight*view.scale,rw=bw*i.naturalWidth*view.scale,rh=bh*i.naturalHeight*view.scale;const selected=focused&&index===selectedDefect;const defectColor=d.overlay_color|| (d.severity==='critical'?'#ff4968':d.severity==='major'?'#ff6b57':'#ffbd4a');const color=focused&&!selected?'rgba(164,174,182,.72)':defectColor;ctx.save();ctx.strokeStyle=color;ctx.lineWidth=selected?3:(focused?1:1.8);ctx.setLineDash(focused&&!selected?[4,5]:[]);ctx.shadowColor=color;ctx.shadowBlur=selected?12:0;ctx.strokeRect(rx,ry,rw,rh);if(!focused||selected){ctx.shadowBlur=4;const label=`${d.name} · ${Math.round(d.confidence*100)}%`;ctx.font='600 11px Inter,system-ui';ctx.fillStyle=defectColor;ctx.fillText(label,rx+4,Math.max(15,ry-9))}ctx.restore()})}
    if(showCrosshair){const cx=view.x+i.naturalWidth*view.scale/2,cy=view.y+i.naturalHeight*view.scale/2;ctx.save();ctx.strokeStyle='rgba(81,188,255,.78)';ctx.lineWidth=1;ctx.setLineDash([7,7]);ctx.beginPath();ctx.moveTo(cx-90,cy);ctx.lineTo(cx+90,cy);ctx.moveTo(cx,cy-90);ctx.lineTo(cx,cy+90);ctx.stroke();ctx.setLineDash([]);ctx.beginPath();ctx.arc(cx,cy,8,0,Math.PI*2);ctx.stroke();ctx.restore()}
- },[defects,error,selectedDefect,showCrosshair,showDefects,state,view]);
+ },[defects,error,imageUrl,selectedDefect,showCrosshair,showDefects,state,view]);
 
  useEffect(()=>{if(frame.current)cancelAnimationFrame(frame.current);frame.current=requestAnimationFrame(paint);return()=>{if(frame.current)cancelAnimationFrame(frame.current)}},[paint,expanded]);
  useEffect(()=>{if(state!=='ready'||activeImage.current!==imageUrl)return;const timer=window.setTimeout(()=>{const h=host.current;if(!h)return;const r=h.getBoundingClientRect();const saved={scale:view.scale,centerX:(r.width/2-view.x)/view.scale,centerY:(r.height/2-view.y)/view.scale};try{const views=JSON.parse(localStorage.getItem(VIEW_STORAGE_KEY)||'{}');views[imageUrl]=saved;localStorage.setItem(VIEW_STORAGE_KEY,JSON.stringify(views))}catch{}},120);return()=>window.clearTimeout(timer)},[imageUrl,state,view]);

@@ -36,7 +36,8 @@ import {
   Target,
   TriangleAlert,
 } from "lucide-react";
-import { api, samplePreviewUrl, WS_API } from "@/lib/api";
+import { api, previewUrl, samplePreviewUrl, WS_API } from "@/lib/api";
+import { primePreview } from "@/lib/preview-cache";
 import type {
   DatasetSummary,
   InspectionResult,
@@ -104,14 +105,23 @@ export function InspectionDashboard({
     useState<InspectionBottomTab>("messages");
   const [wtViewMode, setWtViewMode] = useState<WtViewMode>("images");
   const [selectedGlobalWt, setSelectedGlobalWt] = useState<number | null>(null);
+  const [liveDatasetId, setLiveDatasetId] = useState<string | null>(null);
   const [operationMode, setOperationMode] = useState<"AUTO" | "MANUAL">("AUTO");
   const [loginOpen, setLoginOpen] = useState(false);
+  const [loginView, setLoginView] = useState<"login" | "create">("login");
   const [loginUser, setLoginUser] = useState(
     info?.session.username || "operator",
   );
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
+  const [newUsername, setNewUsername] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState("");
+  const [newUserRole, setNewUserRole] = useState<"Operator" | "Tester">("Operator");
+  const [statusNow, setStatusNow] = useState(() => new Date());
   const wsRef = useRef<WebSocket | null>(null);
+  const wsLiveRef = useRef(false);
+  const wsResultOrdinalRef = useRef(0);
   const runTokenRef = useRef(0);
   const operationModeRef = useRef(operationMode);
   const wtCapacity = info?.settings.wt_capacity || 16;
@@ -126,8 +136,25 @@ export function InspectionDashboard({
       window.history.replaceState({}, "", window.location.pathname);
   }, []);
   useEffect(() => {
+    if (!datasetId || !samples.length) return;
+    for (const candidate of samples) {
+      const previewChannel = candidate.images[channel]
+        ? channel
+        : candidate.images.h
+          ? "h"
+          : candidate.images.d
+            ? "d"
+            : Object.keys(candidate.images)[0];
+      if (previewChannel && !candidate.images[previewChannel]?.relative_path?.startsWith("demo:")) void primePreview(previewUrl(datasetId, candidate.id, previewChannel)).catch(() => {});
+    }
+  }, [channel, datasetId, samples]);
+  useEffect(() => {
     operationModeRef.current = operationMode;
   }, [operationMode]);
+  useEffect(() => {
+    const timer = window.setInterval(() => setStatusNow(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const refreshSystem = useCallback(async () => {
     const [systemResult, storageResult, legendResult] = await Promise.allSettled([
@@ -165,13 +192,15 @@ export function InspectionDashboard({
     setGlobalHistory(flat);
     const newestWt = flat.length ? Math.ceil(flat.length / wtCapacity) : null;
     setSelectedGlobalWt(currentWt => currentWt && newestWt && currentWt <= newestWt ? currentWt : newestWt);
+    return flat;
   }
   useEffect(()=>{if(datasets.length)void rebuildGlobalHistory(datasets)},[wtCapacity]);
   async function refreshDatasets(prefer?: string) {
     try {
       const ds = await api.datasets();
       setDatasets(ds);
-      void rebuildGlobalHistory(ds);
+      const rebuiltHistory = await rebuildGlobalHistory(ds);
+      if (prefer) setSelectedGlobalWt(rebuiltHistory.find(entry => entry.datasetId === prefer)?.wt ?? null);
       const id = prefer || datasetId || ds[0]?.id || "";
       if (id) {
         setDatasetId(id);
@@ -254,13 +283,27 @@ export function InspectionDashboard({
   };
   useEffect(() => {
     if (!datasetId) return;
-    setGlobalHistory(previous => previous.map(entry => entry.datasetId === datasetId ? { ...entry, result: resultMap.get(entry.sample.id) || entry.result } : entry));
-  }, [datasetId, resultMap]);
+    setGlobalHistory(previous => previous.map(entry => {
+      if (entry.datasetId !== datasetId) return entry;
+      const liveResult=resultMap.get(entry.sample.id);
+      return {...entry,result:datasetId===liveDatasetId?liveResult:liveResult||entry.result};
+    }));
+  }, [datasetId, liveDatasetId, resultMap]);
   const sample = useMemo(
     () => samples.find((s) => s.id === current) || null,
     [samples, current],
   );
   const currentResult = current ? resultMap.get(current) : undefined;
+  const lastInspectionLabel = currentResult?.created_at
+    ? new Date(currentResult.created_at).toLocaleString([], {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      })
+    : "—";
   const dataset = datasets.find((item) => item.id === datasetId);
   const currentChannelResult = currentResult?.channels.find(
     (item) => item.channel === channel,
@@ -309,6 +352,15 @@ export function InspectionDashboard({
     };
   }, [activeGlobalWt, channel, sample]);
   const wtEntries = useMemo(() => globalHistory.filter(entry => entry.wt === activeGlobalWt), [globalHistory, activeGlobalWt]);
+  const visibleGlobalHistory = useMemo(() => {
+    if (!liveDatasetId) return globalHistory;
+    const liveEntries=globalHistory.filter(entry=>entry.datasetId===liveDatasetId);
+    if (!liveEntries.length) return globalHistory.filter(entry=>entry.datasetId!==liveDatasetId);
+    const firstLiveWt=Math.min(...liveEntries.map(entry=>entry.wt));
+    const inferredWts=liveEntries.filter(entry=>resultMap.has(entry.sample.id)).map(entry=>entry.wt);
+    const newestStartedWt=inferredWts.length?Math.max(...inferredWts):firstLiveWt;
+    return globalHistory.filter(entry=>entry.datasetId!==liveDatasetId||entry.wt<=newestStartedWt);
+  },[globalHistory,liveDatasetId,resultMap]);
   const wtSamples = useMemo(() => wtEntries.map(entry => entry.sample), [wtEntries]);
   const wtChannelImages = useMemo(
     () =>
@@ -316,13 +368,20 @@ export function InspectionDashboard({
         const position = i + 1,
           entry = wtEntries.find((row) => row.position === position),
           s = entry?.sample,
-          image = s?.images[channel],
-          result = entry?.datasetId === datasetId && s ? resultMap.get(s.id) || entry.result : entry?.result,
+          availableImage = s?.images[channel],
+          result = entry?.datasetId === datasetId && s
+            ? entry.datasetId === liveDatasetId
+              ? resultMap.get(s.id)
+              : resultMap.get(s.id) || entry.result
+            : entry?.result,
+          waitingForLiveResult = entry?.datasetId === liveDatasetId && entry.datasetId === datasetId && !result,
+          visibleSample = waitingForLiveResult ? undefined : s,
+          image = waitingForLiveResult ? undefined : availableImage,
           defect = result?.defects?.[0]?.name || "No defect";
         return {
           position,
           entry,
-          sample: s,
+          sample: visibleSample,
           image,
           result,
           defect,
@@ -330,10 +389,10 @@ export function InspectionDashboard({
           name:
             image?.filename ||
             `Position ${position} · No ${channel.toUpperCase()} image`,
-          src: s && image && entry ? samplePreviewUrl(entry.datasetId, s, channel) : "",
+          src: visibleSample && image && entry ? samplePreviewUrl(entry.datasetId, visibleSample, channel) : "",
         };
       }),
-    [wtEntries, datasetId, channel, resultMap],
+    [wtEntries, datasetId, channel, resultMap, liveDatasetId],
   );
   const channelLabels: Record<string, string> = {
     ...(info?.settings.channel_labels || {}),
@@ -415,13 +474,16 @@ export function InspectionDashboard({
         const terminal = ["completed", "failed", "cancelled"].includes(
           latest.status,
         );
-        if (latest.completed !== lastCompleted || terminal) {
+        if ((!wsLiveRef.current && latest.completed !== lastCompleted) || terminal) {
           lastCompleted = latest.completed;
-          const r = await api.results(did);
-          if (runTokenRef.current === token) {
+          const r = terminal || !wsLiveRef.current ? await api.results(did) : null;
+          if (r && runTokenRef.current === token) {
             setResults(r.items);
-            const newest = r.items.at(-1);
+            const newest = [...r.items].sort((a, b) =>
+              new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+            ).at(-1);
             if (operationModeRef.current === "AUTO" && newest) {
+              setSelectedGlobalWt(null);
               setCurrent(newest.sample_id);
               setSelectedDefect(-1);
             }
@@ -468,22 +530,30 @@ export function InspectionDashboard({
     try {
       const token = runTokenRef.current + 1;
       runTokenRef.current = token;
+      wsResultOrdinalRef.current=0;
       wsRef.current?.close();
       const j = await api.run(targetDatasetId);
+      setLiveDatasetId(targetDatasetId);
       setResults([]);
+      setSelectedGlobalWt(null);
       setJob(j);
       setToast(`Run All started · 0 of ${j.total} lenses`);
       const ws = new WebSocket(`${WS_API}/ws/jobs/${j.id}`);
       wsRef.current = ws;
-      ws.onmessage = (e) => {
+      ws.onopen=()=>{wsLiveRef.current=true};
+      ws.onmessage = async (e) => {
         const m = JSON.parse(e.data);
         if (m.job) setJob(m.job);
         if (m.result) {
+          const resultOrdinal=++wsResultOrdinalRef.current;
+          const resultSample=samples.find(item=>item.id===m.result.sample_id);
+          if(resultSample){const previewChannel=resultSample.images[channel]?channel:resultSample.images.h?"h":resultSample.images.d?"d":Object.keys(resultSample.images)[0];if(previewChannel&&!resultSample.images[previewChannel]?.relative_path?.startsWith("demo:"))await primePreview(previewUrl(targetDatasetId,resultSample.id,previewChannel)).catch(()=>{})}
           setResults((prev) => [
             ...prev.filter((x) => x.sample_id !== m.result.sample_id),
             m.result,
           ]);
-          if (operationModeRef.current === "AUTO") {
+          if (operationModeRef.current === "AUTO"&&resultOrdinal===wsResultOrdinalRef.current) {
+            setSelectedGlobalWt(null);
             setCurrent(m.result.sample_id);
             setSelectedDefect(-1);
           }
@@ -498,13 +568,16 @@ export function InspectionDashboard({
             .then(setStorage)
             .catch(() => { });
           ws.close();
+          wsLiveRef.current=false;
           if (wsRef.current === ws) wsRef.current = null;
         }
       };
       ws.onerror = () => {
+        wsLiveRef.current=false;
         ws.close();
         if (wsRef.current === ws) wsRef.current = null;
       };
+      ws.onclose=()=>{wsLiveRef.current=false};
       void monitorJob(j.id, targetDatasetId, token);
     } catch (e) {
       setToast((e as Error).message);
@@ -513,6 +586,8 @@ export function InspectionDashboard({
     }
   }
   async function handleLotLoaded(id: string) {
+    setLiveDatasetId(id);
+    setSelectedGlobalWt(null);
     const loadedSamples = await refreshDatasets(id);
     setToast(`New lot imported · ${loadedSamples.length} lenses`);
     if (operationMode === "AUTO" && loadedSamples.length) {
@@ -583,6 +658,17 @@ export function InspectionDashboard({
     } finally {
       setBusy(false);
     }
+  }
+  async function createApplicationUser() {
+    setLoginError("");
+    if (newPassword !== newPasswordConfirm) {setLoginError("Passwords do not match");return}
+    setBusy(true);
+    try {
+      await api.createUser(newUsername,newPassword,newUserRole);
+      setLoginUser(newUsername);setLoginPassword("");setNewUsername("");setNewPassword("");setNewPasswordConfirm("");setLoginView("login");
+      setToast(`User ${newUsername} created · sign in with the new account`);
+    } catch (e) {setLoginError(e instanceof Error?e.message:"Unable to create user")}
+    finally {setBusy(false)}
   }
   function select(id: string) {
     setCurrent(id);
@@ -803,7 +889,7 @@ export function InspectionDashboard({
       >
         {prefs.manualSkeleton ? (
           <ClassicHeader
-            onSwitchUser={()=>{setLoginUser(info?.session.username||"operator");setLoginPassword("");setLoginOpen(true)}}
+            onSwitchUser={()=>{setLoginView("login");setLoginError("");setLoginUser(info?.session.username||"operator");setLoginPassword("");setLoginOpen(true)}}
             onImageFilter={()=>window.dispatchEvent(new Event("lens-open-image-filter"))}
             onDataset={()=>setLoader(true)}
             onInfo={()=>setToast(`OKLIN3 · Version ${info?.version||"7.4.0"}`)}
@@ -891,7 +977,7 @@ export function InspectionDashboard({
                 current={current}
                 currentDatasetId={datasetId}
                 onPick={select}
-                history={globalHistory}
+                history={visibleGlobalHistory}
                 onHistoryPick={(entry) => { void selectHistoryEntry(entry) }}
                 maxRows={30}
                 capacity={wtCapacity}
@@ -1319,29 +1405,10 @@ export function InspectionDashboard({
                   <div className="inspectionTrendChart">
                     <TrendChart results={results} />
                   </div>
-                  <div className="inspectionTrendStats">
-                    <span>
-                      <small>Current yield</small>
-                      <b>{displayYield.toFixed(1)}%</b>
-                    </span>
-                    <span>
-                      <small>OK lenses</small>
-                      <b className="good">{counts.OK}</b>
-                    </span>
-                    <span>
-                      <small>NOK lenses</small>
-                      <b className="bad">{counts.NOK}</b>
-                    </span>
-                    <span>
-                      <small>Warnings</small>
-                      <b className="warn">{counts.WARN}</b>
-                    </span>
-                    <span>
-                      <small>Evaluated</small>
-                      <b>
-                        {results.length} / {samples.length}
-                      </b>
-                    </span>
+                  <div className="inspectionTrendStats yieldOnly">
+                    <div className="inspectionYieldRing" style={{"--yield":`${displayYield*3.6}deg`} as React.CSSProperties}>
+                      <span><b>{displayYield.toFixed(1)}%</b><small>Yield</small></span>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1358,9 +1425,9 @@ export function InspectionDashboard({
           </span>
           <span>
             Last inspection:{" "}
-            <b>{job?.status === "completed" ? "Just completed" : "—"}</b>
+            <b>{lastInspectionLabel}</b>
           </span>
-          <em>{new Date().toLocaleDateString()}</em>
+          <em>{statusNow.toLocaleDateString()} · {statusNow.toLocaleTimeString()}</em>
         </div>
         {loginOpen && (
           <div
@@ -1370,7 +1437,7 @@ export function InspectionDashboard({
             }}
           >
             <section
-              className="loginModal"
+              className={`loginModal authMode-${loginView}`}
               role="dialog"
               aria-modal="true"
               aria-labelledby="login-title"
@@ -1381,10 +1448,9 @@ export function InspectionDashboard({
                 </div>
                 <span>
                   <small>EMAGE GROUP · SECURE ACCESS</small>
-                  <h2 id="login-title">Sign in or switch user</h2>
+                  <h2 id="login-title">{loginView==="create"?"Create a new user":"Sign in or switch user"}</h2>
                   <p>
-                    Select the operator identity and permission level for this
-                    workstation.
+                    {loginView==="create"?"Add a secure account for this inspection workstation.":"Enter the account credentials for the next workstation user."}
                   </p>
                 </span>
                 <button
@@ -1394,41 +1460,33 @@ export function InspectionDashboard({
                   ×
                 </button>
               </div>
+              {info?.session.role==="Administrator"&&<div className="authModeSwitch" role="tablist" aria-label="Authentication mode">
+                <button role="tab" aria-selected={loginView==="login"} className={loginView==="login"?"active":""} onClick={()=>{setLoginError("");setLoginView("login")}}><i>↪</i><span><b>Sign in</b><small>Switch workstation user</small></span></button>
+                <button role="tab" aria-selected={loginView==="create"} className={loginView==="create"?"active":""} onClick={()=>{setLoginError("");setLoginView("create")}}><i>＋</i><span><b>Create account</b><small>Add an authorized user</small></span></button>
+              </div>}
               <div className="loginCurrent">
-                <span>Current session</span>
-                <b>{info?.session.username || "NoUser"}</b>
-                <em>{info?.session.role || "NoUser"}</em>
+                <span><i/>Current session</span><b>{info?.session.username || "NoUser"}</b><em>{info?.session.role || "NoUser"}</em>
               </div>
-              <div className="loginFields">
-                <label>
-                  <span>User name</span>
-                  <input
-                    autoFocus
-                    value={loginUser}
-                    onChange={(e) => setLoginUser(e.target.value)}
-                    placeholder="Enter user name"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") void switchUser();
-                    }}
-                  />
-                </label>
-                <label>
-                  <span>Password</span>
-                  <input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} placeholder="Enter password" onKeyDown={(e) => { if (e.key === "Enter") void switchUser() }} />
-                </label>
-              </div>
+              {loginView==="login"?<div className="loginFields">
+                <label><span>User name</span><input autoFocus value={loginUser} onChange={(e)=>setLoginUser(e.target.value)} placeholder="Enter user name" onKeyDown={(e)=>{if(e.key==="Enter")void switchUser()}}/></label>
+                <label><span>Password</span><input type="password" value={loginPassword} onChange={(e)=>setLoginPassword(e.target.value)} placeholder="Enter password" onKeyDown={(e)=>{if(e.key==="Enter")void switchUser()}}/></label>
+                <div className="loginAccessInfo"><div><span><i/>Workstation access</span><b>Protected local session</b></div><section><span><small>Production line</small><b>{info?.settings.line_name||"—"}</b></span><span><small>Inspection station</small><b>{info?.settings.station_name||"—"}</b></span><span><small>Access policy</small><b>Role controlled</b></span></section><p>Signing in changes the active operator and records the event in the system audit log.</p></div>
+              </div>:<div className="loginFields createUserFields">
+                <label><span>New user name</span><input autoFocus value={newUsername} onChange={(e)=>setNewUsername(e.target.value)} placeholder="Minimum 3 characters"/></label>
+                <label className="rolePicker"><span>Production role</span><div><button className={newUserRole==="Operator"?"selected":""} onClick={()=>setNewUserRole("Operator")}><i>OP</i><b>Operator</b><small>Production operation</small></button><button className={newUserRole==="Tester"?"selected":""} onClick={()=>setNewUserRole("Tester")}><i>TS</i><b>Tester</b><small>Quality validation</small></button></div></label>
+                <label><span>Password</span><input type="password" value={newPassword} onChange={(e)=>setNewPassword(e.target.value)} placeholder="Minimum 6 characters"/></label>
+                <label><span>Confirm password</span><input type="password" value={newPasswordConfirm} onChange={(e)=>setNewPasswordConfirm(e.target.value)} placeholder="Repeat password" onKeyDown={(e)=>{if(e.key==="Enter")void createApplicationUser()}}/></label>
+                <div className="passwordGuide"><i className={newPassword.length>=6?"valid":""}/><span>{newPassword.length>=6?"Password length accepted":"Use at least 6 characters"}</span><i className={newPasswordConfirm.length>0&&newPassword===newPasswordConfirm?"valid":""}/><span>{newPasswordConfirm.length>0&&newPassword===newPasswordConfirm?"Passwords match":"Confirm the same password"}</span></div>
+              </div>}
               {loginError && <p className="loginError">{loginError}</p>}
-              <div className="loginActions">
-                <button onClick={() => setLoginOpen(false)}>Cancel</button>
-                <button
-                  className="primary"
-                  onClick={switchUser}
-                  disabled={busy || !loginUser.trim() || !loginPassword}
-                >
-                  {busy ? "Signing in…" : "Apply user"}
-                </button>
-              </div>
-              <footer>Session changes are recorded in the system log.</footer>
+              {loginView==="login"?<div className="loginActions">
+                <button onClick={()=>setLoginOpen(false)}>Cancel</button>
+                <button className="primary" onClick={switchUser} disabled={busy||!loginUser.trim()||!loginPassword}>{busy?"Signing in…":"Apply user"}</button>
+              </div>:<div className="loginActions">
+                <button onClick={()=>{setLoginError("");setLoginView("login")}}>Back to sign in</button>
+                <button className="primary" onClick={createApplicationUser} disabled={busy||newUsername.trim().length<3||newPassword.length<6||!newPasswordConfirm}>{busy?"Creating…":"Create user"}</button>
+              </div>}
+              <footer>{loginView==="create"?"Administrator approval · accounts can be Operator or Tester only.":"Session changes are recorded in the system log."}</footer>
             </section>
           </div>
         )}
@@ -1569,7 +1627,7 @@ export function InspectionDashboard({
               current={current}
               currentDatasetId={datasetId}
               onPick={select}
-              history={globalHistory}
+              history={visibleGlobalHistory}
               onHistoryPick={(entry) => { void selectHistoryEntry(entry) }}
               onArchive={async (wt) => {
                 try {

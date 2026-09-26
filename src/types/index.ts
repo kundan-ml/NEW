@@ -1,5 +1,5 @@
 export type Status='OK'|'NOK'|'WARN'|'IDLE';
-export type Role='NoUser'|'Operator'|'Service'|'Administrator';
+export type Role='NoUser'|'Operator'|'Tester'|'Service'|'Administrator';
 export interface DatasetSummary{id:string;name:string;source_type:string;source_path:string;sample_count:number;image_count:number;categories:Record<string,number>;channels:Record<string,number>;created_at:string}
 export interface ImageRecord{channel:string;filename:string;relative_path:string;absolute_path:string}
 export interface Sample{id:string;position:number;wt_index:number;category:string;base_name:string;metadata:{image_no?:string;machine?:string;code?:string;defect_label?:string;u_index?:string;event_id?:string;io_code?:string;tail_code?:string};images:Record<string,ImageRecord>}

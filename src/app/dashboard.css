@@ -6283,7 +6283,7 @@ html[data-workspace="modern"] .uploadModalWindow .modalBadge {
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 190px;
-  background: #07131d
+  background: var(--control-bg, #08090b)
 }
 
 .inspectionTrendChart {
@@ -6302,6 +6302,53 @@ html[data-workspace="modern"] .uploadModalWindow .modalBadge {
   grid-template-columns: 1fr 1fr;
   gap: 5px
 }
+
+.inspectionTrendStats.yieldOnly {
+  display: grid;
+  place-items: center;
+  grid-template-columns: 1fr;
+  background: color-mix(in srgb, var(--control-panel, #111318) 88%, #000);
+  border-left-color: var(--control-border, #292d34)
+}
+
+.inspectionYieldRing {
+  --yield: 0deg;
+  width: 92px;
+  aspect-ratio: 1;
+  padding: 7px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: conic-gradient(#248cff var(--yield), color-mix(in srgb, #248cff 13%, var(--control-button, #181b20)) 0);
+  box-shadow: 0 0 24px color-mix(in srgb, #248cff 17%, transparent)
+}
+
+.inspectionYieldRing:before {
+  content: "";
+  grid-area: 1/1;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: var(--control-panel, #101216);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #248cff 20%, var(--control-border, #292d34))
+}
+
+.inspectionYieldRing>span {
+  grid-area: 1/1;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  padding: 0;
+  border: 0;
+  background: transparent
+}
+
+.inspectionYieldRing b {margin:0;color:#4aa3ff!important;font-size:16px!important}
+.inspectionYieldRing small {margin-top:3px;color:var(--text-muted)!important;font-size:7px!important;text-transform:uppercase;letter-spacing:.12em}
+
+/* Classic inference updates should not animate over the inspection image. */
+.pdfSkeletonMode .viewerPanel.processing .scanBeam {display:none!important;opacity:0!important;animation:none!important}
 
 .inspectionTrendStats span {
   min-width: 0;
@@ -8608,6 +8655,57 @@ html[data-idle-shape="plus"] .wtStatusDot.idle {
   color: var(--app-muted);
   font-size: 8px
 }
+
+/* High-contrast authentication surface for every Classic/Modern theme. */
+.pdfSkeletonMode .loginModal,.loginModal{position:relative;background:linear-gradient(155deg,color-mix(in srgb,var(--control-header) 96%,#fff 2%),color-mix(in srgb,var(--control-panel) 96%,#000 3%))!important;color:var(--control-text)!important}
+.loginModal:before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 8% 0%,color-mix(in srgb,var(--accent) 12%,transparent),transparent 34%),linear-gradient(color-mix(in srgb,var(--control-border) 14%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--control-border) 11%,transparent) 1px,transparent 1px);background-size:auto,24px 24px,24px 24px;opacity:.45}
+.loginModal>*{position:relative}
+.pdfSkeletonMode .loginModalBrand h2,.loginModalBrand h2{color:var(--control-text)!important;text-shadow:none!important}
+.pdfSkeletonMode .loginModalBrand p,.loginModalBrand p{color:var(--text-secondary)!important;opacity:1!important}
+.pdfSkeletonMode .loginCurrent span,.loginCurrent span{color:var(--text-secondary)!important;opacity:1!important}
+.pdfSkeletonMode .loginCurrent b,.loginCurrent b{color:var(--control-text)!important}
+.pdfSkeletonMode .loginFields label>span,.loginFields label>span{color:var(--text-secondary)!important;font-weight:700!important;opacity:1!important}
+.pdfSkeletonMode .loginFields input,.pdfSkeletonMode .loginFields select,.loginFields input,.loginFields select{background:color-mix(in srgb,var(--control-bg) 91%,var(--control-panel))!important;border-color:color-mix(in srgb,var(--accent) 18%,var(--control-border))!important;color:var(--control-text)!important;-webkit-text-fill-color:var(--control-text)!important;caret-color:var(--accent)!important;font-size:11px!important;font-weight:600!important;opacity:1!important}
+.loginFields input::placeholder{color:var(--text-muted)!important;-webkit-text-fill-color:var(--text-muted)!important;opacity:.85!important}
+.loginFields select option{background:var(--control-panel)!important;color:var(--control-text)!important}
+.createUserFields{grid-template-columns:1fr 1fr;gap:11px 12px}.createUserFields label:first-child{grid-column:1/-1}
+.loginActions.loginActionsThree{grid-template-columns:.8fr 1fr 1.25fr}
+.pdfSkeletonMode .loginActions button,.loginActions button{color:var(--control-text)!important;-webkit-text-fill-color:var(--control-text)!important;background:color-mix(in srgb,var(--control-button) 91%,transparent)!important;border-color:var(--control-border)!important;opacity:1!important}
+.pdfSkeletonMode .loginActions button:hover:not(:disabled),.loginActions button:hover:not(:disabled){border-color:color-mix(in srgb,var(--accent) 48%,var(--control-border))!important;background:color-mix(in srgb,var(--accent) 11%,var(--control-button))!important}
+.pdfSkeletonMode .loginActions button.primary,.loginActions button.primary{background:linear-gradient(120deg,color-mix(in srgb,var(--gradient-start) 86%,#fff 5%),color-mix(in srgb,var(--gradient-end) 82%,#000 4%))!important;border-color:color-mix(in srgb,var(--accent) 62%,var(--control-border))!important;color:#fff!important;-webkit-text-fill-color:#fff!important;box-shadow:0 8px 22px color-mix(in srgb,var(--accent) 16%,transparent)}
+.loginActions button:disabled{opacity:.45!important}
+@media(max-width:560px){.createUserFields{grid-template-columns:1fr}.createUserFields label:first-child{grid-column:auto}.loginActions.loginActionsThree{grid-template-columns:1fr}.loginModal{max-height:calc(100dvh - 24px);overflow:auto}}
+
+/* Authentication center — expressive, compact and production appropriate. */
+.loginModal{width:min(520px,calc(100vw - 28px));border-radius:18px!important;box-shadow:0 42px 130px rgba(0,0,0,.76),0 0 0 1px color-mix(in srgb,#fff 5%,transparent),0 0 54px color-mix(in srgb,var(--accent) 9%,transparent)!important}
+.loginModal{height:min(620px,calc(100dvh - 24px));min-height:0;display:flex;flex-direction:column;overflow:hidden;transition:border-color .22s ease,box-shadow .22s ease!important}
+.loginModalBrand{flex:0 0 104px}.authModeSwitch{flex:0 0 58px}.loginCurrent{flex:0 0 44px}.loginModal .loginFields{min-height:0;animation:authContentIn .22s cubic-bezier(.2,.8,.2,1)}
+.loginModal.authMode-login .loginFields{flex:1;align-content:start;padding-top:13px;padding-bottom:10px;gap:10px}
+.loginModal.authMode-create .loginFields{flex:1;align-content:start;overflow:hidden;padding-top:15px;gap:13px 12px}
+.loginModal .loginActions{flex:0 0 auto;margin-top:auto;animation:authContentIn .22s cubic-bezier(.2,.8,.2,1)}
+.loginModal>footer{flex:0 0 34px}
+.loginModal .loginError{flex:0 0 auto}
+@keyframes authContentIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+.loginModalBrand{min-height:104px;padding:18px 20px;grid-template-columns:52px 1fr 30px;background:radial-gradient(circle at 5% 0%,color-mix(in srgb,var(--gradient-start) 19%,transparent),transparent 43%),linear-gradient(115deg,color-mix(in srgb,var(--gradient-start) 8%,var(--control-header)),color-mix(in srgb,var(--gradient-end) 5%,var(--control-header)))!important}
+.loginEmblem{width:50px;height:50px;border-radius:15px;background:linear-gradient(145deg,color-mix(in srgb,var(--gradient-start) 18%,var(--control-button)),color-mix(in srgb,var(--gradient-end) 9%,var(--control-panel)));box-shadow:inset 0 1px color-mix(in srgb,#fff 9%,transparent),0 10px 24px color-mix(in srgb,#000 22%,transparent),0 0 20px color-mix(in srgb,var(--accent) 11%,transparent)}
+.loginModalBrand h2{font-size:20px!important;letter-spacing:-.025em}.loginModalBrand small{display:inline-flex;align-items:center;gap:6px;color:var(--text-secondary)!important;opacity:1!important}.loginModalBrand small:before{content:"";width:6px;height:6px;border-radius:50%;background:var(--status-ok);box-shadow:0 0 8px var(--status-ok)}
+.authModeSwitch{margin:14px 18px 0;padding:4px;display:grid;grid-template-columns:1fr 1fr;gap:4px;border:1px solid var(--control-border);border-radius:11px;background:color-mix(in srgb,var(--control-bg) 86%,transparent)}
+.authModeSwitch>button{height:48px;padding:0 10px;display:grid;grid-template-columns:27px 1fr;align-items:center;gap:8px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--text-muted);text-align:left;transition:background .18s ease,border-color .18s ease,color .18s ease,box-shadow .18s ease}
+.authModeSwitch>button>i{width:27px;height:27px;display:grid;place-items:center;border:1px solid var(--control-border);border-radius:7px;font-size:13px;font-style:normal}.authModeSwitch>button>span{display:flex;flex-direction:column}.authModeSwitch b{font-size:9px}.authModeSwitch small{margin-top:2px;font-size:7px;color:var(--text-muted)}
+.authModeSwitch>button.active{border-color:color-mix(in srgb,var(--accent) 42%,var(--control-border));background:linear-gradient(125deg,color-mix(in srgb,var(--gradient-start) 15%,var(--control-button)),color-mix(in srgb,var(--gradient-end) 8%,var(--control-button)));color:var(--control-text);box-shadow:inset 0 -2px var(--accent),0 5px 16px color-mix(in srgb,#000 12%,transparent)}
+.authModeSwitch>button.active>i{border-color:color-mix(in srgb,var(--accent) 55%,var(--control-border));background:color-mix(in srgb,var(--accent) 13%,var(--control-button));color:var(--accent)}
+.loginCurrent{height:44px;margin-top:10px;background:linear-gradient(90deg,color-mix(in srgb,var(--status-ok) 5%,var(--control-bg)),var(--control-bg));border-color:color-mix(in srgb,var(--status-ok) 17%,var(--control-border))}
+.loginCurrent span{display:flex;align-items:center;gap:7px}.loginCurrent span>i{width:6px;height:6px;border-radius:50%;background:var(--status-ok);box-shadow:0 0 7px var(--status-ok)}
+.loginCurrent em{color:var(--control-text)!important;background:color-mix(in srgb,var(--accent) 18%,var(--control-button))!important;border:1px solid color-mix(in srgb,var(--accent) 28%,var(--control-border));font-weight:700;opacity:1!important}
+.createUserFields{padding-top:15px}.createUserFields .rolePicker{grid-column:1/-1}.rolePicker>div{display:grid;grid-template-columns:1fr 1fr;gap:8px}.rolePicker>div>button{height:52px;padding:0 10px;display:grid;grid-template-columns:30px 1fr;grid-template-rows:1fr 1fr;column-gap:9px;align-items:center;border:1px solid var(--control-border);border-radius:8px;background:color-mix(in srgb,var(--control-button) 75%,transparent);color:var(--text-secondary);text-align:left}.rolePicker>div>button>i{grid-row:1/3;width:30px;height:30px;display:grid;place-items:center;border-radius:7px;background:var(--control-bg);color:var(--text-muted);font-size:7px;font-style:normal;font-weight:800}.rolePicker>div>button>b{align-self:end;font-size:9px}.rolePicker>div>button>small{align-self:start;color:var(--text-muted);font-size:7px}.rolePicker>div>button.selected{border-color:color-mix(in srgb,var(--accent) 52%,var(--control-border));background:linear-gradient(120deg,color-mix(in srgb,var(--gradient-start) 13%,var(--control-button)),color-mix(in srgb,var(--gradient-end) 7%,var(--control-button)));box-shadow:inset 0 -2px var(--accent)}.rolePicker>div>button.selected>i{background:color-mix(in srgb,var(--accent) 14%,var(--control-bg));color:var(--accent)}
+.rolePicker>div>button:nth-child(2).selected{border-color:color-mix(in srgb,var(--secondary) 58%,var(--control-border));background:linear-gradient(120deg,color-mix(in srgb,var(--secondary) 15%,var(--control-button)),color-mix(in srgb,var(--accent) 7%,var(--control-button)));box-shadow:inset 0 -2px var(--secondary),0 5px 18px color-mix(in srgb,var(--secondary) 9%,transparent)}
+.rolePicker>div>button:nth-child(2).selected>i{background:color-mix(in srgb,var(--secondary) 15%,var(--control-bg));color:var(--secondary)}
+.passwordGuide{grid-column:1/-1;padding:7px 10px;display:grid;grid-template-columns:8px 1fr 8px 1fr;align-items:center;gap:6px;border:1px solid var(--control-border);border-radius:8px;background:color-mix(in srgb,var(--control-bg) 78%,transparent);color:var(--text-muted);font-size:7px}.passwordGuide>i{width:7px;height:7px;border-radius:50%;background:var(--status-idle)}.passwordGuide>i.valid{background:var(--status-ok);box-shadow:0 0 7px color-mix(in srgb,var(--status-ok) 60%,transparent)}
+.loginAccessInfo{margin-top:1px;padding:10px;border:1px solid color-mix(in srgb,var(--accent) 18%,var(--control-border));border-radius:9px;background:linear-gradient(125deg,color-mix(in srgb,var(--gradient-start) 7%,var(--control-bg)),color-mix(in srgb,var(--gradient-end) 4%,var(--control-bg)));box-shadow:inset 0 1px color-mix(in srgb,#fff 4%,transparent)}
+.loginAccessInfo>div{display:flex;align-items:center;justify-content:space-between}.loginAccessInfo>div>span{display:flex;align-items:center;gap:6px;color:var(--text-secondary);font-size:7px;text-transform:uppercase;letter-spacing:.1em}.loginAccessInfo>div>span>i{width:6px;height:6px;border-radius:50%;background:var(--status-ok);box-shadow:0 0 7px var(--status-ok)}.loginAccessInfo>div>b{color:var(--accent);font-size:7px}
+.loginAccessInfo>section{margin-top:8px;display:grid;grid-template-columns:repeat(3,1fr);gap:5px}.loginAccessInfo>section>span{min-width:0;padding:7px;border:1px solid var(--control-border);border-radius:6px;background:color-mix(in srgb,var(--control-button) 65%,transparent);display:flex;flex-direction:column}.loginAccessInfo small{color:var(--text-muted);font-size:6px}.loginAccessInfo section b{margin-top:3px;overflow:hidden;color:var(--control-text);font-size:8px;text-overflow:ellipsis;white-space:nowrap}.loginAccessInfo>p{margin:8px 0 0;color:var(--text-muted);font-size:7px;line-height:1.35}
+.loginActions{padding-top:2px}.loginActions button{border-radius:9px!important}.loginModal footer{background:color-mix(in srgb,var(--control-bg) 55%,transparent);letter-spacing:.02em}
+@media(max-width:560px){.authModeSwitch{grid-template-columns:1fr;flex-basis:100px}.createUserFields .rolePicker,.passwordGuide{grid-column:auto}.rolePicker>div{grid-template-columns:1fr}.passwordGuide{grid-template-columns:8px 1fr}.loginModalBrand{grid-template-columns:44px 1fr 28px}.loginEmblem{width:42px;height:42px}.loginModal{height:calc(100dvh - 24px);overflow:auto}.loginModal.authMode-create .loginFields{overflow:visible}}
 
 .emageHeaderTitle {
   gap: 9px !important

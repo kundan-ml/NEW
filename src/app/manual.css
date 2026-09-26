@@ -144,13 +144,67 @@ html[data-workspace="manual"] .filterWorkspace:before{content:"";position:absolu
 html[data-workspace="manual"] .filterWorkspace>*{position:relative;z-index:1}
 
 /* Image Filter configuration dialog — preserves the designed workspace in the legacy popup flow. */
-.imageFilterModal{position:fixed;inset:0;z-index:600;display:grid;place-items:center;padding:clamp(18px,3vw,44px);background:rgba(2,6,10,.64);backdrop-filter:blur(10px) saturate(.72);animation:filterModalFade .18s ease-out}
-.imageFilterModalWindow{width:min(1240px,96vw);height:min(820px,91dvh);min-height:590px;overflow:hidden;border:1px solid color-mix(in srgb,var(--accent) 34%,var(--border));border-radius:14px;background:var(--fill-background,var(--background));box-shadow:0 36px 100px rgba(0,0,0,.62),0 0 0 1px color-mix(in srgb,#fff 5%,transparent);animation:filterModalEnter .22s cubic-bezier(.2,.8,.2,1)}
+.imageFilterModal{position:fixed;inset:0;z-index:600;display:grid;place-items:center;padding:clamp(18px,3vw,44px);background:color-mix(in srgb,var(--background) 64%,transparent);backdrop-filter:blur(14px) saturate(.62);animation:filterModalFade .18s ease-out}
+.imageFilterModalWindow{width:min(1280px,96vw);height:min(790px,91dvh);min-height:590px;overflow:hidden;border:1px solid color-mix(in srgb,var(--accent) 38%,var(--border));border-radius:18px;background:var(--fill-background,var(--background));box-shadow:0 40px 120px rgba(0,0,0,.7),0 0 0 1px color-mix(in srgb,#fff 6%,transparent),0 0 60px color-mix(in srgb,var(--primary) 8%,transparent);animation:filterModalEnter .22s cubic-bezier(.2,.8,.2,1)}
 .imageFilterModal .imageFilterPage{width:100%;height:100%!important;min-height:0!important;grid-template-rows:38px 52px minmax(0,1fr) 52px!important;border:0;background:var(--fill-background,var(--background))!important}
 .imageFilterModal .filterHero{display:none!important}
 .imageFilterModal .filterWorkspace{height:auto!important;min-height:0!important}
-.imageFilterDialogTitle{padding:0 8px 0 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:linear-gradient(90deg,color-mix(in srgb,var(--primary) 13%,var(--surface-elevated)),var(--fill-elevated,var(--surface-elevated)));box-shadow:inset 0 1px color-mix(in srgb,#fff 6%,transparent)}
+.imageFilterDialogTitle{padding:0 8px 0 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid color-mix(in srgb,var(--accent) 24%,var(--border));background:linear-gradient(110deg,color-mix(in srgb,var(--gradient-start) 16%,var(--surface-elevated)),color-mix(in srgb,var(--gradient-end) 7%,var(--surface-elevated)) 48%,var(--fill-elevated,var(--surface-elevated)));box-shadow:inset 3px 0 var(--accent),inset 0 1px color-mix(in srgb,#fff 7%,transparent)}
 .imageFilterDialogTitle>span{display:flex;align-items:center;gap:8px}.imageFilterDialogTitle svg{width:14px;height:14px;color:var(--accent)}.imageFilterDialogTitle b{font-size:11px;letter-spacing:.02em}.imageFilterDialogTitle small{padding-left:9px;border-left:1px solid var(--border);color:var(--text-muted);font-size:7px}.imageFilterDialogTitle>button{width:27px;height:27px;display:grid;place-items:center;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--text-secondary)}.imageFilterDialogTitle>button:hover{border-color:color-mix(in srgb,var(--status-nok) 45%,var(--border));background:color-mix(in srgb,var(--status-nok) 12%,var(--surface-hover));color:var(--text-primary)}
-.imageFilterModal .defectFilterGrid{grid-template-columns:repeat(4,minmax(0,1fr))}
+.imageFilterModal .filterWorkspace{grid-template-columns:minmax(0,1fr);padding:9px 10px;overflow:hidden}
+.imageFilterModal .filterMainColumn{height:100%;padding:0;gap:8px;overflow:hidden}
+.imageFilterModal .filterPanel{padding:9px 11px;border-radius:8px}
+.imageFilterModal .filterSectionTitle p{display:none}
+.imageFilterModal .filterSectionTitle h2{margin-top:2px;font-size:11px}
+.imageFilterModal .filterSectionTitle>button,.imageFilterModal .filterSectionTitle>div>button{height:24px;padding:0 8px;font-size:7px}
+.imageFilterModal .resultTypeGrid{margin-top:7px;gap:7px}
+.imageFilterModal .resultTypeGrid>button{height:35px;padding:5px 9px}
+.imageFilterModal .defectFilterGrid{margin-top:7px;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;overflow:hidden}
+.imageFilterModal .defectFilterGrid>button{height:33px;min-height:33px;padding:4px 6px;grid-template-columns:22px minmax(0,1fr) 13px;gap:5px}
+.imageFilterModal .defectFilterGrid>button>i{width:22px;height:22px;border-radius:6px;font-size:7px}
+.imageFilterModal .defectFilterGrid>button b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:7px}
+.imageFilterModal .defectFilterGrid>button small{display:none}
+.imageFilterModal .defectFilterGrid>button>em{width:13px;height:13px}
+.imageFilterModal .positionFilterGrid{margin-top:7px;gap:5px;overflow:hidden}
+.imageFilterModal .positionFilterGrid>button{height:31px;min-width:0}
+.imageFilterModal .positionFilterGrid>button small{display:none}
+.imageFilterModal .filterToggle{margin-top:6px}
+.imageFilterModal .filterToggle span small{display:none}
+.imageFilterModal .filterActionBar>div small{display:none}
+.imageFilterModal .filterActionBar{min-height:52px}
+.imageFilterModal :is(.filterMainColumn,.filterWorkspace,.defectFilterGrid,.positionFilterGrid,.scheduleCards,.scheduleCards>.filterPanel){scrollbar-width:none}
+.imageFilterModal :is(.filterMainColumn,.filterWorkspace,.defectFilterGrid,.positionFilterGrid,.scheduleCards,.scheduleCards>.filterPanel)::-webkit-scrollbar{display:none}
 @keyframes filterModalFade{from{opacity:0}to{opacity:1}}@keyframes filterModalEnter{from{opacity:0;transform:translateY(14px) scale(.985)}to{opacity:1;transform:none}}
 @media(max-width:900px){.imageFilterModal{padding:10px}.imageFilterModalWindow{width:100%;height:calc(100dvh - 20px);min-height:0;border-radius:10px}.imageFilterModal .imageFilterPage{height:100%!important;overflow:auto}.imageFilterModal .defectFilterGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Premium technical detailing for the compact filter dialog. */
+.imageFilterModalWindow{position:relative;isolation:isolate}
+.imageFilterModalWindow:before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(circle at 8% 0%,color-mix(in srgb,var(--gradient-start) 13%,transparent),transparent 28%),radial-gradient(circle at 94% 100%,color-mix(in srgb,var(--gradient-end) 9%,transparent),transparent 26%),linear-gradient(color-mix(in srgb,var(--border) 12%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--border) 10%,transparent) 1px,transparent 1px);background-size:auto,auto,28px 28px,28px 28px;opacity:.62}
+.imageFilterModal .imageFilterDialogTitle{height:38px}
+.imageFilterModal .imageFilterDialogTitle>span>svg{width:23px;height:23px;padding:5px;border:1px solid color-mix(in srgb,var(--accent) 42%,var(--border));border-radius:7px;background:color-mix(in srgb,var(--accent) 10%,var(--surface-hover));box-shadow:0 0 18px color-mix(in srgb,var(--accent) 14%,transparent)}
+.imageFilterModal .imageFilterDialogTitle b{font-size:11px;letter-spacing:.035em}.imageFilterModal .imageFilterDialogTitle small{letter-spacing:.08em;text-transform:uppercase}
+.imageFilterModal .filterStepBar{padding:6px 10px;gap:7px;background:color-mix(in srgb,var(--surface-elevated) 91%,transparent);box-shadow:inset 0 -1px color-mix(in srgb,var(--accent) 11%,transparent)}
+.imageFilterModal .filterStepBar>button{min-width:190px;position:relative;border-radius:9px;overflow:hidden}
+.imageFilterModal .filterStepBar>button:after{content:"";position:absolute;inset:auto 12px 0;height:2px;border-radius:2px;background:var(--gradient-primary);transform:scaleX(0);transform-origin:left;transition:transform .2s ease}
+.imageFilterModal .filterStepBar>button.active:after{transform:scaleX(1)}
+.imageFilterModal .filterStepBar>button.active{background:linear-gradient(120deg,color-mix(in srgb,var(--gradient-start) 19%,var(--surface-hover)),color-mix(in srgb,var(--gradient-end) 9%,var(--surface)))!important;box-shadow:inset 0 1px color-mix(in srgb,#fff 7%,transparent),0 6px 18px color-mix(in srgb,#000 13%,transparent)}
+.imageFilterModal .filterStepBar>button.active>i{background:var(--gradient-primary);border-color:color-mix(in srgb,var(--accent) 55%,var(--border));box-shadow:0 0 14px color-mix(in srgb,var(--accent) 20%,transparent)}
+.imageFilterModal .filterPanel{position:relative;overflow:hidden;border-color:color-mix(in srgb,var(--accent) 13%,var(--border));background:linear-gradient(145deg,color-mix(in srgb,var(--surface-elevated) 96%,transparent),color-mix(in srgb,var(--surface) 91%,var(--background)))!important;box-shadow:inset 0 1px color-mix(in srgb,#fff 5%,transparent),0 9px 24px color-mix(in srgb,#000 12%,transparent)!important}
+.imageFilterModal .filterPanel:before{content:"";position:absolute;inset:0 auto 0 0;width:2px;background:linear-gradient(180deg,var(--gradient-start),var(--gradient-end));opacity:.72}
+.imageFilterModal .filterSectionTitle>span>small{color:var(--accent);letter-spacing:.13em}
+.imageFilterModal .filterSectionTitle>button,.imageFilterModal .filterSectionTitle>div>button{border-radius:6px;background:color-mix(in srgb,var(--surface-hover) 82%,transparent);transition:transform .16s ease,border-color .16s ease,background .16s ease}
+.imageFilterModal .filterSectionTitle>button:hover,.imageFilterModal .filterSectionTitle>div>button:hover{transform:translateY(-1px);border-color:color-mix(in srgb,var(--accent) 42%,var(--border));background:color-mix(in srgb,var(--accent) 10%,var(--surface-hover))}
+.imageFilterModal .resultTypeGrid>button{position:relative;overflow:hidden;border-radius:7px;background:linear-gradient(120deg,color-mix(in srgb,var(--result-color) 7%,var(--surface-hover)),var(--surface-hover))}
+.imageFilterModal .resultTypeGrid>button:after{content:"";position:absolute;inset:auto 0 0;height:2px;background:var(--result-color);opacity:.9}
+.imageFilterModal .resultTypeGrid>button.selected{border-color:color-mix(in srgb,var(--result-color) 65%,var(--border));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--result-color) 12%,transparent),0 5px 14px color-mix(in srgb,var(--result-color) 8%,transparent)}
+.imageFilterModal .defectFilterGrid>button{position:relative;border-color:color-mix(in srgb,var(--defect-color) 12%,var(--border));background:linear-gradient(110deg,color-mix(in srgb,var(--defect-color) 6%,var(--surface-hover)),var(--surface-hover));transition:transform .16s ease,border-color .16s ease,background .16s ease,box-shadow .16s ease}
+.imageFilterModal .defectFilterGrid>button:hover{transform:translateY(-1px);border-color:color-mix(in srgb,var(--defect-color) 55%,var(--border));background:linear-gradient(110deg,color-mix(in srgb,var(--defect-color) 13%,var(--surface-hover)),var(--surface-hover));z-index:2}
+.imageFilterModal .defectFilterGrid>button.selected{border-color:color-mix(in srgb,var(--defect-color) 72%,var(--border));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--defect-color) 14%,transparent),0 4px 13px color-mix(in srgb,var(--defect-color) 10%,transparent)}
+.imageFilterModal .defectFilterGrid>button.selected>em{background:var(--defect-color);border-color:var(--defect-color);color:#fff}
+.imageFilterModal .positionFilterGrid>button{position:relative;border-radius:6px;background:linear-gradient(180deg,color-mix(in srgb,var(--surface-hover) 92%,#fff 2%),var(--surface-hover));transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease}
+.imageFilterModal .positionFilterGrid>button:hover{transform:translateY(-1px);border-color:color-mix(in srgb,var(--accent) 50%,var(--border))}
+.imageFilterModal .positionFilterGrid>button.selected{border-color:color-mix(in srgb,var(--accent) 62%,var(--border));background:linear-gradient(150deg,color-mix(in srgb,var(--gradient-start) 14%,var(--surface-hover)),color-mix(in srgb,var(--gradient-end) 8%,var(--surface-hover)));box-shadow:inset 0 -2px var(--accent),0 5px 13px color-mix(in srgb,var(--accent) 9%,transparent)}
+.imageFilterModal .filterActionBar{padding-inline:12px;background:linear-gradient(90deg,color-mix(in srgb,var(--surface-elevated) 97%,transparent),color-mix(in srgb,var(--gradient-end) 4%,var(--surface-elevated)));box-shadow:0 -12px 30px color-mix(in srgb,#000 18%,transparent)}
+.imageFilterModal .filterActionBar>button{border-radius:7px;transition:transform .16s ease,filter .16s ease,box-shadow .16s ease}.imageFilterModal .filterActionBar>button:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.08)}
+.imageFilterModal .filterActionBar>.filterPrimary{background:linear-gradient(115deg,color-mix(in srgb,var(--status-ok) 31%,var(--surface-hover)),color-mix(in srgb,var(--gradient-end) 18%,var(--surface)))!important;box-shadow:0 7px 20px color-mix(in srgb,var(--status-ok) 12%,transparent)}
+@media(prefers-reduced-motion:reduce){.imageFilterModal *{transition:none!important}}
