@@ -6,12 +6,15 @@ import {ClientProviders} from '@/components/ClientProviders';
 import type {UiPreferences} from '@/components/UIProvider';
 import {GRADIENT_ANGLES,THEMES,createDefaultLayerGradients,gradientCss,normalizeTheme} from '@/lib/themes';
 import {appearanceVariables} from '@/lib/appearance';
+import {getDefaultUiPreferences} from '@/lib/default-ui-config';
 
 export const dynamic='force-dynamic';
 
 async function readInitialPreferences():Promise<Partial<UiPreferences>>{
+  const deployedDefaults=getDefaultUiPreferences();
   try{
-    const preferences=JSON.parse(await readFile(path.join(process.cwd(),'config','ui-preferences.json'),'utf8')) as Partial<UiPreferences>;
+    const saved=JSON.parse(await readFile(path.join(process.cwd(),'config','ui-preferences.json'),'utf8')) as Partial<UiPreferences>;
+    const preferences={...deployedDefaults,...saved};
     if(preferences.theme==='premium-white'&&(preferences.whitePdfPolishVersion||0)<1){
       if(preferences.customBg?.toLowerCase()==='#fafafa')preferences.customBg='';
       if(preferences.customPanel?.toLowerCase()==='#c2c2c2')preferences.customPanel='';
@@ -20,7 +23,7 @@ async function readInitialPreferences():Promise<Partial<UiPreferences>>{
       if(primary?.enabled&&primary.stops.length===2&&primary.stops[0].color.toLowerCase()==='#5b5fc7'&&primary.stops[1].color.toLowerCase()==='#00a6a6')preferences.layerGradients!.primary=createDefaultLayerGradients('premium-white').primary;
     }
     return preferences;
-  }catch{return{theme:'pdf-skeleton'}}
+  }catch{return deployedDefaults}
 }
 
 export const metadata={

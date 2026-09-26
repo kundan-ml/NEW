@@ -2,6 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {mkdir,readFile,rename,writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {NextResponse} from 'next/server';
+import {getDefaultUiPreferences} from '@/lib/default-ui-config';
 
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
@@ -13,7 +14,7 @@ export async function GET(){
     const preferences=JSON.parse(await readFile(configPath(),'utf8'));
     return NextResponse.json(preferences);
   }catch(error){
-    if((error as NodeJS.ErrnoException).code==='ENOENT')return NextResponse.json({});
+    if((error as NodeJS.ErrnoException).code==='ENOENT')return NextResponse.json(getDefaultUiPreferences());
     return NextResponse.json({error:'Unable to read UI configuration.'},{status:500});
   }
 }
