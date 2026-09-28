@@ -63,6 +63,16 @@ type InspectionBottomTab = "messages" | "wt" | "trend";
 type WtViewMode = "images" | "names";
 type BottomWidthKey = "trendWidth" | "logsWidth" | "actionsWidth";
 
+const passwordChecks = (value: string) => ({
+  length: value.length >= 8,
+  uppercase: /[A-Z]/.test(value),
+  lowercase: /[a-z]/.test(value),
+  number: /\d/.test(value),
+  special: /[^A-Za-z0-9]/.test(value),
+});
+
+const isStrongPassword = (value: string) => Object.values(passwordChecks(value)).every(Boolean);
+
 export function InspectionDashboard({
   inspectionMode = false,
 }: {
@@ -109,9 +119,7 @@ export function InspectionDashboard({
   const [operationMode, setOperationMode] = useState<"AUTO" | "MANUAL">("AUTO");
   const [loginOpen, setLoginOpen] = useState(false);
   const [loginView, setLoginView] = useState<"login" | "create">("login");
-  const [loginUser, setLoginUser] = useState(
-    info?.session.username || "operator",
-  );
+  const [loginUser, setLoginUser] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [newUsername, setNewUsername] = useState("");
@@ -135,6 +143,17 @@ export function InspectionDashboard({
     if (query.has("login") || query.has("dataset"))
       window.history.replaceState({}, "", window.location.pathname);
   }, []);
+  useEffect(() => {
+    // Credentials are never carried into a freshly opened authentication
+    // dialog. This also replaces values restored by password managers.
+    if (!loginOpen) return;
+    setLoginUser("");
+    setLoginPassword("");
+    setNewUsername("");
+    setNewPassword("");
+    setNewPasswordConfirm("");
+    setLoginError("");
+  }, [loginOpen]);
   useEffect(() => {
     if (!datasetId || !samples.length) return;
     for (const candidate of samples) {
@@ -634,6 +653,25 @@ export function InspectionDashboard({
       setToast((e as Error).message);
     }
   }
+  async function clearInspectionHistory() {
+    if (info?.session.role !== "Administrator") return;
+    const confirmed = window.confirm("Clear all inspection history? Uploaded datasets, previews, and results will be removed. User accounts, settings, logs, and archived ring-buffer images will be kept.");
+    if (!confirmed) return;
+    setBusy(true);
+    try {
+      const response = await api.clearHistory();
+      runTokenRef.current += 1;
+      wsRef.current?.close();
+      wsRef.current = null;
+      setDatasetId(""); setDatasets([]); setSamples([]); setResults([]); setGlobalHistory([]); setCurrent(null); setSelectedGlobalWt(null); setLiveDatasetId(null); setJob(null);
+      await refreshDatasets();
+      setToast(`History cleared · ${response.removed.catalogs || 0} datasets and ${response.removed.results || 0} result files removed`);
+    } catch (error) {
+      setToast(`Unable to clear history: ${(error as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
   async function toggleStorage() {
     try {
       setStorage(
@@ -661,11 +699,12 @@ export function InspectionDashboard({
   }
   async function createApplicationUser() {
     setLoginError("");
+    if (!isStrongPassword(newPassword)) {setLoginError("Password must be at least 8 characters and include uppercase, lowercase, a number, and a special symbol");return}
     if (newPassword !== newPasswordConfirm) {setLoginError("Passwords do not match");return}
     setBusy(true);
     try {
       await api.createUser(newUsername,newPassword,newUserRole);
-      setLoginUser(newUsername);setLoginPassword("");setNewUsername("");setNewPassword("");setNewPasswordConfirm("");setLoginView("login");
+      setLoginUser("");setLoginPassword("");setNewUsername("");setNewPassword("");setNewPasswordConfirm("");setLoginView("login");
       setToast(`User ${newUsername} created · sign in with the new account`);
     } catch (e) {setLoginError(e instanceof Error?e.message:"Unable to create user")}
     finally {setBusy(false)}
@@ -889,7 +928,7 @@ export function InspectionDashboard({
       >
         {prefs.manualSkeleton ? (
           <ClassicHeader
-            onSwitchUser={()=>{setLoginView("login");setLoginError("");setLoginUser(info?.session.username||"operator");setLoginPassword("");setLoginOpen(true)}}
+            onSwitchUser={()=>{setLoginView("login");setLoginError("");setLoginUser("");setLoginPassword("");setLoginOpen(true)}}
             onImageFilter={()=>window.dispatchEvent(new Event("lens-open-image-filter"))}
             onDataset={()=>setLoader(true)}
             onInfo={()=>setToast(`OKLIN3 · Version ${info?.version||"7.4.0"}`)}
@@ -982,6 +1021,7 @@ export function InspectionDashboard({
                 maxRows={30}
                 capacity={wtCapacity}
                 legend={statusLegend}
+                onClearHistory={info?.session.role === "Administrator" ? () => { void clearInspectionHistory(); } : undefined}
                 onArchive={async (wt) => {
                   try {
                     const r = await api.archiveRing(datasetId, wt);
@@ -1329,7 +1369,10 @@ export function InspectionDashboard({
                   <div className={`inspectionWtGallery ${wtViewMode}`} style={{'--wt-grid-columns': String(Math.ceil(wtCapacity / 2))} as React.CSSProperties}>
                     {wtChannelImages.map((item) => {
                       const status = item.result?.status || "IDLE",
-                        configuredStatus = statusSymbol(status),
+                        firstDefect = status === "OK" ? undefined : item.result?.defects?.[0],
+                        // Keep WT View aligned with WT History: a real defect
+                        // uses its configured legend symbol instead of generic NOK.
+                        configuredStatus = firstDefect ? defectSymbol(firstDefect.name) : statusSymbol(status),
                         tone =
                           status === "OK"
                             ? "ok"
@@ -1389,7 +1432,7 @@ export function InspectionDashboard({
                               <b>Position {item.position}</b>
                               <span>{item.name}</span>
                               <small>
-                                {status} · {item.defect}
+                                {configuredStatus.label} · {item.defect}
                               </small>
                               <i className={`wtStatusDot ${tone} configuredWtStatus`} style={{ backgroundColor: configuredStatus.color }}>{configuredStatus.symbol}</i>
                             </div>
@@ -1468,15 +1511,15 @@ export function InspectionDashboard({
                 <span><i/>Current session</span><b>{info?.session.username || "NoUser"}</b><em>{info?.session.role || "NoUser"}</em>
               </div>
               {loginView==="login"?<div className="loginFields">
-                <label><span>User name</span><input autoFocus value={loginUser} onChange={(e)=>setLoginUser(e.target.value)} placeholder="Enter user name" onKeyDown={(e)=>{if(e.key==="Enter")void switchUser()}}/></label>
-                <label><span>Password</span><input type="password" value={loginPassword} onChange={(e)=>setLoginPassword(e.target.value)} placeholder="Enter password" onKeyDown={(e)=>{if(e.key==="Enter")void switchUser()}}/></label>
+                <label><span>User name</span><input autoFocus autoComplete="off" data-lpignore="true" data-1p-ignore="true" value={loginUser} onChange={(e)=>setLoginUser(e.target.value)} placeholder="Enter user name" onKeyDown={(e)=>{if(e.key==="Enter")void switchUser()}}/></label>
+                <label><span>Password</span><input type="password" autoComplete="new-password" data-lpignore="true" data-1p-ignore="true" value={loginPassword} onChange={(e)=>setLoginPassword(e.target.value)} placeholder="Enter password" onKeyDown={(e)=>{if(e.key==="Enter")void switchUser()}}/></label>
                 <div className="loginAccessInfo"><div><span><i/>Workstation access</span><b>Protected local session</b></div><section><span><small>Production line</small><b>{info?.settings.line_name||"—"}</b></span><span><small>Inspection station</small><b>{info?.settings.station_name||"—"}</b></span><span><small>Access policy</small><b>Role controlled</b></span></section><p>Signing in changes the active operator and records the event in the system audit log.</p></div>
               </div>:<div className="loginFields createUserFields">
-                <label><span>New user name</span><input autoFocus value={newUsername} onChange={(e)=>setNewUsername(e.target.value)} placeholder="Minimum 3 characters"/></label>
+                <label><span>New user name</span><input autoFocus autoComplete="off" data-lpignore="true" data-1p-ignore="true" value={newUsername} onChange={(e)=>setNewUsername(e.target.value)} placeholder="Minimum 3 characters"/></label>
                 <label className="rolePicker"><span>Production role</span><div><button className={newUserRole==="Operator"?"selected":""} onClick={()=>setNewUserRole("Operator")}><i>OP</i><b>Operator</b><small>Production operation</small></button><button className={newUserRole==="Tester"?"selected":""} onClick={()=>setNewUserRole("Tester")}><i>TS</i><b>Tester</b><small>Quality validation</small></button></div></label>
-                <label><span>Password</span><input type="password" value={newPassword} onChange={(e)=>setNewPassword(e.target.value)} placeholder="Minimum 6 characters"/></label>
-                <label><span>Confirm password</span><input type="password" value={newPasswordConfirm} onChange={(e)=>setNewPasswordConfirm(e.target.value)} placeholder="Repeat password" onKeyDown={(e)=>{if(e.key==="Enter")void createApplicationUser()}}/></label>
-                <div className="passwordGuide"><i className={newPassword.length>=6?"valid":""}/><span>{newPassword.length>=6?"Password length accepted":"Use at least 6 characters"}</span><i className={newPasswordConfirm.length>0&&newPassword===newPasswordConfirm?"valid":""}/><span>{newPasswordConfirm.length>0&&newPassword===newPasswordConfirm?"Passwords match":"Confirm the same password"}</span></div>
+                <label><span>Password</span><input type="password" autoComplete="new-password" data-lpignore="true" data-1p-ignore="true" value={newPassword} onChange={(e)=>setNewPassword(e.target.value)} placeholder="Create a strong password"/></label>
+                <label><span>Confirm password</span><input type="password" autoComplete="new-password" data-lpignore="true" data-1p-ignore="true" value={newPasswordConfirm} onChange={(e)=>setNewPasswordConfirm(e.target.value)} placeholder="Repeat password" onKeyDown={(e)=>{if(e.key==="Enter")void createApplicationUser()}}/></label>
+                <div className="passwordGuide"><i className={passwordChecks(newPassword).length?"valid":""}/><span>At least 8 characters</span><i className={passwordChecks(newPassword).uppercase?"valid":""}/><span>One uppercase letter</span><i className={passwordChecks(newPassword).lowercase?"valid":""}/><span>One lowercase letter</span><i className={passwordChecks(newPassword).number?"valid":""}/><span>One number</span><i className={passwordChecks(newPassword).special?"valid":""}/><span>One special symbol</span><i className={newPasswordConfirm.length>0&&newPassword===newPasswordConfirm?"valid":""}/><span>Passwords match</span></div>
               </div>}
               {loginError && <p className="loginError">{loginError}</p>}
               {loginView==="login"?<div className="loginActions">
@@ -1484,7 +1527,7 @@ export function InspectionDashboard({
                 <button className="primary" onClick={switchUser} disabled={busy||!loginUser.trim()||!loginPassword}>{busy?"Signing in…":"Apply user"}</button>
               </div>:<div className="loginActions">
                 <button onClick={()=>{setLoginError("");setLoginView("login")}}>Back to sign in</button>
-                <button className="primary" onClick={createApplicationUser} disabled={busy||newUsername.trim().length<3||newPassword.length<6||!newPasswordConfirm}>{busy?"Creating…":"Create user"}</button>
+                <button className="primary" onClick={createApplicationUser} disabled={busy||newUsername.trim().length<3||!isStrongPassword(newPassword)||!newPasswordConfirm}>{busy?"Creating…":"Create user"}</button>
               </div>}
               <footer>{loginView==="create"?"Administrator approval · accounts can be Operator or Tester only.":"Session changes are recorded in the system log."}</footer>
             </section>
@@ -1629,6 +1672,7 @@ export function InspectionDashboard({
               onPick={select}
               history={visibleGlobalHistory}
               onHistoryPick={(entry) => { void selectHistoryEntry(entry) }}
+              onClearHistory={info?.session.role === "Administrator" ? () => { void clearInspectionHistory(); } : undefined}
               onArchive={async (wt) => {
                 try {
                   const r = await api.archiveRing(datasetId, wt);
