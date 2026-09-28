@@ -1481,10 +1481,10 @@ export function InspectionDashboard({
             Current user: <b>{info?.session.username || "NoUser"}</b>
           </span>
           <span>
-            Version: <b>{info?.version || "7.4.0"}</b>
+            Version: <b>{info?.version || "1.0.0"}</b>
           </span>
           <span>
-            Last inspection:{" "}
+            Inspection Time:{" "}
             <b>{lastInspectionLabel}</b>
           </span>
           <em>{statusNow.toLocaleDateString()} · {statusNow.toLocaleTimeString()}</em>
