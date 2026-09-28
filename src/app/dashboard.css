@@ -12200,6 +12200,42 @@ html[data-workspace="modern"] .oakDeckGroup.oakDeckRight :is(.oakDensity>button.
 .matrixHeadActions{display:flex;align-items:center;gap:7px}.clearHistoryButton{height:25px;padding:0 8px;display:inline-flex;align-items:center;gap:5px;border:1px solid color-mix(in srgb,var(--status-nok) 38%,var(--control-border));border-radius:7px;background:color-mix(in srgb,var(--status-nok) 8%,var(--control-button));color:color-mix(in srgb,var(--status-nok) 80%,#fff);font-size:7px;font-weight:750;transition:background .18s ease,border-color .18s ease,transform .18s ease}.clearHistoryButton svg{width:11px;height:11px}.clearHistoryButton:hover{border-color:var(--status-nok);background:color-mix(in srgb,var(--status-nok) 18%,var(--control-button));transform:translateY(-1px)}
 @media(max-width:700px){.clearHistoryButton span{display:none}.clearHistoryButton{width:25px;padding:0;justify-content:center}}
 
+/* Polished WT gallery: image and metadata occupy separate, stable regions. */
+.inspectionWtView{padding:5px;background:radial-gradient(circle at 50% 0%,color-mix(in srgb,var(--accent) 5%,transparent),transparent 46%)}
+.inspectionWtGallery.images{padding:5px;gap:7px}
+html[data-theme] .inspectionWtGallery.images>button{display:grid;grid-template-rows:minmax(0,1fr) 28px;gap:4px;padding:5px!important;overflow:hidden;border-color:color-mix(in srgb,var(--studio-wtView-border,var(--control-border)) 86%,var(--accent) 14%)!important;border-radius:max(8px,var(--studio-wtView-radius))!important;transition:border-color .18s ease,box-shadow .18s ease,transform .18s ease}
+html[data-theme] .inspectionWtGallery.images>button:hover:not(:disabled){z-index:2;border-color:color-mix(in srgb,var(--accent) 52%,var(--control-border))!important;box-shadow:0 10px 24px color-mix(in srgb,#000 35%,transparent),0 0 0 1px color-mix(in srgb,var(--accent) 12%,transparent)!important;transform:translateY(-1px)}
+.inspectionWtGallery.images .inspectionWtSquare{position:relative!important;inset:auto!important;width:100%!important;height:100%!important;min-height:0;border:1px solid color-mix(in srgb,var(--control-border) 78%,transparent);border-radius:7px;overflow:hidden;background:#020304}
+.inspectionWtGallery.images .inspectionWtSquare:after{content:"";position:absolute;z-index:2;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,.34),transparent 25%,transparent 66%,rgba(0,0,0,.58))}
+.inspectionWtGallery.images .inspectionWtSquare>b{z-index:4;top:6px!important;left:6px!important;padding:3px 6px!important;border:1px solid rgba(255,255,255,.12);border-radius:999px;background:rgba(5,8,11,.74)!important;backdrop-filter:blur(5px);font-size:7px!important;line-height:1.2}
+.inspectionWtSquare>.wtStatusDot.configuredWtStatus,.inspectionNameOnly>.wtStatusDot.configuredWtStatus{z-index:6;width:20px!important;height:20px!important;right:6px!important;top:6px!important;border:1px solid color-mix(in srgb,#fff 54%,transparent)!important;border-radius:50%!important;background:var(--legend-color,var(--status-idle))!important;color:#fff!important;font-size:8px!important;transform:none!important;box-shadow:0 3px 10px rgba(0,0,0,.55),0 0 0 2px rgba(3,6,9,.3)!important}
+.inspectionWtGallery.images .wtDefectChip{z-index:5;left:6px;right:auto;bottom:6px;max-width:calc(100% - 12px);padding:4px 6px;border-color:color-mix(in srgb,var(--legend-color,var(--control-border)) 40%,rgba(255,255,255,.12));border-radius:5px;background:rgba(4,7,10,.8);color:#f1f5f7;font-size:6px;line-height:1.15;backdrop-filter:blur(6px)}
+.inspectionWtGallery.images .wtTileResult{position:static!important;width:100%!important;height:28px!important;min-width:0;margin:0!important;padding:3px 5px!important;display:flex!important;justify-content:center;background:color-mix(in srgb,var(--control-bg) 62%,transparent)!important;border-radius:5px;overflow:hidden}
+.inspectionWtGallery.images .wtTileResult>b{display:block;width:100%;overflow:hidden;color:var(--control-text)!important;font-size:7px!important;font-weight:750;line-height:1.2;text-overflow:ellipsis;white-space:nowrap}
+.inspectionWtGallery.images>button.selected{border-color:var(--accent)!important;box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 48%,transparent),0 9px 24px color-mix(in srgb,var(--accent) 14%,transparent)!important}
+.inspectionWtGallery.images>button.missing{opacity:.66}.inspectionWtGallery.images>button.missing .inspectionWtSquare{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--control-button) 55%,transparent) 0 5px,transparent 5px 10px)}
+
+/* Keep image content dominant; metadata stays quiet and translucent. */
+html[data-theme] .inspectionWtGallery.images>button{grid-template-rows:minmax(0,1fr) 17px;gap:2px;padding:3px!important}
+.inspectionWtGallery.images .inspectionWtSquare>b{top:4px!important;left:4px!important;padding:2px 4px!important;border-color:rgba(255,255,255,.08);background:rgba(3,6,9,.38)!important;color:rgba(244,248,250,.82)!important;font-size:5.5px!important;font-weight:700;backdrop-filter:blur(2px)}
+.inspectionWtGallery.images .wtDefectChip{left:4px;bottom:4px;max-width:calc(100% - 8px);padding:2px 4px;border-color:rgba(255,255,255,.07);background:rgba(3,6,9,.32);color:rgba(245,248,250,.76);font-size:5px;line-height:1;backdrop-filter:blur(2px)}
+.inspectionWtGallery.images .wtTileResult{height:17px!important;padding:1px 4px!important;justify-content:center;background:transparent!important;border-radius:3px}
+.inspectionWtGallery.images .wtTileResult>b{color:var(--text-muted)!important;font-size:5.5px!important;font-weight:650;line-height:1;text-align:left}
+.inspectionWtSquare>.wtStatusDot.configuredWtStatus{width:18px!important;height:18px!important;right:4px!important;top:4px!important;font-size:7px!important}
+
+html[data-theme] .inspectionWtGallery.images>button{display:block;grid-template-rows:none;padding:3px!important}
+.inspectionWtGallery.images .inspectionWtSquare{height:100%!important}
+.inspectionWtGallery.images .wtDefectChip{max-width:calc(100% - 8px);background:rgba(3,6,9,.24);color:rgba(247,249,250,.72);font-size:5px;font-weight:700;letter-spacing:.02em}
+.inspectionWtGallery.images>button.ok .wtDefectChip{color:color-mix(in srgb,var(--status-ok) 68%,#fff)}
+.inspectionWtGallery.images>button.nok .wtDefectChip{color:color-mix(in srgb,var(--status-nok) 72%,#fff)}
+.inspectionWtGallery.images>button.warn .wtDefectChip{color:color-mix(in srgb,var(--status-warn) 72%,#fff)}
+
+.inspectionWtGallery.images .wtStatusChip{position:absolute;z-index:5;left:4px;right:auto;bottom:4px;padding:2px 4px;border:1px solid rgba(255,255,255,.07);border-radius:4px;background:rgba(3,6,9,.28);color:rgba(247,249,250,.76);font-size:5px;font-style:normal;font-weight:800;letter-spacing:.04em;line-height:1;backdrop-filter:blur(2px)}
+.inspectionWtGallery.images .wtDefectChip{left:auto;right:4px;max-width:56%;text-align:right}
+.inspectionWtGallery.images>button.ok .wtStatusChip{color:color-mix(in srgb,var(--status-ok) 72%,#fff)}
+.inspectionWtGallery.images>button.nok .wtStatusChip{color:color-mix(in srgb,var(--status-nok) 75%,#fff)}
+.inspectionWtGallery.images>button.warn .wtStatusChip{color:color-mix(in srgb,var(--status-warn) 75%,#fff)}
+
 /* Dataset import follows the same layered dialog language as secure access. */
 html[data-theme] .uploadModalBack{z-index:1000;padding:20px;background:rgba(0,0,0,.72);backdrop-filter:blur(12px) saturate(.78)}
 html[data-theme] .uploadModalWindow{width:min(620px,calc(100vw - 28px));max-height:calc(100dvh - 24px);padding:0!important;overflow:hidden;position:relative;border:1px solid var(--studio-dialogs-border,var(--control-border))!important;border-radius:18px!important;background:linear-gradient(155deg,color-mix(in srgb,var(--control-header) 96%,#fff 2%),color-mix(in srgb,var(--control-panel) 96%,#000 3%))!important;box-shadow:0 42px 130px rgba(0,0,0,.76),0 0 0 1px color-mix(in srgb,#fff 5%,transparent),0 0 54px color-mix(in srgb,var(--accent) 9%,transparent)!important}

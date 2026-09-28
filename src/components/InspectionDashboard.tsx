@@ -73,6 +73,33 @@ const passwordChecks = (value: string) => ({
 
 const isStrongPassword = (value: string) => Object.values(passwordChecks(value)).every(Boolean);
 
+const defectInitials = (name: string) => {
+  const words = name
+    .replace(/^(defect|fail)\s*:\s*/i, "")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .match(/[A-Za-z0-9]+/g) || [];
+  return words.slice(0, 4).map(word => word[0]).join("").toUpperCase();
+};
+
+const uniqueDefectNames = (names: Array<string | undefined>) => {
+  const seen = new Set<string>();
+  return names.flatMap(name => {
+    const clean = name?.trim();
+    if (!clean || clean === "No defect") return [];
+    const key = clean.toLocaleLowerCase();
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [clean];
+  });
+};
+
+const wtResultLabel = (status: Status, defects: string[]) => {
+  if (status === "OK") return "OK";
+  if (status === "IDLE") return "Pending";
+  const codes = defects.map(defectInitials).filter(Boolean);
+  return codes.length ? `${status}: ${codes.join(", ")}` : status;
+};
+
 export function InspectionDashboard({
   inspectionMode = false,
 }: {
@@ -1370,6 +1397,7 @@ export function InspectionDashboard({
                     {wtChannelImages.map((item) => {
                       const status = item.result?.status || "IDLE",
                         firstDefect = status === "OK" ? undefined : item.result?.defects?.[0],
+                        uniqueDefects = uniqueDefectNames(item.result?.defects?.map(defect => defect.name) || []),
                         // Keep WT View aligned with WT History: a real defect
                         // uses its configured legend symbol instead of generic NOK.
                         configuredStatus = firstDefect ? defectSymbol(firstDefect.name) : statusSymbol(status),
@@ -1381,14 +1409,14 @@ export function InspectionDashboard({
                               : status === "WARN"
                                 ? "warn"
                                 : "idle",
-                        shortDefect =
-                          item.defect.length > 16
-                            ? `${item.defect.slice(0, 14)}…`
-                            : item.defect;
+                        resultLabel = wtResultLabel(status, uniqueDefects),
+                        resultTitle = status === "OK" ? "Inspection OK" : status === "IDLE" ? "Not inspected" : uniqueDefects.length ? `${status}: ${uniqueDefects.join(", ")}` : status,
+                        defectCodes = uniqueDefects.map(defectInitials).filter(Boolean).join(", ");
                       return (
                         <button
                           key={`${item.position}-${item.channel}`}
                           className={`${item.sample?.id === current ? "selected" : ""} ${!item.image ? "missing" : ""} ${tone}`}
+                          style={{ "--legend-color": configuredStatus.color } as React.CSSProperties}
                           onClick={() => {
                             if (item.sample && item.entry) {
                               void selectHistoryEntry(item.entry);
@@ -1399,8 +1427,7 @@ export function InspectionDashboard({
                           title={`${item.name} · ${item.defect}`}
                         >
                           {wtViewMode === "images" ? (
-                            <>
-                              <div className="inspectionWtSquare">
+                            <div className="inspectionWtSquare">
                                 {item.src ? (
                                   <img src={item.src} alt={item.name} />
                                 ) : (
@@ -1408,33 +1435,23 @@ export function InspectionDashboard({
                                     No image
                                   </span>
                                 )}
-                                <b>Position {item.position}</b>
+                                <b>P{item.position}</b>
                                 <i
                                   className={`wtStatusDot ${tone} configuredWtStatus`}
-                                  style={{ backgroundColor: configuredStatus.color }}
+                                  style={{ "--legend-color": configuredStatus.color } as React.CSSProperties}
                                   title={configuredStatus.label}
                                 >{configuredStatus.symbol}</i>
-                                <em
-                                  className="wtDefectChip"
-                                  title={item.defect}
-                                >
-                                  {shortDefect}
-                                </em>
+                                <em className="wtStatusChip" title={resultTitle}>{status === "IDLE" ? "Pending" : status}</em>
+                                {defectCodes && <em className="wtDefectChip" title={resultTitle}>{defectCodes}</em>}
                               </div>
-                              <span className="wtTileResult">
-                                <b>
-                                  {configuredStatus.label}
-                                </b>
-                              </span>
-                            </>
                           ) : (
                             <div className="inspectionNameOnly">
-                              <b>Position {item.position}</b>
+                              <b>P{item.position}</b>
                               <span>{item.name}</span>
                               <small>
-                                {configuredStatus.label} · {item.defect}
+                                {resultLabel}
                               </small>
-                              <i className={`wtStatusDot ${tone} configuredWtStatus`} style={{ backgroundColor: configuredStatus.color }}>{configuredStatus.symbol}</i>
+                              <i className={`wtStatusDot ${tone} configuredWtStatus`} style={{ "--legend-color": configuredStatus.color } as React.CSSProperties}>{configuredStatus.symbol}</i>
                             </div>
                           )}
                         </button>
