@@ -11,6 +11,6 @@ export interface SystemInfo{app:string;version:string;mode:'AUTO'|'SETUP';bridge
 export interface LogRow{time:string;level:string;message:string}
 export interface StorageRuntime{active:boolean;started_at?:string;saved_lenses:number;saved_images:number;event_count:number;position_counts:Record<string,number>;error_counts:Record<string,number>;last_saved_at?:string;reason:string}
 export interface ErrorClass{key:string;label:string;color:string;symbol:string;severity:string}
-export interface StatusSymbol{key:string;label:string;color:string;symbol:string;match_terms?:string[];color_from_status?:Status}
+export interface StatusSymbol{key:string;label:string;color:string;symbol:string;match_terms?:string[];color_from_status?:Status;outcome?:'OK'|'NOK'}
 export interface StatusSymbolLegend{statuses:StatusSymbol[];defects:StatusSymbol[];fallback_defect:StatusSymbol}
 export interface FocusMetric{key:string;label:string;value:number;status:'green'|'yellow'|'red';optimum:[number,number];acceptable:[number,number]}

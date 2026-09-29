@@ -10074,6 +10074,75 @@ html[data-workspace="modern"]:not([data-theme="premium-white"]) .oakTrayCell.sel
   box-shadow: inset 0 0 0 1px var(--accent), 0 7px 20px color-mix(in srgb, var(--accent) 18%, transparent) !important
 }
 
+/* Modern tray cards use the same concise image metadata language as Classic WT View. */
+html[data-workspace="modern"] .oakTrayCell>b {
+  z-index: 5;
+  padding: 2px 5px;
+  border: 1px solid color-mix(in srgb, #fff 16%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--background) 72%, transparent);
+  color: var(--text-primary);
+  font-size: 7px;
+  line-height: 1
+}
+
+html[data-workspace="modern"] .oakTrayCell .oakTrayStatusIcon {
+  position: absolute;
+  z-index: 6;
+  right: 5px;
+  top: 5px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, #fff 25%, var(--legend-color));
+  border-radius: 50%;
+  background: var(--legend-color);
+  color: #fff;
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--legend-color) 42%, transparent), 0 0 0 2px color-mix(in srgb, var(--background) 52%, transparent)
+}
+
+html[data-workspace="modern"] .oakTrayCell .oakTrayStatus {
+  position: absolute;
+  z-index: 5;
+  left: 4px;
+  bottom: 4px;
+  right: auto;
+  width: auto;
+  height: auto;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--background) 72%, transparent);
+  color: #fff;
+  font-size: 6px;
+  font-weight: 800;
+  letter-spacing: .05em;
+  line-height: 1.1
+}
+
+html[data-workspace="modern"] .oakTrayCell .oakTrayDefect {
+  position: absolute;
+  z-index: 5;
+  right: 4px;
+  bottom: 4px;
+  max-width: 62%;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--legend-color) 82%, #fff);
+  font-size: 6px;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: .04em;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px #000
+}
+
 html[data-workspace="modern"]:not([data-theme="premium-white"]) .modernLegendPopover {
   position: absolute;
   z-index: 30;
@@ -11534,4 +11603,81 @@ html[data-workspace="modern"] .oakDeckGroup.oakDeckRight :is(.oakDensity>button.
 .referenceYield span {
   display: flex;
   flex-direction: column;
+}
+
+/* Final Modern WT View image-overlay contract. */
+html[data-workspace="modern"] .oakTrayCell {
+  overflow: hidden !important;
+  background: #000 !important;
+}
+
+html[data-workspace="modern"] .oakTrayCell img {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0;
+  object-fit: cover;
+  background: #000 !important;
+}
+
+html[data-workspace="modern"] .oakTrayCell>b {
+  position: absolute !important;
+  z-index: 8;
+  left: 5px !important;
+  top: 5px !important;
+  padding: 2px 4px !important;
+  border: 0 !important;
+  border-radius: 3px !important;
+  background: rgba(0, 0, 0, .46) !important;
+  color: #fff !important;
+  font-size: 7px !important;
+  line-height: 1 !important;
+}
+
+html[data-workspace="modern"] .oakTrayCell .oakTrayStatusIcon {
+  position: absolute !important;
+  z-index: 8;
+  right: 6px !important;
+  top: 6px !important;
+  left: auto !important;
+  width: 9px !important;
+  height: 9px !important;
+  padding: 0 !important;
+  border: 1px solid rgba(255, 255, 255, .82) !important;
+  border-radius: 50% !important;
+  background: var(--legend-color) !important;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--legend-color) 85%, transparent), 0 0 0 2px rgba(0, 0, 0, .42) !important;
+}
+
+html[data-workspace="modern"] .oakTrayCell .oakTrayStatus,
+html[data-workspace="modern"] .oakTrayCell .oakTrayDefect {
+  position: absolute !important;
+  z-index: 8;
+  bottom: 5px !important;
+  width: auto !important;
+  height: auto !important;
+  padding: 2px 4px !important;
+  border: 0 !important;
+  border-radius: 3px !important;
+  background: rgba(0, 0, 0, .48) !important;
+  font-size: 6px !important;
+  font-style: normal !important;
+  font-weight: 800 !important;
+  line-height: 1.1 !important;
+  letter-spacing: .05em !important;
+}
+
+html[data-workspace="modern"] .oakTrayCell .oakTrayStatus {
+  left: 5px !important;
+  right: auto !important;
+  color: #fff !important;
+}
+
+html[data-workspace="modern"] .oakTrayCell .oakTrayDefect {
+  right: 5px !important;
+  left: auto !important;
+  max-width: 58% !important;
+  overflow: hidden !important;
+  color: color-mix(in srgb, var(--legend-color) 84%, #fff) !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
 }

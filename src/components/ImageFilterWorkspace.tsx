@@ -7,13 +7,14 @@ import {
   RefreshCw,Save,ShieldCheck,SlidersHorizontal,TimerReset,X,
 } from "lucide-react";
 import {api} from "@/lib/api";
-import type {StorageRuntime,SystemInfo} from "@/types";
+import type {StatusSymbolLegend,StorageRuntime,SystemInfo} from "@/types";
 
 type FilterTab="selection"|"storage"|"schedule";
 type StorageMode="total"|"per-position"|"per-error";
 type EndMode="never"|"date"|"events";
 type Pattern="daily"|"weekly";
-type ErrorOption={key:string;label:string;color:string;symbol:string;severity?:string};
+type ErrorOption={key:string;label:string;color:string;symbol:string;severity?:string;match_terms?:string[];outcome?:"OK"|"NOK"};
+type ResultOption={key:string;label:string;color:string;symbol:string};
 type FilterSettings={
   positions:number[];
   result_types:string[];
@@ -27,41 +28,52 @@ type FilterSettings={
 };
 
 const defaults:FilterSettings={positions:Array.from({length:16},(_,i)=>i+1),result_types:["OK","NOK","WARN"],error_classes:[],storage_path:"./storage/optimization",image_count:100,storage_mode:"total",apply_to_display:false,storage_information:"Offline optimization run",recurring:{enabled:false,start_date:"",start_time:"00:00",interval_enabled:false,interval_minutes:480,pattern:"daily",every_n:1,weekdays:[0,1,2,3,4],end_mode:"never",end_date:"",end_after_events:10}};
-const fallbackErrors:ErrorOption[]=[
-  {key:"ok",label:"OK",color:"#22c55e",symbol:"✓",severity:"OK"},{key:"inspection-error",label:"Inspection error",color:"#ef4444",symbol:"!"},{key:"acquisition-error",label:"Acquisition error",color:"#f97316",symbol:"A"},{key:"no-inspection-parameters",label:"No inspection parameters",color:"#eab308",symbol:"?",severity:"WARN"},
-  {key:"no-inspection-order",label:"No inspection order",color:"#f59e0b",symbol:"!",severity:"WARN"},{key:"illumination-error",label:"Illumination error",color:"#fb7185",symbol:"☼"},{key:"no-bottom-lens",label:"No bottom lens found",color:"#a855f7",symbol:"B"},{key:"no-lens",label:"No lens",color:"#64748b",symbol:"Ø"},
-  {key:"multiple-lenses",label:"Multiple lenses",color:"#8b5cf6",symbol:"2"},{key:"diameter",label:"Diameter",color:"#06b6d4",symbol:"D"},{key:"geometry-error",label:"Geometry error",color:"#0ea5e9",symbol:"G"},{key:"lens-not-floated",label:"Lens not floated",color:"#6366f1",symbol:"F"},
-  {key:"bubble",label:"Bubble",color:"#3b82f6",symbol:"●"},{key:"startear",label:"Startear",color:"#f97316",symbol:"✦"},{key:"edge-error",label:"Edge defect",color:"#d946ef",symbol:"◖"},{key:"dent-scorching",label:"Dent with scorching",color:"#ec4899",symbol:"⌁"},
-  {key:"tear",label:"Tear",color:"#ef4444",symbol:"╱"},{key:"roadmaps",label:"Roadmaps",color:"#d4a017",symbol:"≋"},{key:"entrapment",label:"Entrapment",color:"#67e8f9",symbol:"◆"},{key:"under-dosed",label:"Underdosed lens",color:"#38bdf8",symbol:"◌"},
-  {key:"surface",label:"Surface error",color:"#fb7185",symbol:"◍"},{key:"material-foam",label:"Material foam",color:"#c2b280",symbol:"○"},{key:"toric-mark",label:"Toric mark defect",color:"#14b8a6",symbol:"T"},{key:"sph-nok",label:"SPH NOK",color:"#ef4444",symbol:"S"},
-  {key:"multiple-errors",label:"Multiple errors inside",color:"#dc2626",symbol:"M"},{key:"cyl-nok",label:"CYL NOK",color:"#f43f5e",symbol:"C"},{key:"axis-nok",label:"Axis NOK",color:"#e11d48",symbol:"X"},{key:"pseudo",label:"Pseudo Error",color:"#f472b6",symbol:"P",severity:"WARN"},
+const fallbackResults:ResultOption[]=[
+  {key:"OK",label:"Inspection OK",color:"var(--status-ok)",symbol:"✓"},
+  {key:"NOK",label:"Not OK",color:"var(--status-nok)",symbol:"!"},
+  {key:"WARN",label:"Warning",color:"var(--status-warn)",symbol:"▲"},
 ];
-const resultOptions=[{key:"OK",label:"Inspection OK",color:"var(--status-ok)"},{key:"NOK",label:"Not OK",color:"var(--status-nok)"},{key:"WARN",label:"Warning",color:"var(--status-warn)"}];
 const weekdays=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 
 export function ImageFilterWorkspace({modal=false,onClose}:{modal?:boolean;onClose?:()=>void}={}){
   const[tab,setTab]=useState<FilterTab>("selection");
   const[settings,setSettings]=useState<FilterSettings>(defaults);
   const[baseline,setBaseline]=useState<FilterSettings>(defaults);
-  const[errors,setErrors]=useState<ErrorOption[]>(fallbackErrors);
+  const[errors,setErrors]=useState<ErrorOption[]>([]);
+  const[legend,setLegend]=useState<StatusSymbolLegend|null>(null);
+  const[legendBaseline,setLegendBaseline]=useState<StatusSymbolLegend|null>(null);
+  const[resultOptions,setResultOptions]=useState<ResultOption[]>(fallbackResults);
   const[system,setSystem]=useState<SystemInfo|null>(null);
   const[runtime,setRuntime]=useState<StorageRuntime|null>(null);
   const[loading,setLoading]=useState(true);
   const[saving,setSaving]=useState(false);
   const[notice,setNotice]=useState("");
   const capacity=system?.settings.wt_capacity||16;
-  const dirty=JSON.stringify(settings)!==JSON.stringify(baseline);
+  const legendDirty=JSON.stringify(legend)!==JSON.stringify(legendBaseline);
+  const dirty=JSON.stringify(settings)!==JSON.stringify(baseline)||legendDirty;
 
   async function load(){
     setLoading(true);setNotice("");
-    const[filterResult,errorResult,systemResult,runtimeResult]=await Promise.allSettled([api.getFilters(),api.errorMap(),api.system(),api.storageState()]);
+    const[filterResult,legendResult,systemResult,runtimeResult]=await Promise.allSettled([api.getFilters(),api.statusSymbolLegend(),api.system(),api.storageState()]);
     if(filterResult.status==="fulfilled"){
       const next={...defaults,...filterResult.value,recurring:{...defaults.recurring,...filterResult.value.recurring}} as FilterSettings;
       setSettings(next);setBaseline(next);
     }
-    if(errorResult.status==="fulfilled"){
-      const mapped=(errorResult.value as {lens_error_classes?:ErrorOption[]}).lens_error_classes;
-      if(mapped?.length){const live=new Map(mapped.map(item=>[item.key,item]));setErrors(fallbackErrors.map(item=>live.get(item.key)||item).concat(mapped.filter(item=>!fallbackErrors.some(base=>base.key===item.key))))}
+    if(legendResult.status==="fulfilled"){
+      const legend=legendResult.value as StatusSymbolLegend;
+      setLegend(legend);setLegendBaseline(legend);
+      const statusByKey=new Map(legend.statuses.map(item=>[item.key,item]));
+      setResultOptions(fallbackResults.map(item=>{
+        const configured=statusByKey.get(item.key);
+        return configured?{...item,label:configured.label,color:configured.color,symbol:configured.symbol}:item;
+      }));
+      setErrors(legend.defects.map(item=>({
+        key:item.key,label:item.label,color:item.color,symbol:item.symbol,
+        match_terms:item.match_terms,severity:item.outcome||"NOK",outcome:item.outcome||"NOK",
+      })));
+      const configuredKeys=new Set(legend.defects.map(item=>item.key));
+      setSettings(current=>({...current,error_classes:current.error_classes.filter(key=>configuredKeys.has(key))}));
+      setBaseline(current=>({...current,error_classes:current.error_classes.filter(key=>configuredKeys.has(key))}));
     }
     if(systemResult.status==="fulfilled")setSystem(systemResult.value);
     if(runtimeResult.status==="fulfilled")setRuntime(runtimeResult.value);
@@ -75,13 +87,13 @@ export function ImageFilterWorkspace({modal=false,onClose}:{modal?:boolean;onClo
   function patch<K extends keyof FilterSettings>(key:K,value:FilterSettings[K]){setSettings(old=>({...old,[key]:value}))}
   function patchRecurring<K extends keyof FilterSettings["recurring"]>(key:K,value:FilterSettings["recurring"][K]){setSettings(old=>({...old,recurring:{...old.recurring,[key]:value}}))}
   function toggleList(key:"positions"|"result_types"|"error_classes",value:number|string){setSettings(old=>{const list=old[key] as Array<number|string>,next=list.includes(value)?list.filter(item=>item!==value):[...list,value];return {...old,[key]:next}})}
-  async function save(){setSaving(true);setNotice("");try{const saved=await api.saveFilters(settings) as FilterSettings;setSettings(saved);setBaseline(saved);setNotice("Image filter configuration saved") }catch(error){setNotice(error instanceof Error?error.message:"Unable to save configuration")}finally{setSaving(false)}}
-  async function toggleStorage(){setSaving(true);setNotice("");try{if(dirty)await api.saveFilters(settings);const next=runtime?.active?await api.storageStop():await api.storageStart();setRuntime(next);setBaseline(settings);setNotice(next.active?"Optimization image storage started":"Image storage stopped")}catch(error){setNotice(error instanceof Error?error.message:"Unable to update image storage")}finally{setSaving(false)}}
+  async function save(){setSaving(true);setNotice("");try{const[saved,savedLegend]=await Promise.all([api.saveFilters(settings) as Promise<FilterSettings>,legend&&legendDirty?api.saveStatusSymbolLegend(legend):Promise.resolve(null)]);setSettings(saved);setBaseline(saved);if(savedLegend){setLegend(savedLegend);setLegendBaseline(savedLegend)}setNotice("Image filter configuration saved");localStorage.setItem("lens-image-filter-version",String(Date.now()));window.dispatchEvent(new Event("lens-image-filter-changed"));window.dispatchEvent(new Event("lens-status-legend-changed"))}catch(error){setNotice(error instanceof Error?error.message:"Unable to save configuration")}finally{setSaving(false)}}
+  async function toggleStorage(){setSaving(true);setNotice("");try{if(dirty)await api.saveFilters(settings);if(legend&&legendDirty){const savedLegend=await api.saveStatusSymbolLegend(legend);setLegend(savedLegend);setLegendBaseline(savedLegend)}const next=runtime?.active?await api.storageStop():await api.storageStart();setRuntime(next);setBaseline(settings);localStorage.setItem("lens-image-filter-version",String(Date.now()));window.dispatchEvent(new Event("lens-image-filter-changed"));window.dispatchEvent(new Event("lens-status-legend-changed"));setNotice(next.active?"Optimization image storage started":"Image storage stopped")}catch(error){setNotice(error instanceof Error?error.message:"Unable to update image storage")}finally{setSaving(false)}}
   const selectedSummary=useMemo(()=>`${settings.result_types.length} results · ${settings.error_classes.length||"all"} defects · ${settings.positions.length}/${capacity} positions`,[settings,capacity]);
   const completion=runtime?.active&&settings.image_count?Math.min(100,(runtime.saved_lenses/settings.image_count)*100):0;
 
   const workspace=<div className={`imageFilterPage ${modal?"imageFilterDialogPage":""}`}>
-    {modal&&<div className="imageFilterDialogTitle"><span><SlidersHorizontal/><b>Image Filter Configuration</b><small>Optimization image rules</small></span><button onClick={onClose} aria-label="Close image filter"><X/></button></div>}
+    {modal&&<div className="imageFilterDialogTitle"><span><SlidersHorizontal/><b>Image Filter Configuration</b><small>Live rule editor</small><em><i/>{capacity} positions · legend linked</em></span><button onClick={onClose} aria-label="Close image filter"><X/></button></div>}
     <header className="filterHero">
       <div className="filterHeroTitle"><img src="/brand/emage-mark.png" alt="Emage Group"/><span><small><SlidersHorizontal/> DSM BV 4Cam Inspection System</small><h1>Image Filter & Storage</h1><p>Optimization capture · Operation 3.2.3</p></span></div>
       <div className="filterHeroStatus">
@@ -99,7 +111,7 @@ export function ImageFilterWorkspace({modal=false,onClose}:{modal?:boolean;onClo
     </div>
 
     {loading?<div className="filterLoading"><Loader2 className="spin"/><span>Loading image filter configuration…</span></div>:<main className="filterWorkspace">
-      {tab==="selection"&&<SelectionPanel settings={settings} errors={errors} capacity={capacity} toggleList={toggleList} patch={patch}/>} 
+      {tab==="selection"&&<SelectionPanel settings={settings} errors={errors} resultOptions={resultOptions} capacity={capacity} toggleList={toggleList} patch={patch}/>} 
       {tab==="storage"&&<StoragePanel settings={settings} runtime={runtime} patch={patch}/>} 
       {tab==="schedule"&&<SchedulePanel settings={settings} patchRecurring={patchRecurring}/>} 
       {!modal&&<aside className="filterInsightRail">
@@ -111,9 +123,16 @@ export function ImageFilterWorkspace({modal=false,onClose}:{modal?:boolean;onClo
 
     <footer className="filterActionBar">
       <div><Info/><span><b>{dirty?"Unsaved configuration":"Configuration synchronized"}</b><small>{notice||"Settings are stored in the backend image-filter configuration."}</small></span></div>
-      {!modal&&<button className="filterSecondary" onClick={()=>{setSettings(baseline);setNotice("Unsaved changes discarded")}} disabled={!dirty||saving}><RefreshCw/>Discard</button>}
+      {!modal&&<button className="filterSecondary" onClick={()=>{setSettings(baseline);if(legendBaseline){setLegend(legendBaseline);setErrors(items=>items.map(item=>{const saved=legendBaseline.defects.find(defect=>defect.key===item.key);return {...item,outcome:saved?.outcome||"NOK",severity:saved?.outcome||"NOK"}}))}setNotice("Unsaved changes discarded")}} disabled={!dirty||saving}><RefreshCw/>Discard</button>}
       <button className="filterSecondary" onClick={()=>void save()} disabled={!dirty||saving}>{saving?<Loader2 className="spin"/>:<Save/>}{modal?"Save":"Save settings"}</button>
-      <button className={`filterPrimary ${runtime?.active?"stop":""}`} onClick={()=>void toggleStorage()} disabled={saving}>{runtime?.active?<Pause/>:<Play/>}{modal?(runtime?.active?"Stop":"Apply"):(runtime?.active?"Stop storage":"Start storage")}</button>
+      {/* <button className={`filterPrimary ${runtime?.active?"stop":""}`} onClick={()=>void toggleStorage()} disabled={saving}>{runtime?.active?<Pause/>:<Play/>}{modal?(runtime?.active?"Stop":"Apply"):(runtime?.active?"Stop storage":"Start storage")}</button> */}
+      <button
+  className="filterPrimary"
+  onClick={() => void toggleStorage()}
+  disabled={saving}
+>
+  Apply
+</button>
       {modal&&<button className="filterSecondary" onClick={onClose}><X/>Close</button>}
     </footer>
   </div>;
@@ -121,12 +140,13 @@ export function ImageFilterWorkspace({modal=false,onClose}:{modal?:boolean;onClo
 }
 
 type PanelProps={settings:FilterSettings;patch:<K extends keyof FilterSettings>(key:K,value:FilterSettings[K])=>void};
-function SelectionPanel({settings,errors,capacity,toggleList,patch}:PanelProps&{errors:ErrorOption[];capacity:number;toggleList:(key:"positions"|"result_types"|"error_classes",value:number|string)=>void}){
+function SelectionPanel({settings,errors,resultOptions,capacity,toggleList,patch}:PanelProps&{errors:ErrorOption[];resultOptions:ResultOption[];capacity:number;toggleList:(key:"positions"|"result_types"|"error_classes",value:number|string)=>void}){
   const positions=Array.from({length:capacity},(_,i)=>i+1);
+  const renderDefect=(item:ErrorOption)=><button key={item.key} title={`${item.label} · toggle custom dashboard icon`} className={settings.error_classes.includes(item.key)?"selected":""} onClick={()=>toggleList("error_classes",item.key)} style={{"--defect-color":item.color} as React.CSSProperties}><i>{item.symbol}</i><span><b>{item.label}</b><small>{settings.error_classes.includes(item.key)?"Custom icon":"Generic icon"}</small></span><em aria-hidden="true"/></button>;
   return <div className="filterMainColumn">
-    <section className="filterPanel"><div className="filterSectionTitle"><span><small>RESULT FILTER</small><h2>Inspection outcomes</h2><p>Select the result categories eligible for display and storage.</p></span><button onClick={()=>patch("result_types",settings.result_types.length?[]:["OK","NOK","WARN"])}>{settings.result_types.length?"Clear":"Select all"}</button></div><div className="resultTypeGrid">{resultOptions.map(item=><button key={item.key} className={settings.result_types.includes(item.key)?"selected":""} onClick={()=>toggleList("result_types",item.key)} style={{"--result-color":item.color} as React.CSSProperties}><i>{settings.result_types.includes(item.key)&&<Check/>}</i><span><b>{item.label}</b><small>{item.key}</small></span></button>)}</div></section>
-    <section className="filterPanel grow"><div className="filterSectionTitle"><span><small>DEFECT FILTER</small><h2>Error classes</h2><p>No selection means that every configured defect class is accepted.</p></span><button onClick={()=>patch("error_classes",settings.error_classes.length?[]:errors.map(item=>item.key))}>{settings.error_classes.length?"Deactivate all":"Activate all"}</button></div><div className="defectFilterGrid">{errors.map(item=><button key={item.key} title={item.label} className={settings.error_classes.includes(item.key)?"selected":""} onClick={()=>toggleList("error_classes",item.key)} style={{"--defect-color":item.color} as React.CSSProperties}><i>{item.symbol}</i><span><b>{item.label}</b><small>{item.severity||"NOK"}</small></span><em>{settings.error_classes.includes(item.key)&&<Check/>}</em></button>)}</div></section>
-    <section className="filterPanel"><div className="filterSectionTitle"><span><small>WT POSITION FILTER</small><h2>Tray positions</h2><p>Choose which positions are included in the storage rule.</p></span><div><button onClick={()=>patch("positions",positions)}>Activate all</button><button onClick={()=>patch("positions",[])}>Deactivate all</button></div></div><div className="positionFilterGrid" style={{"--position-count":Math.min(capacity,16)} as React.CSSProperties}>{positions.map(position=><button key={position} className={settings.positions.includes(position)?"selected":""} onClick={()=>toggleList("positions",position)}><span>{position}</span><small>P{String(position).padStart(2,"0")}</small></button>)}</div><label className="filterToggle"><input type="checkbox" checked={settings.apply_to_display} onChange={event=>patch("apply_to_display",event.target.checked)}/><i/><span><b>Apply filter to display</b><small>Use the same rule for the large inspection viewer.</small></span></label></section>
+    <section className="filterPanel"><div className="filterSectionTitle"><span><h2>RESULT FILTER</h2><p>Select the result categories eligible for display and storage.</p></span><button onClick={()=>patch("result_types",settings.result_types.length?[]:resultOptions.map(item=>item.key))}>{settings.result_types.length?"Clear":"Select all"}</button></div><div className="resultTypeGrid">{resultOptions.map(item=><button key={item.key} className={settings.result_types.includes(item.key)?"selected":""} onClick={()=>toggleList("result_types",item.key)} style={{"--result-color":item.color} as React.CSSProperties}><i>{settings.result_types.includes(item.key)?<Check/>:item.symbol}</i><span><b>{item.label}</b><small>{item.key}</small></span></button>)}</div></section>
+    <section className="filterPanel grow"><div className="filterSectionTitle"><span></span><button onClick={()=>patch("error_classes",settings.error_classes.length?[]:errors.map(item=>item.key))}>{settings.error_classes.length?"Use generic icons":"Use all custom icons"}</button></div><div className="defectOutcomeBoard"><section className="defectOutcomeLane nok"><header><span><i/>Image filter configration</span><b>{errors.length}</b></header><div className="defectFilterGrid">{errors.map(renderDefect)}</div></section></div></section>
+    <section className="filterPanel"><div className="filterSectionTitle"><span><h2  >WT POSITION FILTER</h2><p>Choose which positions are included in the storage rule.</p></span><div><button onClick={()=>patch("positions",positions)}>Activate all</button><button onClick={()=>patch("positions",[])}>Deactivate all</button></div></div><div className="positionFilterGrid" style={{"--position-count":Math.min(capacity,16)} as React.CSSProperties}>{positions.map(position=><button key={position} className={settings.positions.includes(position)?"selected":""} onClick={()=>toggleList("positions",position)}><span>{position}</span><small>P{String(position).padStart(2,"0")}</small></button>)}</div><label className="filterToggle"><input type="checkbox" checked={settings.apply_to_display} onChange={event=>patch("apply_to_display",event.target.checked)}/><i/><span><b>Apply filter to display</b><small>Use the same rule for the large inspection viewer.</small></span></label></section>
   </div>
 }
 

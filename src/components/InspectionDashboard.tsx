@@ -138,6 +138,7 @@ export function InspectionDashboard({
   const [focusMode, setFocusMode] = useState(false);
   const [showLegend, setShowLegend] = useState(false);
   const [statusLegend, setStatusLegend] = useState<StatusSymbolLegend | null>(null);
+  const [customDefectIcons, setCustomDefectIcons] = useState<Set<string>>(new Set());
   const [inspectionBottomTab, setInspectionBottomTab] =
     useState<InspectionBottomTab>("messages");
   const [wtViewMode, setWtViewMode] = useState<WtViewMode>("images");
@@ -203,15 +204,17 @@ export function InspectionDashboard({
   }, []);
 
   const refreshSystem = useCallback(async () => {
-    const [systemResult, storageResult, legendResult] = await Promise.allSettled([
-      api.system(), api.storageState(), api.statusSymbolLegend(),
+    const [systemResult, storageResult, legendResult,filterResult] = await Promise.allSettled([
+      api.system(), api.storageState(), api.statusSymbolLegend(),api.getFilters(),
     ]);
     if (systemResult.status === "fulfilled") setInfo(systemResult.value);
     if (storageResult.status === "fulfilled") setStorage(storageResult.value);
     if (legendResult.status === "fulfilled") setStatusLegend(legendResult.value);
+    if (filterResult.status === "fulfilled") setCustomDefectIcons(new Set((filterResult.value as {error_classes?:string[]}).error_classes||[]));
   }, []);
   useEffect(()=>{const refresh=()=>{void refreshSystem()};window.addEventListener('lens-system-changed',refresh);return()=>window.removeEventListener('lens-system-changed',refresh)},[refreshSystem]);
   useEffect(()=>{const refresh=()=>{void api.statusSymbolLegend().then(setStatusLegend).catch(()=>{})};const storage=(event:StorageEvent)=>{if(event.key==='lens-status-legend-version')refresh()};window.addEventListener('lens-status-legend-changed',refresh);window.addEventListener('storage',storage);window.addEventListener('focus',refresh);return()=>{window.removeEventListener('lens-status-legend-changed',refresh);window.removeEventListener('storage',storage);window.removeEventListener('focus',refresh)}},[]);
+  useEffect(()=>{const refresh=()=>{void api.getFilters().then(value=>setCustomDefectIcons(new Set((value as {error_classes?:string[]}).error_classes||[]))).catch(()=>{})};const storage=(event:StorageEvent)=>{if(event.key==='lens-image-filter-version')refresh()};window.addEventListener('lens-image-filter-changed',refresh);window.addEventListener('storage',storage);return()=>{window.removeEventListener('lens-image-filter-changed',refresh);window.removeEventListener('storage',storage)}},[]);
   const changeOperationMode = useCallback(async (next?: "AUTO" | "MANUAL") => {
     const target = next || (operationMode === "AUTO" ? "MANUAL" : "AUTO");
     setOperationMode(target);
@@ -234,9 +237,25 @@ export function InspectionDashboard({
           .map(sample => ({ datasetId: dataset.id, sample, result: resultBySample.get(sample.id) }));
       } catch { return [] }
     }));
-    const flat = loaded.flat().map((entry, index) => ({ ...entry, wt: Math.floor(index / wtCapacity) + 1, position: index % wtCapacity + 1 }));
+    // WT numbers remain global, while each uploaded dataset begins a fresh tray
+    // at P1.  Never let a partially filled previous upload make the next upload
+    // start at P9/P10/etc.
+    let wtOffset = 0;
+    const flat = loaded.flatMap((datasetEntries) => {
+      const localWtCount = Math.max(
+        1,
+        ...datasetEntries.map((entry) => entry.sample.wt_index || 1),
+      );
+      const entries = datasetEntries.map((entry, index) => ({
+        ...entry,
+        wt: wtOffset + (entry.sample.wt_index || Math.floor(index / wtCapacity) + 1),
+        position: entry.sample.position || (index % wtCapacity) + 1,
+      }));
+      wtOffset += localWtCount;
+      return entries;
+    });
     setGlobalHistory(flat);
-    const newestWt = flat.length ? Math.ceil(flat.length / wtCapacity) : null;
+    const newestWt = flat.length ? Math.max(...flat.map((entry) => entry.wt)) : null;
     setSelectedGlobalWt(currentWt => currentWt && newestWt && currentWt <= newestWt ? currentWt : newestWt);
     return flat;
   }
@@ -321,11 +340,16 @@ export function InspectionDashboard({
     WARN: { key: "WARN", label: "Warning", color: "#f4b740", symbol: "▲" },
     IDLE: { key: "IDLE", label: "Not inspected", color: "#718397", symbol: "·" },
   } satisfies Record<Status, StatusSymbol>)[status];
-  const defectSymbol = (name: string): StatusSymbol => {
+  const defectDefinition = (name: string): StatusSymbol|undefined => {
     const normalized = name.toLowerCase();
     return (statusLegend?.defects || []).find((item) =>
       (item.match_terms || []).some((term) => normalized.includes(term.toLowerCase())),
-    ) || statusLegend?.fallback_defect || { key: "unknown-defect", label: "NOK", color: statusSymbol("NOK").color, symbol: "i" };
+    );
+  };
+  const defectSymbol = (name: string): StatusSymbol => {
+    const configured=defectDefinition(name);
+    if(configured&&!customDefectIcons.has(configured.key))return statusSymbol(configured.outcome||"NOK");
+    return configured || statusLegend?.fallback_defect || { key: "unknown-defect", label: "NOK", color: statusSymbol("NOK").color, symbol: "i" };
   };
   useEffect(() => {
     if (!datasetId) return;
@@ -578,6 +602,10 @@ export function InspectionDashboard({
       runTokenRef.current = token;
       wsResultOrdinalRef.current=0;
       wsRef.current?.close();
+      // A newly started lot must not keep the previous tray visible while it is
+      // waiting for its first inspection result.
+      const firstTray = globalHistory.find((entry) => entry.datasetId === targetDatasetId)?.wt;
+      if (firstTray) setSelectedGlobalWt(firstTray);
       const j = await api.run(targetDatasetId);
       setLiveDatasetId(targetDatasetId);
       setResults([]);
@@ -1048,6 +1076,7 @@ export function InspectionDashboard({
                 maxRows={30}
                 capacity={wtCapacity}
                 legend={statusLegend}
+                customDefectIcons={customDefectIcons}
                 onClearHistory={info?.session.role === "Administrator" ? () => { void clearInspectionHistory(); } : undefined}
                 onArchive={async (wt) => {
                   try {
@@ -1396,21 +1425,23 @@ export function InspectionDashboard({
                   <div className={`inspectionWtGallery ${wtViewMode}`} style={{'--wt-grid-columns': String(Math.ceil(wtCapacity / 2))} as React.CSSProperties}>
                     {wtChannelImages.map((item) => {
                       const status = item.result?.status || "IDLE",
-                        firstDefect = status === "OK" ? undefined : item.result?.defects?.[0],
+                        firstDefect = item.result?.defects?.[0],
+                        assignedOutcome = firstDefect ? defectDefinition(firstDefect.name)?.outcome : undefined,
+                        displayStatus:Status = assignedOutcome || status,
                         uniqueDefects = uniqueDefectNames(item.result?.defects?.map(defect => defect.name) || []),
                         // Keep WT View aligned with WT History: a real defect
                         // uses its configured legend symbol instead of generic NOK.
                         configuredStatus = firstDefect ? defectSymbol(firstDefect.name) : statusSymbol(status),
                         tone =
-                          status === "OK"
+                          displayStatus === "OK"
                             ? "ok"
-                            : status === "NOK"
+                            : displayStatus === "NOK"
                               ? "nok"
-                              : status === "WARN"
+                              : displayStatus === "WARN"
                                 ? "warn"
                                 : "idle",
-                        resultLabel = wtResultLabel(status, uniqueDefects),
-                        resultTitle = status === "OK" ? "Inspection OK" : status === "IDLE" ? "Not inspected" : uniqueDefects.length ? `${status}: ${uniqueDefects.join(", ")}` : status,
+                        resultLabel = wtResultLabel(displayStatus, uniqueDefects),
+                        resultTitle = displayStatus === "OK" ? "Inspection OK" : displayStatus === "IDLE" ? "Not inspected" : uniqueDefects.length ? `${displayStatus}: ${uniqueDefects.join(", ")}` : displayStatus,
                         defectCodes = uniqueDefects.map(defectInitials).filter(Boolean).join(", ");
                       return (
                         <button
@@ -1441,7 +1472,7 @@ export function InspectionDashboard({
                                   style={{ "--legend-color": configuredStatus.color } as React.CSSProperties}
                                   title={configuredStatus.label}
                                 >{configuredStatus.symbol}</i>
-                                <em className="wtStatusChip" title={resultTitle}>{status === "IDLE" ? "Pending" : status}</em>
+                                <em className="wtStatusChip" title={resultTitle}>{displayStatus === "IDLE" ? "Pending" : displayStatus}</em>
                                 {defectCodes && <em className="wtDefectChip" title={resultTitle}>{defectCodes}</em>}
                               </div>
                           ) : (
@@ -1700,6 +1731,7 @@ export function InspectionDashboard({
               }}
               capacity={wtCapacity}
               legend={statusLegend}
+              customDefectIcons={customDefectIcons}
             />
           )}
           {showHistory && (
@@ -1875,7 +1907,16 @@ export function InspectionDashboard({
             <div className="oakTrayStrip">
               {Array.from({ length: wtCapacity }, (_, i) => {
                 const s = wtSamples.find((x) => x.position === i + 1);
-                if (!s)
+                const liveEntry = wtEntries.find((entry) => entry.position === i + 1);
+                // Samples arrive with the upload, but their image tile should only
+                // appear after that individual frame has completed inference.
+                const awaitingLiveResult = Boolean(
+                  s &&
+                  liveEntry?.datasetId === liveDatasetId &&
+                  liveEntry.datasetId === datasetId &&
+                  !resultMap.has(s.id),
+                );
+                if (!s || awaitingLiveResult)
                   return (
                     <div key={i} className="oakTrayCell empty">
                       <b>{i + 1}</b>
@@ -1883,7 +1924,13 @@ export function InspectionDashboard({
                     </div>
                   );
                 const r = resultMap.get(s.id),
-                  configuredStatus = statusSymbol(r?.status || "IDLE"),
+                  rawStatus:Status = r?.status || "IDLE",
+                  firstDefect = r?.defects?.[0],
+                  assignedOutcome = firstDefect ? defectDefinition(firstDefect.name)?.outcome : undefined,
+                  displayStatus:Status = assignedOutcome || rawStatus,
+                  configuredStatus = firstDefect ? defectSymbol(firstDefect.name) : statusSymbol(displayStatus),
+                  defectNames = uniqueDefectNames(r?.defects?.map(defect=>defect.name)||[]),
+                  defectCodes = defectNames.map(defectInitials).filter(Boolean).join(", "),
                   ch = s.images.h
                     ? "h"
                     : s.images.d
@@ -1892,14 +1939,17 @@ export function InspectionDashboard({
                   src = samplePreviewUrl(datasetId, s, ch);
                 return (
                   <button
-                    className={`oakTrayCell ${(r?.status || "idle").toLowerCase()} ${s.id === current ? "selected" : ""}`}
+                    className={`oakTrayCell ${displayStatus.toLowerCase()} ${s.id === current ? "selected" : ""}`}
                     key={s.id}
                     onClick={() => select(s.id)}
-                    title={`Position ${s.position} · ${configuredStatus.label}`}
+                    title={`Position ${s.position} · ${firstDefect?.name || configuredStatus.label}`}
+                    style={{"--legend-color":configuredStatus.color} as React.CSSProperties}
                   >
-                    <b>{s.position}</b>
+                    <b>P{s.position}</b>
                     <img src={src} alt={`Lens position ${s.position}`} />
-                    <span style={{ backgroundColor: configuredStatus.color }}>{configuredStatus.symbol} {configuredStatus.label}</span>
+                    <i className="oakTrayStatusIcon" aria-label={configuredStatus.label} title={configuredStatus.label}/>
+                    <em className="oakTrayStatus" title={configuredStatus.label}>{displayStatus === "IDLE" ? "Pending" : displayStatus}</em>
+                    {defectCodes&&<em className="oakTrayDefect" title={defectNames.join(", ")}>{defectCodes}</em>}
                   </button>
                 );
               })}

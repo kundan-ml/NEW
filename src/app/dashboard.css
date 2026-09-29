@@ -6856,7 +6856,7 @@ html[data-workspace="modern"] .uploadModalWindow .modalBadge {
 
 .inspectionWtSquare>b {
   position: absolute !important;
-  left: 5px !important;
+  left: 15px !important;
   top: 5px !important;
   padding: 3px 5px !important;
   border-radius: 3px;
@@ -12197,55 +12197,916 @@ html[data-workspace="modern"] .oakDeckGroup.oakDeckRight :is(.oakDensity>button.
   flex-direction: column;
 }
 
-.matrixHeadActions{display:flex;align-items:center;gap:7px}.clearHistoryButton{height:25px;padding:0 8px;display:inline-flex;align-items:center;gap:5px;border:1px solid color-mix(in srgb,var(--status-nok) 38%,var(--control-border));border-radius:7px;background:color-mix(in srgb,var(--status-nok) 8%,var(--control-button));color:color-mix(in srgb,var(--status-nok) 80%,#fff);font-size:7px;font-weight:750;transition:background .18s ease,border-color .18s ease,transform .18s ease}.clearHistoryButton svg{width:11px;height:11px}.clearHistoryButton:hover{border-color:var(--status-nok);background:color-mix(in srgb,var(--status-nok) 18%,var(--control-button));transform:translateY(-1px)}
-@media(max-width:700px){.clearHistoryButton span{display:none}.clearHistoryButton{width:25px;padding:0;justify-content:center}}
+.matrixHeadActions {
+  display: flex;
+  align-items: center;
+  gap: 7px
+}
+
+.clearHistoryButton {
+  height: 25px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid color-mix(in srgb, var(--status-nok) 38%, var(--control-border));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--status-nok) 8%, var(--control-button));
+  color: color-mix(in srgb, var(--status-nok) 80%, #fff);
+  font-size: 7px;
+  font-weight: 750;
+  transition: background .18s ease, border-color .18s ease, transform .18s ease
+}
+
+.clearHistoryButton svg {
+  width: 11px;
+  height: 11px
+}
+
+.clearHistoryButton:hover {
+  border-color: var(--status-nok);
+  background: color-mix(in srgb, var(--status-nok) 18%, var(--control-button));
+  transform: translateY(-1px)
+}
+
+@media(max-width:700px) {
+  .clearHistoryButton span {
+    display: none
+  }
+
+  .clearHistoryButton {
+    width: 25px;
+    padding: 0;
+    justify-content: center
+  }
+}
 
 /* Polished WT gallery: image and metadata occupy separate, stable regions. */
-.inspectionWtView{padding:5px;background:radial-gradient(circle at 50% 0%,color-mix(in srgb,var(--accent) 5%,transparent),transparent 46%)}
-.inspectionWtGallery.images{padding:5px;gap:7px}
-html[data-theme] .inspectionWtGallery.images>button{display:grid;grid-template-rows:minmax(0,1fr) 28px;gap:4px;padding:5px!important;overflow:hidden;border-color:color-mix(in srgb,var(--studio-wtView-border,var(--control-border)) 86%,var(--accent) 14%)!important;border-radius:max(8px,var(--studio-wtView-radius))!important;transition:border-color .18s ease,box-shadow .18s ease,transform .18s ease}
-html[data-theme] .inspectionWtGallery.images>button:hover:not(:disabled){z-index:2;border-color:color-mix(in srgb,var(--accent) 52%,var(--control-border))!important;box-shadow:0 10px 24px color-mix(in srgb,#000 35%,transparent),0 0 0 1px color-mix(in srgb,var(--accent) 12%,transparent)!important;transform:translateY(-1px)}
-.inspectionWtGallery.images .inspectionWtSquare{position:relative!important;inset:auto!important;width:100%!important;height:100%!important;min-height:0;border:1px solid color-mix(in srgb,var(--control-border) 78%,transparent);border-radius:7px;overflow:hidden;background:#020304}
-.inspectionWtGallery.images .inspectionWtSquare:after{content:"";position:absolute;z-index:2;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,.34),transparent 25%,transparent 66%,rgba(0,0,0,.58))}
-.inspectionWtGallery.images .inspectionWtSquare>b{z-index:4;top:6px!important;left:6px!important;padding:3px 6px!important;border:1px solid rgba(255,255,255,.12);border-radius:999px;background:rgba(5,8,11,.74)!important;backdrop-filter:blur(5px);font-size:7px!important;line-height:1.2}
-.inspectionWtSquare>.wtStatusDot.configuredWtStatus,.inspectionNameOnly>.wtStatusDot.configuredWtStatus{z-index:6;width:20px!important;height:20px!important;right:6px!important;top:6px!important;border:1px solid color-mix(in srgb,#fff 54%,transparent)!important;border-radius:50%!important;background:var(--legend-color,var(--status-idle))!important;color:#fff!important;font-size:8px!important;transform:none!important;box-shadow:0 3px 10px rgba(0,0,0,.55),0 0 0 2px rgba(3,6,9,.3)!important}
-.inspectionWtGallery.images .wtDefectChip{z-index:5;left:6px;right:auto;bottom:6px;max-width:calc(100% - 12px);padding:4px 6px;border-color:color-mix(in srgb,var(--legend-color,var(--control-border)) 40%,rgba(255,255,255,.12));border-radius:5px;background:rgba(4,7,10,.8);color:#f1f5f7;font-size:6px;line-height:1.15;backdrop-filter:blur(6px)}
-.inspectionWtGallery.images .wtTileResult{position:static!important;width:100%!important;height:28px!important;min-width:0;margin:0!important;padding:3px 5px!important;display:flex!important;justify-content:center;background:color-mix(in srgb,var(--control-bg) 62%,transparent)!important;border-radius:5px;overflow:hidden}
-.inspectionWtGallery.images .wtTileResult>b{display:block;width:100%;overflow:hidden;color:var(--control-text)!important;font-size:7px!important;font-weight:750;line-height:1.2;text-overflow:ellipsis;white-space:nowrap}
-.inspectionWtGallery.images>button.selected{border-color:var(--accent)!important;box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 48%,transparent),0 9px 24px color-mix(in srgb,var(--accent) 14%,transparent)!important}
-.inspectionWtGallery.images>button.missing{opacity:.66}.inspectionWtGallery.images>button.missing .inspectionWtSquare{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--control-button) 55%,transparent) 0 5px,transparent 5px 10px)}
+.inspectionWtView {
+  padding: 5px;
+  background: radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--accent) 5%, transparent), transparent 46%)
+}
+
+.inspectionWtGallery.images {
+  padding: 5px;
+  gap: 7px
+}
+
+html[data-theme] .inspectionWtGallery.images>button {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 28px;
+  gap: 4px;
+  padding: 5px !important;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--studio-wtView-border, var(--control-border)) 86%, var(--accent) 14%) !important;
+  border-radius: max(8px, var(--studio-wtView-radius)) !important;
+  transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease
+}
+
+html[data-theme] .inspectionWtGallery.images>button:hover:not(:disabled) {
+  z-index: 2;
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--control-border)) !important;
+  box-shadow: 0 10px 24px color-mix(in srgb, #000 35%, transparent), 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent) !important;
+  transform: translateY(-1px)
+}
+
+.inspectionWtGallery.images .inspectionWtSquare {
+  position: relative !important;
+  inset: auto !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0;
+  border: 1px solid color-mix(in srgb, var(--control-border) 78%, transparent);
+  border-radius: 7px;
+  overflow: hidden;
+  background: #020304
+}
+
+.inspectionWtGallery.images .inspectionWtSquare:after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(0, 0, 0, .34), transparent 25%, transparent 66%, rgba(0, 0, 0, .58))
+}
+
+.inspectionWtGallery.images .inspectionWtSquare>b {
+  z-index: 4;
+  top: 6px !important;
+  left: 6px !important;
+  padding: 3px 6px !important;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 999px;
+  background: rgba(5, 8, 11, .74) !important;
+  backdrop-filter: blur(5px);
+  font-size: 7px !important;
+  line-height: 1.2
+}
+
+.inspectionWtSquare>.wtStatusDot.configuredWtStatus,
+.inspectionNameOnly>.wtStatusDot.configuredWtStatus {
+  z-index: 6;
+  width: 20px !important;
+  height: 20px !important;
+  right: 6px !important;
+  top: 6px !important;
+  border: 1px solid color-mix(in srgb, #fff 54%, transparent) !important;
+  border-radius: 50% !important;
+  background: var(--legend-color, var(--status-idle)) !important;
+  color: #fff !important;
+  font-size: 8px !important;
+  transform: none !important;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, .55), 0 0 0 2px rgba(3, 6, 9, .3) !important
+}
+
+.inspectionWtGallery.images .wtDefectChip {
+  z-index: 5;
+  left: 6px;
+  right: auto;
+  bottom: 6px;
+  max-width: calc(100% - 12px);
+  padding: 4px 6px;
+  border-color: color-mix(in srgb, var(--legend-color, var(--control-border)) 40%, rgba(255, 255, 255, .12));
+  border-radius: 5px;
+  background: rgba(4, 7, 10, .8);
+  color: #f1f5f7;
+  font-size: 6px;
+  line-height: 1.15;
+  backdrop-filter: blur(6px)
+}
+
+.inspectionWtGallery.images .wtTileResult {
+  position: static !important;
+  width: 100% !important;
+  height: 28px !important;
+  min-width: 0;
+  margin: 0 !important;
+  padding: 3px 5px !important;
+  display: flex !important;
+  justify-content: center;
+  background: color-mix(in srgb, var(--control-bg) 62%, transparent) !important;
+  border-radius: 5px;
+  overflow: hidden
+}
+
+.inspectionWtGallery.images .wtTileResult>b {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  color: var(--control-text) !important;
+  font-size: 7px !important;
+  font-weight: 750;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap
+}
+
+.inspectionWtGallery.images>button.selected {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 48%, transparent), 0 9px 24px color-mix(in srgb, var(--accent) 14%, transparent) !important
+}
+
+.inspectionWtGallery.images>button.missing {
+  opacity: .66
+}
+
+.inspectionWtGallery.images>button.missing .inspectionWtSquare {
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--control-button) 55%, transparent) 0 5px, transparent 5px 10px)
+}
 
 /* Keep image content dominant; metadata stays quiet and translucent. */
-html[data-theme] .inspectionWtGallery.images>button{grid-template-rows:minmax(0,1fr) 17px;gap:2px;padding:3px!important}
-.inspectionWtGallery.images .inspectionWtSquare>b{top:4px!important;left:4px!important;padding:2px 4px!important;border-color:rgba(255,255,255,.08);background:rgba(3,6,9,.38)!important;color:rgba(244,248,250,.82)!important;font-size:5.5px!important;font-weight:700;backdrop-filter:blur(2px)}
-.inspectionWtGallery.images .wtDefectChip{left:4px;bottom:4px;max-width:calc(100% - 8px);padding:2px 4px;border-color:rgba(255,255,255,.07);background:rgba(3,6,9,.32);color:rgba(245,248,250,.76);font-size:5px;line-height:1;backdrop-filter:blur(2px)}
-.inspectionWtGallery.images .wtTileResult{height:17px!important;padding:1px 4px!important;justify-content:center;background:transparent!important;border-radius:3px}
-.inspectionWtGallery.images .wtTileResult>b{color:var(--text-muted)!important;font-size:5.5px!important;font-weight:650;line-height:1;text-align:left}
-.inspectionWtSquare>.wtStatusDot.configuredWtStatus{width:18px!important;height:18px!important;right:4px!important;top:4px!important;font-size:7px!important}
+html[data-theme] .inspectionWtGallery.images>button {
+  grid-template-rows: minmax(0, 1fr) 17px;
+  gap: 2px;
+  padding: 3px !important
+}
 
-html[data-theme] .inspectionWtGallery.images>button{display:block;grid-template-rows:none;padding:3px!important}
-.inspectionWtGallery.images .inspectionWtSquare{height:100%!important}
-.inspectionWtGallery.images .wtDefectChip{max-width:calc(100% - 8px);background:rgba(3,6,9,.24);color:rgba(247,249,250,.72);font-size:5px;font-weight:700;letter-spacing:.02em}
-.inspectionWtGallery.images>button.ok .wtDefectChip{color:color-mix(in srgb,var(--status-ok) 68%,#fff)}
-.inspectionWtGallery.images>button.nok .wtDefectChip{color:color-mix(in srgb,var(--status-nok) 72%,#fff)}
-.inspectionWtGallery.images>button.warn .wtDefectChip{color:color-mix(in srgb,var(--status-warn) 72%,#fff)}
+.inspectionWtGallery.images .inspectionWtSquare>b {
+  top: 4px !important;
+  left: 4px !important;
+  padding: 2px 4px !important;
+  border-color: rgba(255, 255, 255, .08);
+  background: rgba(3, 6, 9, .38) !important;
+  color: rgba(244, 248, 250, .82) !important;
+  font-size: 5.5px !important;
+  font-weight: 700;
+  backdrop-filter: blur(2px)
+}
 
-.inspectionWtGallery.images .wtStatusChip{position:absolute;z-index:5;left:4px;right:auto;bottom:4px;padding:2px 4px;border:1px solid rgba(255,255,255,.07);border-radius:4px;background:rgba(3,6,9,.28);color:rgba(247,249,250,.76);font-size:5px;font-style:normal;font-weight:800;letter-spacing:.04em;line-height:1;backdrop-filter:blur(2px)}
-.inspectionWtGallery.images .wtDefectChip{left:auto;right:4px;max-width:56%;text-align:right}
-.inspectionWtGallery.images>button.ok .wtStatusChip{color:color-mix(in srgb,var(--status-ok) 72%,#fff)}
-.inspectionWtGallery.images>button.nok .wtStatusChip{color:color-mix(in srgb,var(--status-nok) 75%,#fff)}
-.inspectionWtGallery.images>button.warn .wtStatusChip{color:color-mix(in srgb,var(--status-warn) 75%,#fff)}
+.inspectionWtGallery.images .wtDefectChip {
+  left: 4px;
+  bottom: 4px;
+  max-width: calc(100% - 8px);
+  padding: 2px 4px;
+  border-color: rgba(255, 255, 255, .07);
+  background: rgba(3, 6, 9, .32);
+  color: rgba(245, 248, 250, .76);
+  font-size: 5px;
+  line-height: 1;
+  backdrop-filter: blur(2px)
+}
+
+.inspectionWtGallery.images .wtTileResult {
+  height: 17px !important;
+  padding: 1px 4px !important;
+  justify-content: center;
+  background: transparent !important;
+  border-radius: 3px
+}
+
+.inspectionWtGallery.images .wtTileResult>b {
+  color: var(--text-muted) !important;
+  font-size: 5.5px !important;
+  font-weight: 650;
+  line-height: 1;
+  text-align: left
+}
+
+.inspectionWtSquare>.wtStatusDot.configuredWtStatus {
+  width: 18px !important;
+  height: 18px !important;
+  right: 4px !important;
+  top: 4px !important;
+  font-size: 7px !important
+}
+
+html[data-theme] .inspectionWtGallery.images>button {
+  display: block;
+  grid-template-rows: none;
+  padding: 3px !important
+}
+
+.inspectionWtGallery.images .inspectionWtSquare {
+  height: 100% !important
+}
+
+.inspectionWtGallery.images .wtDefectChip {
+  max-width: calc(100% - 8px);
+  background: rgba(3, 6, 9, .24);
+  color: rgba(247, 249, 250, .72);
+  font-size: 5px;
+  font-weight: 700;
+  letter-spacing: .02em
+}
+
+.inspectionWtGallery.images>button.ok .wtDefectChip {
+  color: color-mix(in srgb, var(--status-ok) 68%, #fff)
+}
+
+.inspectionWtGallery.images>button.nok .wtDefectChip {
+  color: color-mix(in srgb, var(--status-nok) 72%, #fff)
+}
+
+.inspectionWtGallery.images>button.warn .wtDefectChip {
+  color: color-mix(in srgb, var(--status-warn) 72%, #fff)
+}
+
+.inspectionWtGallery.images .wtStatusChip {
+  position: absolute;
+  z-index: 5;
+  left: 4px;
+  right: auto;
+  bottom: 4px;
+  padding: 2px 4px;
+  border: 1px solid rgba(255, 255, 255, .07);
+  border-radius: 4px;
+  background: rgba(3, 6, 9, .28);
+  color: rgba(247, 249, 250, .76);
+  font-size: 5px;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: .04em;
+  line-height: 1;
+  backdrop-filter: blur(2px)
+}
+
+.inspectionWtGallery.images .wtDefectChip {
+  left: auto;
+  right: 4px;
+  max-width: 56%;
+  text-align: right
+}
+
+.inspectionWtGallery.images>button.ok .wtStatusChip {
+  color: color-mix(in srgb, var(--status-ok) 72%, #fff)
+}
+
+.inspectionWtGallery.images>button.nok .wtStatusChip {
+  color: color-mix(in srgb, var(--status-nok) 75%, #fff)
+}
+
+.inspectionWtGallery.images>button.warn .wtStatusChip {
+  color: color-mix(in srgb, var(--status-warn) 75%, #fff)
+}
 
 /* Dataset import follows the same layered dialog language as secure access. */
-html[data-theme] .uploadModalBack{z-index:1000;padding:20px;background:rgba(0,0,0,.72);backdrop-filter:blur(12px) saturate(.78)}
-html[data-theme] .uploadModalWindow{width:min(620px,calc(100vw - 28px));max-height:calc(100dvh - 24px);padding:0!important;overflow:hidden;position:relative;border:1px solid var(--studio-dialogs-border,var(--control-border))!important;border-radius:18px!important;background:linear-gradient(155deg,color-mix(in srgb,var(--control-header) 96%,#fff 2%),color-mix(in srgb,var(--control-panel) 96%,#000 3%))!important;box-shadow:0 42px 130px rgba(0,0,0,.76),0 0 0 1px color-mix(in srgb,#fff 5%,transparent),0 0 54px color-mix(in srgb,var(--accent) 9%,transparent)!important}
-html[data-theme] .uploadModalWindow:before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 8% 0%,color-mix(in srgb,var(--accent) 12%,transparent),transparent 34%),linear-gradient(color-mix(in srgb,var(--control-border) 14%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--control-border) 11%,transparent) 1px,transparent 1px);background-size:auto,24px 24px,24px 24px;opacity:.45}
-.uploadModalWindow>*{position:relative}.uploadModalBrand{min-height:104px;padding:18px 20px;display:grid;grid-template-columns:52px 1fr 30px;gap:12px;align-items:start;border-bottom:1px solid var(--control-border);background:radial-gradient(circle at 5% 0%,color-mix(in srgb,var(--gradient-start) 19%,transparent),transparent 43%),linear-gradient(115deg,color-mix(in srgb,var(--gradient-start) 8%,var(--control-header)),color-mix(in srgb,var(--gradient-end) 5%,var(--control-header)))}
-.uploadModalBrand .modalBadge{width:50px;height:50px;margin:0;border-radius:15px;background:linear-gradient(145deg,color-mix(in srgb,var(--gradient-start) 18%,var(--control-button)),var(--accent));color:var(--accent);box-shadow:inset 0 1px color-mix(in srgb,#fff 9%,transparent),0 10px 24px color-mix(in srgb,#000 22%,transparent)}
-.uploadModalBrand .modalBadge svg{width:23px}.uploadModalBrand small{display:inline-flex;align-items:center;gap:6px;color:var(--text-secondary);font-size:8px;letter-spacing:.08em}.uploadModalBrand small:before{content:"";width:6px;height:6px;border-radius:50%;background:var(--status-ok);box-shadow:0 0 8px var(--status-ok)}.uploadModalBrand h2{margin:5px 0 3px;color:var(--control-text);font-size:20px!important;letter-spacing:-.025em}.uploadModalBrand p{margin:0;color:var(--text-secondary);font-size:8px;line-height:1.45}.uploadModalBrand .modalClose{position:static;width:30px;height:30px;border:0;border-radius:8px;background:transparent;color:var(--text-muted)}.uploadModalBrand .modalClose:hover{background:var(--control-button);color:var(--control-text)}
-.uploadModalBody{padding:14px 18px 16px;display:grid;gap:12px}.uploadStatus{height:34px;padding:0 10px;display:grid;grid-template-columns:7px 1fr auto;align-items:center;gap:7px;border:1px solid color-mix(in srgb,var(--status-ok) 17%,var(--control-border));border-radius:8px;background:linear-gradient(90deg,color-mix(in srgb,var(--status-ok) 5%,var(--control-bg)),var(--control-bg));font-size:8px}.uploadStatus i{width:6px;height:6px;border-radius:50%;background:var(--status-ok);box-shadow:0 0 7px var(--status-ok)}.uploadStatus span{color:var(--text-secondary);font-weight:700}.uploadStatus em{color:var(--control-text);font-size:7px;font-style:normal}.uploadModalBody>label{display:grid;gap:6px;margin:0;color:var(--text-secondary);font-size:9px;font-weight:700}.uploadModalBody input{height:38px;width:100%;padding:0 11px;border:1px solid color-mix(in srgb,var(--accent) 18%,var(--control-border));border-radius:7px;background:color-mix(in srgb,var(--control-bg) 91%,var(--control-panel));color:var(--control-text);font:600 11px var(--font-ui,inherit);outline:none}.uploadModalBody input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent)}.uploadModalBody input::placeholder{color:var(--text-muted)}.uploadModalBody .modalInline{gap:8px}.uploadModalBody .modalInline button,.uploadModalBody .uploadFolder{border:1px solid color-mix(in srgb,var(--accent) 62%,var(--control-border));border-radius:9px;background:linear-gradient(120deg,color-mix(in srgb,var(--gradient-start) 86%,#fff 5%),color-mix(in srgb,var(--gradient-end) 82%,#000 4%));color:#fff;box-shadow:0 8px 22px color-mix(in srgb,var(--accent) 16%,transparent);font-weight:700}.uploadModalBody .modalInline button{height:38px}.uploadModalBody .uploadFolder{height:46px}.uploadModalBody .orLine{margin:2px 0;color:var(--text-muted);font-size:7px}.uploadModalBody .orLine:before,.uploadModalBody .orLine:after{background:var(--control-border)}.uploadModalBody .errorBox{margin:0;border-color:color-mix(in srgb,var(--status-nok) 38%,var(--control-border));background:color-mix(in srgb,var(--status-nok) 9%,transparent);color:var(--control-text)}
-.uploadModalFooter{margin:0;padding:12px 18px 15px;display:grid;grid-template-columns:repeat(4,1fr);gap:7px;border-top:1px solid var(--control-border)}.uploadModalFooter span{min-width:0;padding:7px 6px;border:1px solid var(--control-border);border-radius:7px;background:color-mix(in srgb,var(--control-button) 65%,transparent);color:var(--text-secondary);font-size:7px}.uploadModalFooter b{display:block;margin-bottom:2px;color:var(--accent);font-size:7px}
-.uploadRouteCard{padding:10px;border:1px solid color-mix(in srgb,var(--accent) 18%,var(--control-border));border-radius:11px;background:linear-gradient(125deg,color-mix(in srgb,var(--gradient-start) 6%,var(--control-bg)),color-mix(in srgb,var(--gradient-end) 4%,var(--control-bg)));box-shadow:inset 0 1px color-mix(in srgb,#fff 4%,transparent)}.uploadRouteHead{display:flex;align-items:center;gap:8px;margin:0 0 9px}.uploadRouteHead>i{width:24px;height:24px;display:grid;place-items:center;border:1px solid color-mix(in srgb,var(--accent) 42%,var(--control-border));border-radius:7px;background:color-mix(in srgb,var(--accent) 12%,var(--control-button));color:var(--accent);font-size:8px;font-style:normal;font-weight:800}.uploadRouteHead span{display:flex;min-width:0;flex-direction:column}.uploadRouteHead b{color:var(--control-text);font-size:8px}.uploadRouteHead small{margin-top:2px;color:var(--text-muted);font-size:7px}.uploadRouteCard label{display:grid;gap:6px;color:var(--text-secondary);font-size:8px;font-weight:700}.uploadModalBody .uploadFolder{height:60px;padding:0 13px;display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:center;text-align:left}.uploadModalBody .uploadFolder>svg{width:24px;height:24px}.uploadFolderCopy{display:flex;min-width:0;flex-direction:column}.uploadFolderCopy small{color:color-mix(in srgb,#fff 70%,transparent);font-size:7px;letter-spacing:.09em}.uploadFolderCopy b{margin:2px 0;color:#fff;font-size:10px}.uploadFolderCopy em{color:color-mix(in srgb,#fff 67%,transparent);font-size:7px;font-style:normal}.uploadModalBody .uploadFolder>i{padding:5px 7px;border:1px solid color-mix(in srgb,#fff 22%,transparent);border-radius:6px;background:color-mix(in srgb,#000 12%,transparent);color:#fff;font-size:7px;font-style:normal}.uploadAssurance{display:flex;flex-wrap:wrap;gap:5px 10px;margin-top:-2px;color:var(--text-muted);font-size:7px}.uploadAssurance span{display:inline-flex;align-items:center;gap:4px}.uploadAssurance i{width:12px;height:12px;display:grid;place-items:center;border-radius:50%;background:color-mix(in srgb,var(--status-ok) 13%,transparent);color:var(--status-ok);font-size:8px;font-style:normal;font-weight:800}
-.uploadDropZone{position:relative;padding:1px;border-radius:12px;background:linear-gradient(120deg,color-mix(in srgb,var(--gradient-start) 72%,transparent),color-mix(in srgb,var(--gradient-end) 50%,transparent));box-shadow:0 10px 28px color-mix(in srgb,var(--accent) 12%,transparent)}.uploadDropGlow{position:absolute;inset:-10px;z-index:0;border-radius:18px;background:radial-gradient(ellipse at 50% 50%,color-mix(in srgb,var(--accent) 17%,transparent),transparent 68%);filter:blur(9px);pointer-events:none}.uploadDropZone .uploadFolder{position:relative;z-index:1;width:100%;border:1px dashed color-mix(in srgb,#fff 28%,transparent)!important;background:linear-gradient(120deg,color-mix(in srgb,var(--gradient-start) 87%,#141820 12%),color-mix(in srgb,var(--gradient-end) 83%,#07090d 14%))!important;transition:transform .2s ease,filter .2s ease,box-shadow .2s ease}.uploadDropZone .uploadFolder:hover:not(:disabled){transform:translateY(-1px);filter:saturate(1.12) brightness(1.06);box-shadow:0 14px 30px color-mix(in srgb,var(--accent) 24%,transparent)!important}.uploadDropZone .uploadFolder:active:not(:disabled){transform:none}
-.uploadFlow{margin:0 18px 12px;padding:8px 10px;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;border:1px solid var(--control-border);border-radius:10px;background:color-mix(in srgb,var(--control-bg) 58%,transparent)}.uploadFlow span{position:relative;min-width:0;padding:0 4px 0 25px;display:grid;grid-template-columns:1fr;line-height:1.1}.uploadFlow span:not(:last-child):after{content:"";position:absolute;top:10px;right:-3px;width:7px;height:1px;background:var(--control-border)}.uploadFlow i{position:absolute;left:0;top:0;width:18px;height:18px;display:grid;place-items:center;border:1px solid var(--control-border);border-radius:50%;color:var(--text-muted);font-size:6px;font-style:normal}.uploadFlow b{color:var(--text-secondary);font-size:7px}.uploadFlow small{margin-top:2px;overflow:hidden;color:var(--text-muted);font-size:6px;text-overflow:ellipsis;white-space:nowrap}.uploadFlow .active i{border-color:color-mix(in srgb,var(--accent) 60%,var(--control-border));background:color-mix(in srgb,var(--accent) 17%,var(--control-button));color:var(--accent);box-shadow:0 0 10px color-mix(in srgb,var(--accent) 20%,transparent)}.uploadFlow .active b{color:var(--control-text)}
-@media(max-width:560px){html[data-theme] .uploadModalWindow{max-height:calc(100dvh - 24px);overflow:auto}.uploadModalBrand{grid-template-columns:44px 1fr 28px;padding:16px}.uploadModalBrand .modalBadge{width:42px;height:42px}.uploadModalFooter{grid-template-columns:1fr 1fr;padding:11px 16px}.uploadStatus em{display:none}.uploadModalBody{padding-inline:16px}}
+html[data-theme] .uploadModalBack {
+  z-index: 1000;
+  padding: 20px;
+  background: rgba(0, 0, 0, .72);
+  backdrop-filter: blur(12px) saturate(.78)
+}
+
+html[data-theme] .uploadModalWindow {
+  width: min(620px, calc(100vw - 28px));
+  max-height: calc(100dvh - 24px);
+  padding: 0 !important;
+  overflow: hidden;
+  position: relative;
+  border: 1px solid var(--studio-dialogs-border, var(--control-border)) !important;
+  border-radius: 18px !important;
+  background: linear-gradient(155deg, color-mix(in srgb, var(--control-header) 96%, #fff 2%), color-mix(in srgb, var(--control-panel) 96%, #000 3%)) !important;
+  box-shadow: 0 42px 130px rgba(0, 0, 0, .76), 0 0 0 1px color-mix(in srgb, #fff 5%, transparent), 0 0 54px color-mix(in srgb, var(--accent) 9%, transparent) !important
+}
+
+html[data-theme] .uploadModalWindow:before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 8% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 34%), linear-gradient(color-mix(in srgb, var(--control-border) 14%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--control-border) 11%, transparent) 1px, transparent 1px);
+  background-size: auto, 24px 24px, 24px 24px;
+  opacity: .45
+}
+
+.uploadModalWindow>* {
+  position: relative
+}
+
+.uploadModalBrand {
+  min-height: 104px;
+  padding: 18px 20px;
+  display: grid;
+  grid-template-columns: 52px 1fr 30px;
+  gap: 12px;
+  align-items: start;
+  border-bottom: 1px solid var(--control-border);
+  background: radial-gradient(circle at 5% 0%, color-mix(in srgb, var(--gradient-start) 19%, transparent), transparent 43%), linear-gradient(115deg, color-mix(in srgb, var(--gradient-start) 8%, var(--control-header)), color-mix(in srgb, var(--gradient-end) 5%, var(--control-header)))
+}
+
+.uploadModalBrand .modalBadge {
+  width: 50px;
+  height: 50px;
+  margin: 0;
+  border-radius: 15px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--gradient-start) 18%, var(--control-button)), var(--accent));
+  color: var(--accent);
+  box-shadow: inset 0 1px color-mix(in srgb, #fff 9%, transparent), 0 10px 24px color-mix(in srgb, #000 22%, transparent)
+}
+
+.uploadModalBrand .modalBadge svg {
+  width: 23px
+}
+
+.uploadModalBrand small {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 8px;
+  letter-spacing: .08em
+}
+
+.uploadModalBrand small:before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--status-ok);
+  box-shadow: 0 0 8px var(--status-ok)
+}
+
+.uploadModalBrand h2 {
+  margin: 5px 0 3px;
+  color: var(--control-text);
+  font-size: 20px !important;
+  letter-spacing: -.025em
+}
+
+.uploadModalBrand p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 8px;
+  line-height: 1.45
+}
+
+.uploadModalBrand .modalClose {
+  position: static;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted)
+}
+
+.uploadModalBrand .modalClose:hover {
+  background: var(--control-button);
+  color: var(--control-text)
+}
+
+.uploadModalBody {
+  padding: 14px 18px 16px;
+  display: grid;
+  gap: 12px
+}
+
+.uploadStatus {
+  height: 34px;
+  padding: 0 10px;
+  display: grid;
+  grid-template-columns: 7px 1fr auto;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid color-mix(in srgb, var(--status-ok) 17%, var(--control-border));
+  border-radius: 8px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--status-ok) 5%, var(--control-bg)), var(--control-bg));
+  font-size: 8px
+}
+
+.uploadStatus i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--status-ok);
+  box-shadow: 0 0 7px var(--status-ok)
+}
+
+.uploadStatus span {
+  color: var(--text-secondary);
+  font-weight: 700
+}
+
+.uploadStatus em {
+  color: var(--control-text);
+  font-size: 7px;
+  font-style: normal
+}
+
+.uploadModalBody>label {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 9px;
+  font-weight: 700
+}
+
+.uploadModalBody input {
+  height: 38px;
+  width: 100%;
+  padding: 0 11px;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--control-border));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--control-bg) 91%, var(--control-panel));
+  color: var(--control-text);
+  font: 600 11px var(--font-ui, inherit);
+  outline: none
+}
+
+.uploadModalBody input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent)
+}
+
+.uploadModalBody input::placeholder {
+  color: var(--text-muted)
+}
+
+.uploadModalBody .modalInline {
+  gap: 8px
+}
+
+.uploadModalBody .modalInline button,
+.uploadModalBody .uploadFolder {
+  border: 1px solid color-mix(in srgb, var(--accent) 62%, var(--control-border));
+  border-radius: 9px;
+  background: linear-gradient(120deg, color-mix(in srgb, var(--gradient-start) 86%, #fff 5%), color-mix(in srgb, var(--gradient-end) 82%, #000 4%));
+  color: #fff;
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--accent) 16%, transparent);
+  font-weight: 700
+}
+
+.uploadModalBody .modalInline button {
+  height: 38px
+}
+
+.uploadModalBody .uploadFolder {
+  height: 46px
+}
+
+.uploadModalBody .orLine {
+  margin: 2px 0;
+  color: var(--text-muted);
+  font-size: 7px
+}
+
+.uploadModalBody .orLine:before,
+.uploadModalBody .orLine:after {
+  background: var(--control-border)
+}
+
+.uploadModalBody .errorBox {
+  margin: 0;
+  border-color: color-mix(in srgb, var(--status-nok) 38%, var(--control-border));
+  background: color-mix(in srgb, var(--status-nok) 9%, transparent);
+  color: var(--control-text)
+}
+
+.uploadModalFooter {
+  margin: 0;
+  padding: 12px 18px 15px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 7px;
+  border-top: 1px solid var(--control-border)
+}
+
+.uploadModalFooter span {
+  min-width: 0;
+  padding: 7px 6px;
+  border: 1px solid var(--control-border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--control-button) 65%, transparent);
+  color: var(--text-secondary);
+  font-size: 7px
+}
+
+.uploadModalFooter b {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--accent);
+  font-size: 7px
+}
+
+.uploadRouteCard {
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--control-border));
+  border-radius: 11px;
+  background: linear-gradient(125deg, color-mix(in srgb, var(--gradient-start) 6%, var(--control-bg)), color-mix(in srgb, var(--gradient-end) 4%, var(--control-bg)));
+  box-shadow: inset 0 1px color-mix(in srgb, #fff 4%, transparent)
+}
+
+.uploadRouteHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 9px
+}
+
+.uploadRouteHead>i {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--control-border));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--control-button));
+  color: var(--accent);
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 800
+}
+
+.uploadRouteHead span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column
+}
+
+.uploadRouteHead b {
+  color: var(--control-text);
+  font-size: 8px
+}
+
+.uploadRouteHead small {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 7px
+}
+
+.uploadRouteCard label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 8px;
+  font-weight: 700
+}
+
+.uploadModalBody .uploadFolder {
+  height: 60px;
+  padding: 0 13px;
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  text-align: left
+}
+
+.uploadModalBody .uploadFolder>svg {
+  width: 24px;
+  height: 24px
+}
+
+.uploadFolderCopy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column
+}
+
+.uploadFolderCopy small {
+  color: color-mix(in srgb, #fff 70%, transparent);
+  font-size: 7px;
+  letter-spacing: .09em
+}
+
+.uploadFolderCopy b {
+  margin: 2px 0;
+  color: #fff;
+  font-size: 10px
+}
+
+.uploadFolderCopy em {
+  color: color-mix(in srgb, #fff 67%, transparent);
+  font-size: 7px;
+  font-style: normal
+}
+
+.uploadModalBody .uploadFolder>i {
+  padding: 5px 7px;
+  border: 1px solid color-mix(in srgb, #fff 22%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, #000 12%, transparent);
+  color: #fff;
+  font-size: 7px;
+  font-style: normal
+}
+
+.uploadAssurance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 10px;
+  margin-top: -2px;
+  color: var(--text-muted);
+  font-size: 7px
+}
+
+.uploadAssurance span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px
+}
+
+.uploadAssurance i {
+  width: 12px;
+  height: 12px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--status-ok) 13%, transparent);
+  color: var(--status-ok);
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 800
+}
+
+.uploadDropZone {
+  position: relative;
+  padding: 1px;
+  border-radius: 12px;
+  background: linear-gradient(120deg, color-mix(in srgb, var(--gradient-start) 72%, transparent), color-mix(in srgb, var(--gradient-end) 50%, transparent));
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--accent) 12%, transparent)
+}
+
+.uploadDropGlow {
+  position: absolute;
+  inset: -10px;
+  z-index: 0;
+  border-radius: 18px;
+  background: radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--accent) 17%, transparent), transparent 68%);
+  filter: blur(9px);
+  pointer-events: none
+}
+
+.uploadDropZone .uploadFolder {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  border: 1px dashed color-mix(in srgb, #fff 28%, transparent) !important;
+  background: linear-gradient(120deg, color-mix(in srgb, var(--gradient-start) 87%, #141820 12%), color-mix(in srgb, var(--gradient-end) 83%, #07090d 14%)) !important;
+  transition: transform .2s ease, filter .2s ease, box-shadow .2s ease
+}
+
+.uploadDropZone .uploadFolder:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: saturate(1.12) brightness(1.06);
+  box-shadow: 0 14px 30px color-mix(in srgb, var(--accent) 24%, transparent) !important
+}
+
+.uploadDropZone .uploadFolder:active:not(:disabled) {
+  transform: none
+}
+
+.uploadFlow {
+  margin: 0 18px 12px;
+  padding: 8px 10px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  border: 1px solid var(--control-border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--control-bg) 58%, transparent)
+}
+
+.uploadFlow span {
+  position: relative;
+  min-width: 0;
+  padding: 0 4px 0 25px;
+  display: grid;
+  grid-template-columns: 1fr;
+  line-height: 1.1
+}
+
+.uploadFlow span:not(:last-child):after {
+  content: "";
+  position: absolute;
+  top: 10px;
+  right: -3px;
+  width: 7px;
+  height: 1px;
+  background: var(--control-border)
+}
+
+.uploadFlow i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--control-border);
+  border-radius: 50%;
+  color: var(--text-muted);
+  font-size: 6px;
+  font-style: normal
+}
+
+.uploadFlow b {
+  color: var(--text-secondary);
+  font-size: 7px
+}
+
+.uploadFlow small {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 6px;
+  text-overflow: ellipsis;
+  white-space: nowrap
+}
+
+.uploadFlow .active i {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--control-border));
+  background: color-mix(in srgb, var(--accent) 17%, var(--control-button));
+  color: var(--accent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 20%, transparent)
+}
+
+.uploadFlow .active b {
+  color: var(--control-text)
+}
+
+@media(max-width:560px) {
+  html[data-theme] .uploadModalWindow {
+    max-height: calc(100dvh - 24px);
+    overflow: auto
+  }
+
+  .uploadModalBrand {
+    grid-template-columns: 44px 1fr 28px;
+    padding: 16px
+  }
+
+  .uploadModalBrand .modalBadge {
+    width: 42px;
+    height: 42px
+  }
+
+  .uploadModalFooter {
+    grid-template-columns: 1fr 1fr;
+    padding: 11px 16px
+  }
+
+  .uploadStatus em {
+    display: none
+  }
+
+  .uploadModalBody {
+    padding-inline: 16px
+  }
+}
+
+/* Modern UI WT strip — same image-overlay information as Classic WT View. */
+html[data-workspace="modern"] .oakTrayCell {
+  position: relative;
+  overflow: hidden !important;
+  background: #000 !important
+}
+
+html[data-workspace="modern"] .oakTrayCell img {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0;
+  object-fit: cover;
+  background: #000 !important
+}
+
+html[data-workspace="modern"] .oakTrayCell>b {
+  position: absolute !important;
+  z-index: 8;
+  left: 5px !important;
+  margin-left: 10px !important;
+  transform: none !important;
+  top: 5px !important;
+  padding: 2px 4px !important;
+  border: 0 !important;
+  border-radius: 3px !important;
+  background: rgba(0, 0, 0, .46) !important;
+  color: #fff !important;
+  font-size: 7px !important;
+  line-height: 1 !important
+}
+
+html[data-workspace="modern"] .oakTrayStrip {
+  direction: ltr;
+  grid-auto-flow: row;
+  justify-content: start;
+}
+
+html[data-workspace="modern"] .oakTrayCell .oakTrayStatusIcon {
+  position: absolute !important;
+  z-index: 8;
+  right: 6px !important;
+  top: 6px !important;
+  left: auto !important;
+  width: 9px !important;
+  height: 9px !important;
+  padding: 0 !important;
+  border: 1px solid rgba(255, 255, 255, .82) !important;
+  border-radius: 50% !important;
+  background: var(--legend-color) !important;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--legend-color) 85%, transparent), 0 0 0 2px rgba(0, 0, 0, .42) !important
+}
+
+html[data-workspace="modern"] .oakTrayCell .oakTrayStatus,
+html[data-workspace="modern"] .oakTrayCell .oakTrayDefect {
+  position: absolute !important;
+  z-index: 8;
+  bottom: 5px !important;
+  width: auto !important;
+  height: auto !important;
+  padding: 2px 4px !important;
+  border: 0 !important;
+  border-radius: 3px !important;
+  background: rgba(0, 0, 0, .48) !important;
+  font-size: 6px !important;
+  font-style: normal !important;
+  font-weight: 800 !important;
+  line-height: 1.1 !important;
+  letter-spacing: .05em !important
+}
+
+html[data-workspace="modern"] .oakTrayCell .oakTrayStatus {
+  left: 5px !important;
+  right: auto !important;
+  color: #fff !important
+}
+
+/* Keep the pass/fail language instantly legible, independent of a custom defect colour. */
+html[data-workspace="modern"] .oakTrayCell.ok {
+  --legend-color: #38d996 !important;
+}
+
+html[data-workspace="modern"] .oakTrayCell.nok {
+  --legend-color: #ff535f !important;
+}
+
+html[data-workspace="modern"] .oakTrayCell.ok .oakTrayStatus {
+  color: #54e7a7 !important;
+}
+
+html[data-workspace="modern"] .oakTrayCell.nok .oakTrayStatus {
+  color: #ff6872 !important;
+}
+
+html[data-workspace="modern"] .oakTrayCell .oakTrayDefect {
+  right: 5px !important;
+  left: auto !important;
+  max-width: 58% !important;
+  overflow: hidden !important;
+  color: color-mix(in srgb, var(--legend-color) 84%, #fff) !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important
+}

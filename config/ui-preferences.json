@@ -1509,8 +1509,8 @@
       "shadow": 0.7
     }
   },
-  "historyWidth": 1.1863088492994986,
-  "viewerWidth": 0.9812507979589613,
+  "historyWidth": 1.1455369279500431,
+  "viewerWidth": 1.0045336139326406,
   "detailsWidth": 0.7622332849645965,
   "inspectionHistoryWidth": 570,
   "inspectionControlWidth": 302,
@@ -1518,8 +1518,8 @@
   "trayHeight": 128,
   "bottomHeight": 340,
   "trendWidth": 1.230943636029419,
-  "logsWidth": 1.0764135176984173,
-  "actionsWidth": 0.6326428462721632,
+  "logsWidth": 0.8836470812401894,
+  "actionsWidth": 0.825409282730391,
   "showHistory": true,
   "showDetails": true,
   "showCommandBar": true,
