@@ -3175,3 +3175,73 @@ html[data-workspace="manual"] .filterWorkspace>* {
     transition: none !important
   }
 }
+
+/* Classic configuration pages and the image-filter dialog on touch screens. */
+@media (any-pointer: coarse) {
+  html[data-workspace="manual"] .manualPage { padding: 16px clamp(12px, 2vw, 24px) 28px }
+  html[data-workspace="manual"] .manualTabs { touch-action: pan-x; -webkit-overflow-scrolling: touch }
+
+  html[data-workspace="manual"] .manualPage :is(.manualBtn, .manualTabs button, .cameraHeadSelect button, .filterRows button, .pathField button) {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  html[data-workspace="manual"] .parameterForm :is(input:not([type="checkbox"]), select) {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  html[data-workspace="manual"] .parameterForm input[type="range"] { min-height: 44px; touch-action: pan-y }
+  html[data-workspace="manual"] .manualCheck { min-height: 44px }
+  html[data-workspace="manual"] .manualCheck span { width: 24px; height: 24px; flex: 0 0 24px }
+  html[data-workspace="manual"] .manualPage :is(button, input, select):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+
+  html[data-workspace="manual"] .imageFilterModalWindow {
+    width: min(1280px, calc(100vw - 16px));
+    height: min(900px, calc(100dvh - 16px));
+    min-height: 0;
+  }
+
+  html[data-workspace="manual"] .imageFilterModal .imageFilterPage {
+    grid-template-rows: 48px 56px minmax(0, 1fr) 62px !important;
+  }
+
+  html[data-workspace="manual"] .imageFilterModal .imageFilterDialogTitle > button {
+    width: 44px;
+    height: 44px;
+  }
+
+  html[data-workspace="manual"] .imageFilterModal .filterMainColumn {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  html[data-workspace="manual"] .imageFilterModal :is(.filterStepBar > button, .filterSectionTitle button, .resultTypeGrid > button, .defectFilterGrid > button, .positionFilterGrid > button, .filterActionBar button) {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  html[data-workspace="manual"] .imageFilterModal .defectFilterGrid > button {
+    height: auto;
+    min-height: 48px;
+  }
+
+  html[data-workspace="manual"] .imageFilterModal .defectFilterGrid > button b,
+  html[data-workspace="manual"] .imageFilterModal .filterSectionTitle button {
+    font-size: 10px;
+  }
+
+  html[data-workspace="manual"] .imageFilterModal :is(.filterFormGrid input, .filterFormGrid textarea, .filterFormGrid select) {
+    min-height: 44px;
+    font-size: 16px;
+  }
+}
+
+@media (any-pointer: coarse) and (max-width: 900px) {
+  html[data-workspace="manual"] .manualHeader { flex-wrap: wrap; padding-block: 10px }
+  html[data-workspace="manual"] .manualHeaderActions { width: 100%; flex-wrap: wrap }
+  html[data-workspace="manual"] .manualGrid { grid-template-columns: minmax(0, 1fr) }
+  html[data-workspace="manual"] .imageFilterModal .defectOutcomeLane.nok .defectFilterGrid { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+}

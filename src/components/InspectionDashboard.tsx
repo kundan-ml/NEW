@@ -841,6 +841,9 @@ export function InspectionDashboard({
   ) {
     if (prefs.uiLocked || window.innerWidth < 1060) return;
     e.preventDefault();
+    const pointerId = e.pointerId;
+    const handle = e.currentTarget;
+    handle.setPointerCapture(pointerId);
     const startX = e.clientX,
       h0 = prefs.inspectionHistoryWidth,
       c0 = prefs.inspectionControlWidth,
@@ -853,6 +856,7 @@ export function InspectionDashboard({
     const root = document.documentElement;
     document.body.classList.add("is-resizing-dashboard");
     const move = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
       const delta = ev.clientX - startX;
       if (kind === "history") {
         const value = Math.max(240, Math.min(570, h0 + delta));
@@ -870,22 +874,30 @@ export function InspectionDashboard({
         root.style.setProperty("--inspection-details-width", `${value}px`);
       }
     };
-    const up = () => {
+    const up = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
       document.body.classList.remove("is-resizing-dashboard");
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      if (handle.hasPointerCapture(pointerId)) handle.releasePointerCapture(pointerId);
       patch(next);
     };
     window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up, { once: true });
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
   }
   function beginBottomResize(e: ReactPointerEvent<HTMLButtonElement>) {
     if (prefs.uiLocked) return;
     e.preventDefault();
+    const pointerId = e.pointerId;
+    const handle = e.currentTarget;
+    handle.setPointerCapture(pointerId);
     const startY = e.clientY,
       h0 = prefs.bottomHeight;
     document.body.classList.add("is-resizing-dashboard");
     const move = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
       const h = Math.max(
         126,
         Math.min(
@@ -899,6 +911,7 @@ export function InspectionDashboard({
       );
     };
     const up = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
       const h = Math.max(
         126,
         Math.min(
@@ -909,10 +922,13 @@ export function InspectionDashboard({
       document.body.classList.remove("is-resizing-dashboard");
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      if (handle.hasPointerCapture(pointerId)) handle.releasePointerCapture(pointerId);
       patch({ bottomHeight: h });
     };
     window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up, { once: true });
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
   }
   function beginBottomSectionResize(
     leftKey: BottomWidthKey,
@@ -1422,7 +1438,7 @@ export function InspectionDashboard({
               )}
               {inspectionBottomTab === "wt" && (
                 <div className="inspectionWtView">
-                  <div className={`inspectionWtGallery ${wtViewMode}`} style={{'--wt-grid-columns': String(Math.ceil(wtCapacity / 2))} as React.CSSProperties}>
+                  <div className={`inspectionWtGallery ${wtViewMode}`} style={{'--wt-grid-columns': String(Math.ceil(wtCapacity / 2)), '--wt-touch-width': `${Math.ceil(wtCapacity / 2) * 82}px`} as React.CSSProperties}>
                     {wtChannelImages.map((item) => {
                       const status = item.result?.status || "IDLE",
                         firstDefect = item.result?.defects?.[0],
@@ -1523,7 +1539,7 @@ export function InspectionDashboard({
         {loginOpen && (
           <div
             className="loginModalBackdrop"
-            onMouseDown={(e) => {
+            onPointerDown={(e) => {
               if (e.target === e.currentTarget) setLoginOpen(false);
             }}
           >

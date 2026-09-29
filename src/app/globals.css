@@ -12963,3 +12963,142 @@ html[data-theme="premium-white"] body {
   background: radial-gradient(circle at 10% 0%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 28%), radial-gradient(circle at 95% 95%, color-mix(in srgb, var(--primary) 6%, transparent), transparent 30%), var(--fill-background, var(--background)) !important;
   color: var(--text-primary) !important
 }
+
+/* Shared Classic UI touch chrome, including pages outside the dashboard. */
+@media (any-pointer: coarse) {
+  html[data-workspace="manual"] .pdfMenuStrip.sharedClassicHeader {
+    height: 50px !important;
+    min-height: 50px !important;
+    gap: 3px;
+    padding: 3px 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    touch-action: pan-x;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  html[data-workspace="manual"] .pdfMenuStrip.sharedClassicHeader:before {
+    height: 42px;
+    flex: 0 0 auto;
+  }
+
+  html[data-workspace="manual"] .pdfMenuStrip.sharedClassicHeader > span { flex: 0 0 8px }
+
+  html[data-workspace="manual"] .pdfMenuStrip.sharedClassicHeader button {
+    flex: 0 0 auto;
+    height: 44px !important;
+    min-height: 44px !important;
+    padding-inline: 13px !important;
+    font-size: 11px !important;
+    touch-action: manipulation;
+  }
+
+  html[data-workspace="manual"] .sharedAppFooter { min-height: 30px }
+
+  html[data-workspace="manual"] .sharedPageBody > :not(.inspectionReferencePage) button:not(.matrixDot),
+  html[data-workspace="manual"] .sharedPageBody > :not(.inspectionReferencePage) :is(input:not([type="checkbox"]):not([type="color"]):not([type="hidden"]), select, textarea) {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  html[data-workspace="manual"] .customDrawer :is(button, select, input:not([type="color"]), summary),
+  html[data-workspace="manual"] .imageFilterModalWindow :is(button, select, input:not([type="checkbox"]):not([type="color"])),
+  html[data-workspace="manual"] .paletteBackdrop button {
+    min-height: 42px;
+    touch-action: manipulation;
+  }
+
+  html[data-workspace="manual"] .customDrawer :is(.drawerScroll, .studioTabBar),
+  html[data-workspace="manual"] .imageFilterModalWindow {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  html[data-workspace="manual"] .customDrawer input[type="range"] {
+    min-height: 44px;
+    touch-action: pan-y;
+  }
+
+  html[data-workspace="manual"] .customDrawer input[type="checkbox"],
+  html[data-workspace="manual"] .imageFilterModalWindow input[type="checkbox"] {
+    width: 22px;
+    height: 22px;
+  }
+
+  html[data-workspace="manual"] .customDrawer :is(button, input, select, summary):focus-visible,
+  html[data-workspace="manual"] .imageFilterModalWindow :is(button, input, select):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}
+
+/* The detached studio uses the same editable theme surfaces as the main window. */
+html[data-theme="premium-white"] .studioWindowPage,
+html[data-theme="premium-white"] .studioWindowPage .drawerBackdrop {
+  background: var(--fill-background) !important;
+}
+
+html[data-theme="premium-white"] .customDrawer {
+  background: var(--studio-dialogs-fill) !important;
+  border-color: var(--studio-dialogs-border) !important;
+}
+
+html[data-theme="premium-white"] .customDrawer :is(.drawerHead, .drawerFoot) {
+  background: var(--studio-header-fill) !important;
+  border-color: var(--studio-header-border) !important;
+}
+
+html[data-theme="premium-white"] .customDrawer .customSection {
+  background: var(--fill-surface) !important;
+  border-color: var(--studio-border) !important;
+}
+
+html[data-theme="premium-white"] .customDrawer .lockNotice {
+  background: color-mix(in srgb, var(--primary) 5%, var(--surface)) !important;
+  color: var(--text-secondary) !important;
+  border-color: var(--studio-border) !important;
+}
+
+html[data-theme="premium-white"] .customDrawer .workspaceStyleCards > button {
+  background: var(--fill-surface) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--studio-border) !important;
+}
+
+html[data-theme="premium-white"] .customDrawer .workspaceStyleCards > button.selected {
+  background: color-mix(in srgb, var(--primary) 11%, var(--surface)) !important;
+  border-color: var(--primary) !important;
+}
+
+html[data-theme="premium-white"] .customDrawer .workspaceStyleCards > button > span small,
+html[data-theme="premium-white"] .customDrawer .themeCards small {
+  color: var(--text-muted) !important;
+}
+
+html[data-theme="premium-white"] .customDrawer .statusEditor {
+  background: var(--fill-surface) !important;
+  border-color: var(--studio-border) !important;
+}
+
+html[data-theme="premium-white"] .customDrawer .statusEditor span {
+  color: var(--text-secondary) !important;
+}
+
+.studioSaveStatus {
+  min-width: 0;
+  flex: 1;
+  align-self: center;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.studioSaveStatus.saved { color: var(--status-ok) }
+.studioSaveStatus.error { color: var(--status-nok) }
+
+.drawerFoot .primaryAction {
+  background: var(--fill-primary) !important;
+  border-color: transparent !important;
+  color: #fff !important;
+}

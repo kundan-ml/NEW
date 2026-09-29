@@ -56,7 +56,7 @@ export function CommandPalette({open,onClose,onCustomize}:{open:boolean;onClose:
     router.push(href);
   }
 
-  return <div className="paletteBackdrop" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
+  return <div className="paletteBackdrop" onPointerDown={e=>{if(e.target===e.currentTarget)onClose()}}>
     <div className="commandPalette">
       <div className="paletteSearch">
         <Search/>

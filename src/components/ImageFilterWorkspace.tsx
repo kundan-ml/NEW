@@ -136,7 +136,7 @@ export function ImageFilterWorkspace({modal=false,onClose}:{modal?:boolean;onClo
       {modal&&<button className="filterSecondary" onClick={onClose}><X/>Close</button>}
     </footer>
   </div>;
-  return modal?<div className="imageFilterModal" role="dialog" aria-modal="true" aria-label="Image Filter Configuration" onMouseDown={event=>{if(event.target===event.currentTarget)onClose?.()}}><div className="imageFilterModalWindow">{workspace}</div></div>:workspace;
+  return modal?<div className="imageFilterModal" role="dialog" aria-modal="true" aria-label="Image Filter Configuration" onPointerDown={event=>{if(event.target===event.currentTarget)onClose?.()}}><div className="imageFilterModalWindow">{workspace}</div></div>:workspace;
 }
 
 type PanelProps={settings:FilterSettings;patch:<K extends keyof FilterSettings>(key:K,value:FilterSettings[K])=>void};

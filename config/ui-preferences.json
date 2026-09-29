@@ -1070,11 +1070,11 @@
           "angle": 135,
           "stops": [
             {
-              "color": "#315cbd",
+              "color": "#5945e9",
               "position": 0
             },
             {
-              "color": "#0a9290",
+              "color": "#d22be4",
               "position": 100
             }
           ]
@@ -1252,7 +1252,7 @@
   "glow": true,
   "sidebarCollapsed": true,
   "manualSkeleton": true,
-  "uiLocked": true,
+  "uiLocked": false,
   "sidebarWidth": 82,
   "headerHeight": 46,
   "okColor": "#44df83",
@@ -1510,8 +1510,8 @@
     }
   },
   "historyWidth": 1.1455369279500431,
-  "viewerWidth": 1.0045336139326406,
-  "detailsWidth": 0.7622332849645965,
+  "viewerWidth": 1.1881353769295344,
+  "detailsWidth": 0.5786315219677027,
   "inspectionHistoryWidth": 570,
   "inspectionControlWidth": 302,
   "inspectionDetailsWidth": 298,

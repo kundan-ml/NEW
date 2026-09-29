@@ -50,8 +50,8 @@ export function DatasetLoader({open,onClose,onLoaded}:{open:boolean;onClose:()=>
 
   const dirProps={webkitdirectory:'',directory:''} as any;
 
-  return createPortal(<div className="modalBack uploadModalBack" onMouseDown={()=>{if(!busy)onClose()}}>
-    <div className="modernModal uploadModalWindow" role="dialog" aria-modal="true" aria-labelledby="upload-folder-title" onMouseDown={event=>event.stopPropagation()}>
+  return createPortal(<div className="modalBack uploadModalBack" onPointerDown={event=>{if(event.target===event.currentTarget&&!busy)onClose()}}>
+    <div className="modernModal uploadModalWindow" role="dialog" aria-modal="true" aria-labelledby="upload-folder-title">
       <header className="uploadModalBrand">
         <div className="modalBadge"><FolderInput/></div>
         <span><small>EMAGE GROUP · DATA INTAKE</small><h2 id="upload-folder-title">Upload inspection images</h2><p>Add a complete camera folder for WT processing and live inference.</p></span>

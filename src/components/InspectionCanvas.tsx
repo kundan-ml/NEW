@@ -18,7 +18,11 @@ function readSavedView(imageUrl:string):SavedView|null{
 
 export function InspectionCanvas({imageUrl,defects,selectedDefect=-1,showDefects=true,showCrosshair=true,onProbe}:Props){
  const host=useRef<HTMLDivElement>(null);const canvas=useRef<HTMLCanvasElement>(null);const source=useRef<HTMLImageElement|null>(null);const pixels=useRef<HTMLCanvasElement|null>(null);const frame=useRef<number|null>(null);const activeImage=useRef('');const loadSequence=useRef(0);const lastSize=useRef({width:0,height:0});
+ const activePointers=useRef(new Map<number,{x:number;y:number;startX:number;startY:number}>());
+ const pinch=useRef<{distance:number;scale:number;imageX:number;imageY:number}|null>(null);
+ const viewRef=useRef<View>({scale:1,x:0,y:0});
  const[view,setView]=useState<View>({scale:1,x:0,y:0});const[drag,setDrag]=useState<{sx:number;sy:number;vx:number;vy:number}|null>(null);const[state,setState]=useState<'idle'|'loading'|'ready'|'error'>('idle');const[error,setError]=useState('');const[probe,setProbe]=useState<Probe|null>(null);const[expanded,setExpanded]=useState(false);const[popupAspect,setPopupAspect]=useState(16/9);
+ useEffect(()=>{viewRef.current=view},[view]);
 
  const fit=useCallback(()=>{const h=host.current,i=source.current;if(!h||!i||!i.naturalWidth)return;const r=h.getBoundingClientRect();const padding=Math.max(28,Math.min(r.width,r.height)*.055);const s=Math.max(.01,Math.min((r.width-padding*2)/i.naturalWidth,(r.height-padding*2)/i.naturalHeight));setView({scale:s,x:(r.width-i.naturalWidth*s)/2,y:(r.height-i.naturalHeight*s)/2})},[]);
  const restoreOrFit=useCallback((url:string)=>{const h=host.current,i=source.current;if(!h||!i)return;const r=h.getBoundingClientRect(),saved=readSavedView(url);lastSize.current={width:r.width,height:r.height};activeImage.current=url;if(saved){const scale=Math.max(.025,Math.min(12,saved.scale));setView({scale,x:r.width/2-saved.centerX*scale,y:r.height/2-saved.centerY*scale})}else fit()},[fit]);
@@ -73,19 +77,55 @@ export function InspectionCanvas({imageUrl,defects,selectedDefect=-1,showDefects
 
  function zoomAt(factor:number,cx?:number,cy?:number){const h=host.current,i=source.current;if(!h||!i)return;const rect=h.getBoundingClientRect(),px=cx??rect.width/2,py=cy??rect.height/2;setView(v=>{const ns=Math.max(.025,Math.min(12,v.scale*factor));const ix=(px-v.x)/v.scale,iy=(py-v.y)/v.scale;return{scale:ns,x:px-ix*ns,y:py-iy*ns}})}
  function wheel(e:React.WheelEvent){e.preventDefault();const rect=e.currentTarget.getBoundingClientRect();zoomAt(e.deltaY<0?1.13:.885,e.clientX-rect.left,e.clientY-rect.top)}
- function pointerDown(e:React.PointerEvent){if(e.button!==0)return;e.currentTarget.setPointerCapture(e.pointerId);setDrag({sx:e.clientX,sy:e.clientY,vx:view.x,vy:view.y})}
+ function pointerDown(e:React.PointerEvent){
+   if(e.pointerType==='mouse'&&e.button!==0)return;
+   e.currentTarget.setPointerCapture(e.pointerId);
+   activePointers.current.set(e.pointerId,{x:e.clientX,y:e.clientY,startX:e.clientX,startY:e.clientY});
+   if(activePointers.current.size===1){pinch.current=null;setDrag({sx:e.clientX,sy:e.clientY,vx:viewRef.current.x,vy:viewRef.current.y});return}
+   const [a,b]=Array.from(activePointers.current.values());
+   const rect=e.currentTarget.getBoundingClientRect(),midX=(a.x+b.x)/2-rect.left,midY=(a.y+b.y)/2-rect.top,v=viewRef.current;
+   pinch.current={distance:Math.max(1,Math.hypot(a.x-b.x,a.y-b.y)),scale:v.scale,imageX:(midX-v.x)/v.scale,imageY:(midY-v.y)/v.scale};
+   setDrag(null);
+ }
  function updateProbe(e:React.PointerEvent){const h=host.current,i=source.current,p=pixels.current;if(!h||!i||!p||state!=='ready')return;const r=h.getBoundingClientRect(),px=e.clientX-r.left,py=e.clientY-r.top,ix=Math.floor((px-view.x)/view.scale),iy=Math.floor((py-view.y)/view.scale);if(ix<0||iy<0||ix>=i.naturalWidth||iy>=i.naturalHeight){setProbe(null);return}let gray:number|null=null;try{const d=p.getContext('2d',{willReadFrequently:true})?.getImageData(ix,iy,1,1).data;if(d)gray=Math.round(.299*d[0]+.587*d[1]+.114*d[2])}catch{}const next={x:ix,y:iy,gray};setProbe(next);onProbe?.(next)}
- function pointerMove(e:React.PointerEvent){if(drag)setView(v=>({...v,x:drag.vx+e.clientX-drag.sx,y:drag.vy+e.clientY-drag.sy}));updateProbe(e)}
+ function pointerMove(e:React.PointerEvent){
+   const pointer=activePointers.current.get(e.pointerId);
+   if(pointer){pointer.x=e.clientX;pointer.y=e.clientY}
+   if(activePointers.current.size>=2&&pinch.current){
+     const [a,b]=Array.from(activePointers.current.values());
+     const rect=e.currentTarget.getBoundingClientRect(),gesture=pinch.current;
+     const scale=Math.max(.025,Math.min(12,gesture.scale*Math.hypot(a.x-b.x,a.y-b.y)/gesture.distance));
+     const midX=(a.x+b.x)/2-rect.left,midY=(a.y+b.y)/2-rect.top;
+     const next={scale,x:midX-gesture.imageX*scale,y:midY-gesture.imageY*scale};
+     viewRef.current=next;
+     setView(next);
+   }else if(pointer&&drag){
+     const next={...viewRef.current,x:drag.vx+e.clientX-drag.sx,y:drag.vy+e.clientY-drag.sy};
+     viewRef.current=next;
+     setView(next);
+   }
+   if(e.pointerType==='mouse'&&activePointers.current.size<2)updateProbe(e);
+ }
+ function pointerEnd(e:React.PointerEvent){
+   const pointer=activePointers.current.get(e.pointerId);
+   if(pointer&&e.pointerType==='touch'&&activePointers.current.size===1&&Math.hypot(e.clientX-pointer.startX,e.clientY-pointer.startY)<8)updateProbe(e);
+   activePointers.current.delete(e.pointerId);
+   if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);
+   pinch.current=null;
+   const remaining=activePointers.current.values().next().value;
+   const v=viewRef.current;
+   setDrag(remaining?{sx:remaining.x,sy:remaining.y,vx:v.x,vy:v.y}:null);
+ }
  function oneToOne(){const h=host.current,i=source.current;if(!h||!i)return;const r=h.getBoundingClientRect();setView({scale:1,x:(r.width-i.naturalWidth)/2,y:(r.height-i.naturalHeight)/2})}
  function focusDefect(){const i=source.current,h=host.current,d=defects[selectedDefect];if(!i||!h||!d?.bbox_xywh_norm)return;const[x,y,w,hh]=d.bbox_xywh_norm,r=h.getBoundingClientRect();const targetW=Math.max(w*i.naturalWidth,60),targetH=Math.max(hh*i.naturalHeight,60),s=Math.min(r.width*.58/targetW,r.height*.58/targetH,8);const cx=(x+w/2)*i.naturalWidth,cy=(y+hh/2)*i.naturalHeight;setView({scale:s,x:r.width/2-cx*s,y:r.height/2-cy*s})}
  function toggleExpanded(){if(!expanded){const r=host.current?.getBoundingClientRect();if(r&&r.width>0&&r.height>0)setPopupAspect(Math.max(.55,Math.min(2.4,r.width/r.height)))}setExpanded(value=>!value)}
- const canvasView=<div className={`canvasHost canvas-${state} ${expanded?'canvasPopupHost':''}`} ref={host} onWheel={wheel} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={()=>setDrag(null)} onPointerCancel={()=>setDrag(null)} onPointerLeave={()=>setDrag(null)} onDoubleClick={fit}>
+ const canvasView=<div className={`canvasHost canvas-${state} ${expanded?'canvasPopupHost':''}`} ref={host} onWheel={wheel} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerEnd} onPointerCancel={pointerEnd} onPointerLeave={e=>{if(e.pointerType==='mouse'&&!activePointers.current.has(e.pointerId))setProbe(null)}} onDoubleClick={fit}>
    <canvas ref={canvas}/><div className="scanBeam" aria-hidden/>
-   <div className="canvasTools" onPointerDown={e=>e.stopPropagation()}><button onClick={()=>zoomAt(1.22)} title="Zoom in"><Plus/></button><button onClick={()=>zoomAt(.82)} title="Zoom out"><Minus/></button><button onClick={fit} title="Fit image"><RotateCcw/></button><button onClick={oneToOne} title="1:1 pixels"><ScanSearch/></button><button onClick={focusDefect} disabled={!defects[selectedDefect]?.bbox_xywh_norm} title="Focus selected defect"><Focus/></button><button onClick={toggleExpanded} title={expanded?'Close expanded viewer':'Open expanded viewer'}>{expanded?<Minimize2/>:<Maximize2/>}</button></div>
+   <div className="canvasTools" onPointerDown={e=>e.stopPropagation()}><button onClick={()=>zoomAt(1.22)} title="Zoom in" aria-label="Zoom in"><Plus/></button><button onClick={()=>zoomAt(.82)} title="Zoom out" aria-label="Zoom out"><Minus/></button><button onClick={fit} title="Fit image" aria-label="Fit image"><RotateCcw/></button><button onClick={oneToOne} title="1:1 pixels" aria-label="Show image at 1:1 pixels"><ScanSearch/></button><button onClick={focusDefect} disabled={!defects[selectedDefect]?.bbox_xywh_norm} title="Focus selected defect" aria-label="Focus selected defect"><Focus/></button><button onClick={toggleExpanded} title={expanded?'Close expanded viewer':'Open expanded viewer'} aria-label={expanded?'Close expanded viewer':'Open expanded viewer'}>{expanded?<Minimize2/>:<Maximize2/>}</button></div>
    {probe&&<div className="pixelProbe"><MousePointer2/><b>X {probe.x}</b><b>Y {probe.y}</b><b>Gray {probe.gray??'—'}</b></div>}
-   <div className="canvasHint"><Crosshair/> drag to pan · wheel to zoom · double click fit</div>
+   <div className="canvasHint"><Crosshair/><span className="canvasMouseHint">drag to pan · wheel to zoom · double click fit</span><span className="canvasTouchHint">drag to pan · pinch to zoom · use Fit to reset</span></div>
    {state==='ready'&&<div className="canvasScale"><span style={{'--scale-bar-width':`${Math.max(20,Math.min(280,Math.round(220*view.scale)))}px`} as React.CSSProperties}/><b>1 cm · {Math.round(view.scale*100)}%</b></div>}
  </div>;
- if(expanded&&typeof document!=='undefined')return createPortal(<div className="canvasPopupBackdrop" role="dialog" aria-modal="true" aria-label="Expanded inspection image" onPointerDown={e=>{if(e.target===e.currentTarget)setExpanded(false)}}><div className="canvasPopupWindow" style={{'--canvas-popup-ratio':String(popupAspect)} as React.CSSProperties}><div className="canvasPopupHeader"><span><i/><span><b>Inspection Image</b><em>Precision viewer</em></span></span><small>Scroll to zoom · drag to inspect · double-click to fit · Esc to close</small><button onClick={()=>setExpanded(false)}><Minimize2/>Close</button></div><div className="canvasPopupStage"><i className="canvasCorner topLeft"/><i className="canvasCorner topRight"/><i className="canvasCorner bottomLeft"/><i className="canvasCorner bottomRight"/>{canvasView}</div></div></div>,document.body);
+ if(expanded&&typeof document!=='undefined')return createPortal(<div className="canvasPopupBackdrop" role="dialog" aria-modal="true" aria-label="Expanded inspection image" onPointerDown={e=>{if(e.target===e.currentTarget)setExpanded(false)}}><div className="canvasPopupWindow" style={{'--canvas-popup-ratio':String(popupAspect)} as React.CSSProperties}><div className="canvasPopupHeader"><span><i/><span><b>Inspection Image</b><em>Precision viewer</em></span></span><small><span className="canvasMouseHint">Scroll to zoom · drag to inspect · double-click to fit · Esc to close</span><span className="canvasTouchHint">Pinch to zoom · drag to inspect · tap Fit to reset</span></small><button onClick={()=>setExpanded(false)}><Minimize2/>Close</button></div><div className="canvasPopupStage"><i className="canvasCorner topLeft"/><i className="canvasCorner topRight"/><i className="canvasCorner bottomLeft"/><i className="canvasCorner bottomRight"/>{canvasView}</div></div></div>,document.body);
  return canvasView
 }

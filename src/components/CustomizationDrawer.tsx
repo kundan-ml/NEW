@@ -8,8 +8,8 @@ import {GRADIENT_ANGLES,THEMES,type GradientDirection,type LayerGradient} from '
 import {useEffect,useState} from 'react';
 import {api} from '@/lib/api';
 
-export function CustomizationDrawer({open,onClose}:{open:boolean;onClose:()=>void}){
-  const{prefs,canCustomize,set,patch,selectTheme,resetThemeColors,reset}=useUI();
+export function CustomizationDrawer({open,onClose,popout=false}:{open:boolean;onClose:()=>void;popout?:boolean}){
+  const{prefs,canCustomize,saveState,saveError,saveNow,set,patch,selectTheme,resetThemeColors,reset}=useUI();
   const[wtCapacity,setWtCapacity]=useState(16);
   const[trayCapacities,setTrayCapacities]=useState<number[]>([12,14,16]);
   const[capacityNotice,setCapacityNotice]=useState('');
@@ -30,8 +30,9 @@ export function CustomizationDrawer({open,onClose}:{open:boolean;onClose:()=>voi
     patch({layerGradients:{...prefs.layerGradients,[key]:value},...(value.enabled?{[solidKey]:''}:{})});
   };
   const saveLegend=async()=>{if(!legend)return;try{const saved=await api.saveStatusSymbolLegend(legend);setLegend(saved);setLegendNotice('Symbols saved for every user.');localStorage.setItem('lens-status-legend-version',String(Date.now()));window.dispatchEvent(new Event('lens-status-legend-changed'))}catch(error){setLegendNotice((error as Error).message)}};
+  const closeStudio=async()=>{if(popout&&canCustomize&&!(await saveNow()))return;onClose()};
 
-  return <div className="drawerBackdrop" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
+  return <div className="drawerBackdrop" onPointerDown={e=>{if(e.target===e.currentTarget)void closeStudio()}}>
     <aside className={`customDrawer ${prefs.uiLocked?'uiConfigurationLocked':''}`} aria-label="Customize interface">
       <div className="drawerHead">
         <div className="drawerIcon"><Palette/></div>
@@ -40,8 +41,8 @@ export function CustomizationDrawer({open,onClose}:{open:boolean;onClose:()=>voi
           <h2>Interface Studio</h2>
           <p>Changes are saved to the shared workstation profile.</p>
         </div>
-        <button className="iconButton" onClick={onClose}><X/></button>
-        <button className="drawerPopout" title="Open on another monitor" onClick={()=>window.open('/ui-studio','oaklin-ui-studio','width=520,height=900,resizable=yes,scrollbars=yes')}><ExternalLink/> Pop out</button>
+        <button className="iconButton" onClick={()=>void closeStudio()} aria-label="Close Interface Studio"><X/></button>
+        {!popout&&<button className="drawerPopout" title="Open on another monitor" onClick={()=>window.open('/ui-studio','oaklin-ui-studio','width=520,height=900,resizable=yes,scrollbars=yes')}><ExternalLink/> Pop out</button>}
       </div>
 
       <nav className="studioTabBar" aria-label="Interface Studio sections">{([['basics','Start'],['colors','Colors & effects'],['components','Components'],['layout','Layout']] as const).map(([key,label])=><button key={key} className={activeTab===key?'active':''} onClick={()=>setActiveTab(key)}>{label}</button>)}</nav>
@@ -223,8 +224,9 @@ export function CustomizationDrawer({open,onClose}:{open:boolean;onClose:()=>voi
       </div>
 
       <div className="drawerFoot">
+        <span className={`studioSaveStatus ${saveState}`} role="status">{saveState==='error'?saveError:saveState==='saving'?'Saving appearance…':saveState==='saved'?'Appearance saved':'Changes preview live'}</span>
         <button onClick={reset} disabled={prefs.uiLocked||!canCustomize}><RotateCcw/>Reset to production defaults</button>
-        <button className="primaryAction" onClick={onClose}>Done</button>
+        <button className="primaryAction" onClick={()=>void closeStudio()}>{popout?'Save & close':'Done'}</button>
       </div>
     </aside>
   </div>;
