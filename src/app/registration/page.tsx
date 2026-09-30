@@ -1,3 +1,2 @@
-import '../manual.css';
-import {ManualWorkbench} from '@/components/ManualWorkbench';
-export default function RegistrationPage(){return <ManualWorkbench kind="registration"/>}
+import {redirect} from 'next/navigation';
+export default function RegistrationPage(){redirect('/?registration=1')}

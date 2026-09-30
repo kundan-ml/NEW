@@ -14,3 +14,5 @@ export interface ErrorClass{key:string;label:string;color:string;symbol:string;s
 export interface StatusSymbol{key:string;label:string;color:string;symbol:string;match_terms?:string[];color_from_status?:Status;outcome?:'OK'|'NOK'}
 export interface StatusSymbolLegend{statuses:StatusSymbol[];defects:StatusSymbol[];fallback_defect:StatusSymbol}
 export interface FocusMetric{key:string;label:string;value:number;status:'green'|'yellow'|'red';optimum:[number,number];acceptable:[number,number]}
+export interface RegistrationTransform{channel:string;tx_px:number;ty_px:number;rotation_deg:number;scale:number;um_per_pixel:number}
+export interface RegistrationResult{camera_head:number;dataset_id:string;sample_id:string;transforms:RegistrationTransform[];created_at:string;user:string}

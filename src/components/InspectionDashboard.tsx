@@ -154,7 +154,7 @@ export function InspectionDashboard({
   const [newPassword, setNewPassword] = useState("");
   const [newPasswordConfirm, setNewPasswordConfirm] = useState("");
   const [newUserRole, setNewUserRole] = useState<"Operator" | "Tester">("Operator");
-  const [statusNow, setStatusNow] = useState(() => new Date());
+  const [statusNow, setStatusNow] = useState<Date | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const wsLiveRef = useRef(false);
   const wsResultOrdinalRef = useRef(0);
@@ -199,6 +199,7 @@ export function InspectionDashboard({
     operationModeRef.current = operationMode;
   }, [operationMode]);
   useEffect(() => {
+    setStatusNow(new Date());
     const timer = window.setInterval(() => setStatusNow(new Date()), 1000);
     return () => window.clearInterval(timer);
   }, []);
@@ -1001,6 +1002,8 @@ export function InspectionDashboard({
           <ClassicHeader
             onSwitchUser={()=>{setLoginView("login");setLoginError("");setLoginUser("");setLoginPassword("");setLoginOpen(true)}}
             onImageFilter={()=>window.dispatchEvent(new Event("lens-open-image-filter"))}
+            onRegistration={()=>window.dispatchEvent(new Event("lens-open-registration"))}
+            onFocus={()=>window.dispatchEvent(new Event("lens-open-focus"))}
             onDataset={()=>setLoader(true)}
             onInfo={()=>setToast(`OKLIN3 · Version ${info?.version||"7.4.0"}`)}
             onExit={()=>setToast("Exit is disabled in the browser interface")}
@@ -1534,7 +1537,7 @@ export function InspectionDashboard({
             Inspection Time:{" "}
             <b>{lastInspectionLabel}</b>
           </span>
-          <em>{statusNow.toLocaleDateString()} · {statusNow.toLocaleTimeString()}</em>
+          <em>{statusNow ? `${statusNow.toLocaleDateString()} · ${statusNow.toLocaleTimeString()}` : '—'}</em>
         </div>
         {loginOpen && (
           <div

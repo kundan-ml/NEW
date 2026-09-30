@@ -22,6 +22,8 @@ import {CustomizationDrawer} from './CustomizationDrawer';
 import {CommandPalette} from './CommandPalette';
 import {ClassicHeader} from './ClassicHeader';
 import {ImageFilterWorkspace} from './ImageFilterWorkspace';
+import {RegistrationWorkspace} from './RegistrationWorkspace';
+import {FocusWorkspace} from './FocusWorkspace';
 import {api} from '@/lib/api';
 import type {SystemInfo} from '@/types';
 
@@ -47,6 +49,8 @@ function ShellInner({children}:{children:React.ReactNode}){
   const[customize,setCustomize]=useState(false);
   const[palette,setPalette]=useState(false);
   const[imageFilterOpen,setImageFilterOpen]=useState(false);
+  const[registrationOpen,setRegistrationOpen]=useState(false);
+  const[focusOpen,setFocusOpen]=useState(false);
   const[system,setSystem]=useState<SystemInfo|null>(null);
   const[now,setNow]=useState(()=>new Date());
   const sharedChrome=path!=="/";
@@ -63,21 +67,37 @@ function ShellInner({children}:{children:React.ReactNode}){
       if(e.key==='Escape'){
         setPalette(false);
         setCustomize(false);
+        setRegistrationOpen(false);
+        setFocusOpen(false);
       }
     }
     function custom(){setCustomize(true)}
     function command(){setPalette(true)}
-    function imageFilter(){setImageFilterOpen(true)}
+    function imageFilter(){setRegistrationOpen(false);setImageFilterOpen(true)}
+    function registration(){setImageFilterOpen(false);setRegistrationOpen(true)}
+    function focus(){setImageFilterOpen(false);setRegistrationOpen(false);setFocusOpen(true)}
     window.addEventListener('keydown',key);
     window.addEventListener('lens-open-customizer',custom);
     window.addEventListener('lens-open-command',command);
     window.addEventListener('lens-open-image-filter',imageFilter);
+    window.addEventListener('lens-open-registration',registration);
+    window.addEventListener('lens-open-focus',focus);
     return()=>{
       window.removeEventListener('keydown',key);
       window.removeEventListener('lens-open-customizer',custom);
       window.removeEventListener('lens-open-command',command);
       window.removeEventListener('lens-open-image-filter',imageFilter);
+      window.removeEventListener('lens-open-registration',registration);
+      window.removeEventListener('lens-open-focus',focus);
     };
+  },[]);
+
+  useEffect(()=>{
+    const query=new URLSearchParams(window.location.search);
+    if(query.get('registration')==='1'){setRegistrationOpen(true);query.delete('registration')}
+    else if(query.get('focus')==='1'){setFocusOpen(true);query.delete('focus')}
+    else return;
+    window.history.replaceState({},'',`${window.location.pathname}${query.size?`?${query}`:''}`);
   },[]);
 
   return <div className={`appShell ${prefs.sidebarCollapsed?'sidebarCollapsed':''} ${prefs.manualSkeleton?'manualSkeletonShell pdfSkeletonMode':''}`}>
@@ -116,6 +136,8 @@ function ShellInner({children}:{children:React.ReactNode}){
       {prefs.manualSkeleton&&path!=="/"&&<ClassicHeader
         onSwitchUser={()=>window.location.assign('/?login=1')}
         onImageFilter={()=>setImageFilterOpen(true)}
+        onRegistration={()=>{setImageFilterOpen(false);setRegistrationOpen(true)}}
+        onFocus={()=>{setImageFilterOpen(false);setRegistrationOpen(false);setFocusOpen(true)}}
         onDataset={()=>window.location.assign('/?dataset=1')}
         onInfo={()=>window.location.assign('/system')}
         onExit={()=>window.location.assign('/')}
@@ -134,6 +156,8 @@ function ShellInner({children}:{children:React.ReactNode}){
 
     <CustomizationDrawer open={customize} onClose={()=>setCustomize(false)}/>
     {imageFilterOpen&&<ImageFilterWorkspace modal onClose={()=>setImageFilterOpen(false)}/>}
+    {registrationOpen&&<RegistrationWorkspace onClose={()=>setRegistrationOpen(false)}/>}
+    {focusOpen&&<FocusWorkspace onClose={()=>setFocusOpen(false)}/>}
     <CommandPalette
       open={palette}
       onClose={()=>setPalette(false)}

@@ -3,19 +3,21 @@
 type ClassicHeaderProps={
   onSwitchUser?:()=>void;
   onImageFilter?:()=>void;
+  onRegistration?:()=>void;
+  onFocus?:()=>void;
   onDataset?:()=>void;
   onInfo?:()=>void;
   onExit?:()=>void;
   onUi?:()=>void;
 };
 
-export function ClassicHeader({onSwitchUser,onImageFilter,onDataset,onInfo,onExit,onUi}:ClassicHeaderProps){
+export function ClassicHeader({onSwitchUser,onImageFilter,onRegistration,onFocus,onDataset,onInfo,onExit,onUi}:ClassicHeaderProps){
   const go=(href:string)=>{window.location.href=href};
   return <div className="pdfMenuStrip sharedClassicHeader" role="navigation" aria-label="Classic UI navigation">
     <button onClick={onSwitchUser}>Switch User</button>
     <button onClick={onImageFilter||(()=>go('/storage'))}>Image Filter</button>
-    <button onClick={()=>go('/registration')}>Registration</button>
-    <button onClick={()=>go('/focus')}>Focus</button>
+    <button onClick={onRegistration||(()=>go('/registration'))}>Registration</button>
+    <button onClick={onFocus||(()=>go('/focus'))}>Focus</button>
     <button onClick={()=>go('/settings')}>Settings</button>
     <button onClick={()=>go('/bv-test')}>BV Test</button>
     <button onClick={onInfo}>Info</button>

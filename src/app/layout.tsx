@@ -1,5 +1,7 @@
 import './globals.css';
 import './manual.css';
+import './registration.css';
+import './focus.css';
 import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {ClientProviders} from '@/components/ClientProviders';

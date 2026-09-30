@@ -994,12 +994,12 @@
       }
     },
     "premium-white": {
-      "customBg": "",
+      "customBg": "#ffffff",
       "customPanel": "",
-      "customHeader": "",
-      "customButton": "",
-      "customCanvas": "",
-      "customBorder": "",
+      "customHeader": "#ffffff",
+      "customButton": "#efedf7",
+      "customCanvas": "#050505",
+      "customBorder": "#8c8c8c",
       "customText": "",
       "customPrimary": "",
       "customSecondary": "",
@@ -1128,123 +1128,123 @@
       "borderOpacity": 1,
       "componentStyles": {
         "history": {
-          "background": "",
+          "background": "#000000",
           "opacity": 1,
           "border": "",
-          "radius": 0,
-          "shadow": 1
+          "radius": 6,
+          "shadow": 0
         },
         "machine": {
-          "background": "",
+          "background": "#ebebeb",
           "opacity": 1,
           "border": "",
-          "radius": 0,
-          "shadow": 1
+          "radius": 6,
+          "shadow": 0
         },
         "viewer": {
-          "background": "",
+          "background": "#ebebeb",
           "opacity": 1,
           "border": "",
-          "radius": 0,
-          "shadow": 1
+          "radius": 6,
+          "shadow": 0.05
         },
         "details": {
-          "background": "",
+          "background": "#ebebeb",
           "opacity": 1,
           "border": "",
-          "radius": 0,
-          "shadow": 1
+          "radius": 6,
+          "shadow": 0
         },
         "logs": {
-          "background": "",
+          "background": "#ebebeb",
           "opacity": 1,
           "border": "",
-          "radius": 0,
-          "shadow": 1
+          "radius": 6,
+          "shadow": 0.05
         },
         "wtView": {
-          "background": "",
+          "background": "#ffffff",
           "opacity": 1,
           "border": "",
-          "radius": 0,
-          "shadow": 1
+          "radius": 6,
+          "shadow": 0.05
         },
         "header": {
-          "background": "",
+          "background": "#ffffff",
           "opacity": 1,
-          "border": "",
-          "radius": 0,
-          "shadow": 1
+          "border": "#464649",
+          "radius": 1,
+          "shadow": 0
         },
         "sidebar": {
-          "background": "",
+          "background": "#f8f7f7",
           "opacity": 1,
           "border": "",
-          "radius": 0,
-          "shadow": 1
+          "radius": 6,
+          "shadow": 0.15
         },
         "matrixHead": {
-          "background": "",
+          "background": "#ffffff",
           "opacity": 1,
           "border": "",
-          "radius": 0,
-          "shadow": 1
+          "radius": 1,
+          "shadow": 0
         },
         "viewerToolbar": {
-          "background": "",
+          "background": "#fcfcfc",
           "opacity": 1,
           "border": "",
-          "radius": 0,
-          "shadow": 1
+          "radius": 1,
+          "shadow": 0
         },
         "bottomTabs": {
-          "background": "",
+          "background": "#ffffff",
           "opacity": 1,
           "border": "",
-          "radius": 0,
-          "shadow": 1
+          "radius": 1,
+          "shadow": 0
         },
         "actionButtons": {
-          "background": "",
+          "background": "#ffffff",
           "opacity": 1,
           "border": "",
-          "radius": 0,
-          "shadow": 1
+          "radius": 6,
+          "shadow": 0
         },
         "canvas": {
-          "background": "",
+          "background": "#201e1e",
           "opacity": 1,
           "border": "",
           "radius": 0,
-          "shadow": 1
+          "shadow": 0
         },
         "cards": {
-          "background": "",
+          "background": "#fdfcfc",
           "opacity": 1,
           "border": "",
-          "radius": 0,
-          "shadow": 1
+          "radius": 6,
+          "shadow": 0
         },
         "dialogs": {
-          "background": "",
-          "opacity": 1,
-          "border": "",
-          "radius": 0,
-          "shadow": 1
+          "background": "#ffffff",
+          "opacity": 0.63,
+          "border": "#1726ab",
+          "radius": 3,
+          "shadow": 0
         },
         "formControls": {
-          "background": "",
+          "background": "#ffffff",
           "opacity": 1,
-          "border": "",
-          "radius": 0,
-          "shadow": 1
+          "border": "#f5f5f5",
+          "radius": 6,
+          "shadow": 0
         }
       }
     }
   },
   "whitePdfPolishVersion": 1,
   "accent": "bronze",
-  "density": "compact",
+  "density": "spacious",
   "fontScale": 1,
   "radius": 8,
   "glass": 1,
@@ -1252,7 +1252,7 @@
   "glow": true,
   "sidebarCollapsed": true,
   "manualSkeleton": true,
-  "uiLocked": false,
+  "uiLocked": true,
   "sidebarWidth": 82,
   "headerHeight": 46,
   "okColor": "#44df83",
@@ -1513,7 +1513,7 @@
   "viewerWidth": 1.1881353769295344,
   "detailsWidth": 0.5786315219677027,
   "inspectionHistoryWidth": 570,
-  "inspectionControlWidth": 302,
+  "inspectionControlWidth": 289,
   "inspectionDetailsWidth": 298,
   "trayHeight": 128,
   "bottomHeight": 340,
