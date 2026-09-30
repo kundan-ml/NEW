@@ -1128,7 +1128,7 @@
       "borderOpacity": 1,
       "componentStyles": {
         "history": {
-          "background": "#000000",
+          "background": "#ebebeb",
           "opacity": 1,
           "border": "",
           "radius": 6,
@@ -1163,7 +1163,7 @@
           "shadow": 0.05
         },
         "wtView": {
-          "background": "#ffffff",
+          "background": "#ebebeb",
           "opacity": 1,
           "border": "",
           "radius": 6,
@@ -1513,7 +1513,7 @@
   "viewerWidth": 1.1881353769295344,
   "detailsWidth": 0.5786315219677027,
   "inspectionHistoryWidth": 570,
-  "inspectionControlWidth": 289,
+  "inspectionControlWidth": 297,
   "inspectionDetailsWidth": 298,
   "trayHeight": 128,
   "bottomHeight": 340,

@@ -9455,7 +9455,6 @@ html[data-theme="premium-white"] .historyTable tr:hover td {
   background: color-mix(in srgb, var(--primary) 6%, white) !important
 }
 
-html[data-theme="premium-white"] .inspectionCurrentFields span,
 html[data-theme="premium-white"] .inspectionDetailBox,
 html[data-theme="premium-white"] .inspectionWtCard {
   background: linear-gradient(180deg, #fff, #f7f9fc) !important;
@@ -10025,7 +10024,7 @@ html[data-theme="premium-white"] .pdfSkeletonMode .inspectionCurrentFields .refe
   border-color: var(--studio-border) !important
 }
 
-html[data-theme="premium-white"] .pdfSkeletonMode :is(.inspectionWtCard, .inspectionDetailBox, .inspectionCurrentFields .referenceInfoRow) {
+html[data-theme="premium-white"] .pdfSkeletonMode :is(.inspectionWtCard, .inspectionDetailBox) {
   background: color-mix(in srgb, var(--surface) 85%, var(--surface-elevated)) !important;
   border-color: var(--border) !important;
   color: var(--text-primary) !important
@@ -13435,7 +13434,7 @@ html[data-theme="premium-white"][data-workspace="manual"] .historyTable tr:hover
   background: color-mix(in srgb, var(--primary) 8%, var(--surface)) !important;
 }
 
-html[data-theme="premium-white"][data-workspace="manual"] :is(.inspectionWtCard, .inspectionDetailBox, .inspectionCurrentFields span) {
+html[data-theme="premium-white"][data-workspace="manual"] :is(.inspectionWtCard, .inspectionDetailBox) {
   background: var(--fill-surface) !important;
   border-color: var(--studio-border) !important;
 }
@@ -13445,4 +13444,49 @@ html[data-theme="premium-white"][data-workspace="manual"] :is(.premiumChannelTab
   color: #fff !important;
   border-color: transparent !important;
   box-shadow: 0 5px 14px color-mix(in srgb, var(--primary) 20%, transparent) !important;
+}
+
+/* Premium White: Current Lens metadata must retain contrast against the
+   configurable white surface.  Earlier dark-workstation rules left these
+   values near-white, making identifiers disappear on the light panel. */
+html[data-theme="premium-white"] :is(.inspectionCurrentPanel, .oakDetailsPanel) .referenceInfoRow {
+  background: transparent !important;
+  border-bottom-color: color-mix(in srgb, var(--border) 74%, transparent) !important;
+}
+
+html[data-theme="premium-white"][data-workspace="manual"] .pdfSkeletonMode .inspectionCurrentPanel .inspectionCurrentFields,
+html[data-theme="premium-white"][data-workspace="manual"] .pdfSkeletonMode .inspectionCurrentPanel .inspectionCurrentFields .referenceInfoRow {
+  background: transparent !important;
+}
+
+html[data-theme="premium-white"] :is(.inspectionCurrentPanel, .oakDetailsPanel) .referenceInfoRow>span {
+  background: transparent !important;
+  color: var(--text-secondary) !important;
+  font-weight: 650;
+}
+
+html[data-theme="premium-white"] :is(.inspectionCurrentPanel, .oakDetailsPanel) .referenceInfoRow>b {
+  color: var(--text-primary) !important;
+  font-weight: 700;
+}
+
+html[data-theme="premium-white"] :is(.inspectionCurrentPanel, .oakDetailsPanel) .referenceInfoRow .referenceResult {
+  color: #fff !important;
+}
+
+/* Classic white inspection panels share one body treatment. Inner views are
+   transparent so the editable panel colors remain visible in every tab. */
+html[data-theme="premium-white"][data-workspace="manual"] .inspectionHistoryColumn>.matrixPanel,
+html[data-theme="premium-white"][data-workspace="manual"] .inspectionHistoryColumn .matrixScroller,
+html[data-theme="premium-white"][data-workspace="manual"] .inspectionHistoryActions,
+html[data-theme="premium-white"][data-workspace="manual"] .inspectionLogPanel :is(.inspectionLogRows, .inspectionWtView, .inspectionWtGallery, .inspectionTrendView, .inspectionTrendStats.yieldOnly) {
+  background: transparent !important;
+}
+
+html[data-theme="premium-white"][data-workspace="manual"] .inspectionHistoryColumn .premiumMatrixHead {
+  background: var(--studio-matrixHead-fill) !important;
+}
+
+html[data-theme="premium-white"][data-workspace="manual"] .inspectionLogPanel .inspectionLogTabs {
+  background: var(--studio-bottomTabs-fill) !important;
 }

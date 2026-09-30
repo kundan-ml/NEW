@@ -10,6 +10,31 @@ const COLOR_KEYS=['customBg','customPanel','customHeader','customButton','custom
 const defaultThemeProfile=(theme:ThemeName):ThemeColorProfile=>({customBg:'',customPanel:'',customHeader:'',customButton:'',customCanvas:'',customBorder:'',customText:'',customPrimary:'',customSecondary:'',customAccent:'',gradientStart:'',gradientEnd:'',gradientDirection:'to-bottom-right',gradientIntensity:.9,layerGradients:createDefaultLayerGradients(theme),shadowColor:'#000000',shadowStrength:1,shadowBlur:24,borderOpacity:1,componentStyles:defaultComponentStyles()});
 const profileFrom=(value:Pick<UiPreferences,typeof COLOR_KEYS[number]>):ThemeColorProfile=>Object.fromEntries(COLOR_KEYS.map(key=>[key,value[key]])) as ThemeColorProfile;
 const cloneProfile=(profile:ThemeColorProfile,theme:ThemeName):ThemeColorProfile=>{const defaults=defaultThemeProfile(theme);return{...defaults,...profile,layerGradients:structuredClone({...defaults.layerGradients,...(profile.layerGradients||{})}),componentStyles:structuredClone({...defaults.componentStyles,...(profile.componentStyles||{})})}};
+// Repair the exact set of Premium White panel colors accidentally saved into
+// Graphite. Keep every other user-customized Graphite setting untouched.
+const hasWhitePanelBleed=(styles:ComponentStyles)=>
+ ['history','machine','details','logs','wtView'].every(key=>styles[key as keyof ComponentStyles]?.background==='#ebebeb')&&
+ styles.matrixHead?.background==='#ffffff'&&styles.bottomTabs?.background==='#ffffff';
+const restoreGraphitePanels=(styles:ComponentStyles):ComponentStyles=>({
+ ...styles,
+ history:{...styles.history,background:''},
+ machine:{...styles.machine,background:''},
+ details:{...styles.details,background:''},
+ logs:{...styles.logs,background:''},
+ wtView:{...styles.wtView,background:''},
+ matrixHead:{...styles.matrixHead,background:''},
+ bottomTabs:{...styles.bottomTabs,background:''}
+});
+const repairGraphiteProfile=(prefs:UiPreferences):UiPreferences=>{
+ const stored=prefs.themeProfiles.graphite;
+ const repairStored=!!stored&&hasWhitePanelBleed(stored.componentStyles);
+ const repairActive=prefs.theme==='graphite'&&hasWhitePanelBleed(prefs.componentStyles);
+ if(!repairStored&&!repairActive)return prefs;
+ return{...prefs,
+  ...(repairActive?{componentStyles:restoreGraphitePanels(prefs.componentStyles)}:{}),
+  themeProfiles:repairStored?{...prefs.themeProfiles,graphite:{...stored,componentStyles:restoreGraphitePanels(stored.componentStyles)}}:prefs.themeProfiles
+ };
+};
 type Ctx={prefs:UiPreferences;canCustomize:boolean;saveState:'idle'|'saving'|'saved'|'error';saveError:string;saveNow:()=>Promise<boolean>;set:<K extends keyof UiPreferences>(key:K,value:UiPreferences[K])=>void;patch:(value:Partial<UiPreferences>)=>void;selectTheme:(theme:ThemeName)=>void;resetThemeColors:()=>void;reset:()=>void};const UIContext=createContext<Ctx|null>(null);
 const upgradeWhitePdfProfile=(profile:ThemeColorProfile):ThemeColorProfile=>{
  const next=cloneProfile(profile,'premium-white');
@@ -33,10 +58,11 @@ const merge=(value?:Partial<UiPreferences>|null):UiPreferences=>{
   }
  }
  merged.whitePdfPolishVersion=1;
- return merged;
+ return repairGraphiteProfile(merged);
 };
 export function UIProvider({children,initialPreferences}:{children:React.ReactNode;initialPreferences?:Partial<UiPreferences>}){
  const[prefs,setPrefs]=useState(()=>merge(initialPreferences));const[hydrated,setHydrated]=useState(!!initialPreferences);const[canCustomize,setCanCustomize]=useState(false);const[saveState,setSaveState]=useState<'idle'|'saving'|'saved'|'error'>('idle');const[saveError,setSaveError]=useState('');const skipSave=useRef(false);const firstApply=useRef(true);const prefsRef=useRef(prefs);prefsRef.current=prefs;
+ useEffect(()=>{setPrefs(current=>repairGraphiteProfile(current))},[prefs]);
  useEffect(()=>{if((prefs.whitePdfPolishVersion||0)<1)setPrefs(current=>merge(current))},[prefs.whitePdfPolishVersion]);
  useEffect(()=>{if(initialPreferences)return;let active=true;(async()=>{let saved:null|Partial<UiPreferences>=null;try{const response=await fetch('/api/ui-config',{cache:'no-store'});if(response.ok)saved=await response.json()}catch{}if(active){setPrefs(merge(saved));setHydrated(true)}})();return()=>{active=false}},[initialPreferences]);
  useEffect(()=>{let active=true;const check=()=>fetch('/api/ui-config/access',{cache:'no-store'}).then(r=>r.json()).then(s=>{if(active)setCanCustomize(s.canCustomize===true)}).catch(()=>{if(active)setCanCustomize(false)});void check();window.addEventListener('lens-auth-changed',check);window.addEventListener('focus',check);return()=>{active=false;window.removeEventListener('lens-auth-changed',check);window.removeEventListener('focus',check)}},[]);
