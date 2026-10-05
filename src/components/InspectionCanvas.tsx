@@ -4,6 +4,7 @@ import {useCallback,useEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
 import {Crosshair,Focus,Maximize2,Minimize2,Minus,MousePointer2,Plus,RotateCcw,ScanSearch} from 'lucide-react';
 import type {Defect} from '@/types';
+import {constrainImagePan} from '@/lib/image-pan';
 
 type Probe={x:number;y:number;gray:number|null};
 type Props={imageUrl:string;defects:Defect[];selectedDefect?:number;showDefects?:boolean;showCrosshair?:boolean;onProbe?:(p:Probe)=>void};
@@ -21,11 +22,20 @@ export function InspectionCanvas({imageUrl,defects,selectedDefect=-1,showDefects
  const activePointers=useRef(new Map<number,{x:number;y:number;startX:number;startY:number}>());
  const pinch=useRef<{distance:number;scale:number;imageX:number;imageY:number}|null>(null);
  const viewRef=useRef<View>({scale:1,x:0,y:0});
- const[view,setView]=useState<View>({scale:1,x:0,y:0});const[drag,setDrag]=useState<{sx:number;sy:number;vx:number;vy:number}|null>(null);const[state,setState]=useState<'idle'|'loading'|'ready'|'error'>('idle');const[error,setError]=useState('');const[probe,setProbe]=useState<Probe|null>(null);const[expanded,setExpanded]=useState(false);const[popupAspect,setPopupAspect]=useState(16/9);
+ const[view,setRawView]=useState<View>({scale:1,x:0,y:0});const[drag,setDrag]=useState<{sx:number;sy:number;vx:number;vy:number}|null>(null);const[state,setState]=useState<'idle'|'loading'|'ready'|'error'>('idle');const[error,setError]=useState('');const[probe,setProbe]=useState<Probe|null>(null);const[expanded,setExpanded]=useState(false);const[popupAspect,setPopupAspect]=useState(16/9);
+ const constrainView=useCallback((next:View):View=>{
+   const h=host.current,i=source.current;
+   if(!h||!i||!i.naturalWidth||!i.naturalHeight)return next;
+   const r=h.getBoundingClientRect();
+   return {...next,...constrainImagePan(r,{x:next.x,y:next.y,width:i.naturalWidth*next.scale,height:i.naturalHeight*next.scale})};
+ },[]);
+ const setView=useCallback((update:React.SetStateAction<View>)=>{
+   setRawView(current=>{const next=constrainView(typeof update==='function'?update(current):update);viewRef.current=next;return next});
+ },[constrainView]);
  useEffect(()=>{viewRef.current=view},[view]);
 
- const fit=useCallback(()=>{const h=host.current,i=source.current;if(!h||!i||!i.naturalWidth)return;const r=h.getBoundingClientRect();const padding=Math.max(28,Math.min(r.width,r.height)*.055);const s=Math.max(.01,Math.min((r.width-padding*2)/i.naturalWidth,(r.height-padding*2)/i.naturalHeight));setView({scale:s,x:(r.width-i.naturalWidth*s)/2,y:(r.height-i.naturalHeight*s)/2})},[]);
- const restoreOrFit=useCallback((url:string)=>{const h=host.current,i=source.current;if(!h||!i)return;const r=h.getBoundingClientRect(),saved=readSavedView(url);lastSize.current={width:r.width,height:r.height};activeImage.current=url;if(saved){const scale=Math.max(.025,Math.min(12,saved.scale));setView({scale,x:r.width/2-saved.centerX*scale,y:r.height/2-saved.centerY*scale})}else fit()},[fit]);
+ const fit=useCallback(()=>{const h=host.current,i=source.current;if(!h||!i||!i.naturalWidth)return;const r=h.getBoundingClientRect();const padding=Math.max(28,Math.min(r.width,r.height)*.055);const s=Math.max(.01,Math.min((r.width-padding*2)/i.naturalWidth,(r.height-padding*2)/i.naturalHeight));setView({scale:s,x:(r.width-i.naturalWidth*s)/2,y:(r.height-i.naturalHeight*s)/2})},[setView]);
+ const restoreOrFit=useCallback((url:string)=>{const h=host.current,i=source.current;if(!h||!i)return;const r=h.getBoundingClientRect(),saved=readSavedView(url);lastSize.current={width:r.width,height:r.height};activeImage.current=url;if(saved){const scale=Math.max(.025,Math.min(12,saved.scale));setView({scale,x:r.width/2-saved.centerX*scale,y:r.height/2-saved.centerY*scale})}else fit()},[fit,setView]);
 
  useEffect(()=>{
    const requestId=++loadSequence.current;let revoked='';setProbe(null);setError('');
@@ -96,11 +106,11 @@ export function InspectionCanvas({imageUrl,defects,selectedDefect=-1,showDefects
      const rect=e.currentTarget.getBoundingClientRect(),gesture=pinch.current;
      const scale=Math.max(.025,Math.min(12,gesture.scale*Math.hypot(a.x-b.x,a.y-b.y)/gesture.distance));
      const midX=(a.x+b.x)/2-rect.left,midY=(a.y+b.y)/2-rect.top;
-     const next={scale,x:midX-gesture.imageX*scale,y:midY-gesture.imageY*scale};
+     const next=constrainView({scale,x:midX-gesture.imageX*scale,y:midY-gesture.imageY*scale});
      viewRef.current=next;
      setView(next);
    }else if(pointer&&drag){
-     const next={...viewRef.current,x:drag.vx+e.clientX-drag.sx,y:drag.vy+e.clientY-drag.sy};
+     const next=constrainView({...viewRef.current,x:drag.vx+e.clientX-drag.sx,y:drag.vy+e.clientY-drag.sy});
      viewRef.current=next;
      setView(next);
    }

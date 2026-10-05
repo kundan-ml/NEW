@@ -1,3 +1,2 @@
-import '../manual.css';
-import {ManualWorkbench} from '@/components/ManualWorkbench';
-export default function SettingsPage(){return <ManualWorkbench kind="settings"/>}
+import {redirect} from 'next/navigation';
+export default function SettingsPage(){redirect('/?settings=1')}

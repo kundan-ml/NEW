@@ -4,18 +4,18 @@ import {useEffect,useMemo,useRef,useState} from 'react';
 import {Camera,Check,Download,FileImage,ImagePlus,Loader2,RotateCcw,Save,ShieldAlert,X} from 'lucide-react';
 import {api,previewUrl} from '@/lib/api';
 import {createLocalImagePreview,downloadLocalImage} from '@/lib/local-image-preview';
+import {ILLUMINATION_IMAGE_PATTERN as ACCEPTED,mapIlluminationImages} from '@/lib/illumination-images';
 import type {RegistrationResult,SystemInfo} from '@/types';
 
 type Channel='h'|'p'|'d'|'n';
 type ChannelFiles=Partial<Record<Channel,File>>;
 const EMPTY_FILES:ChannelFiles={};
 const CHANNELS=[
-  {key:'h',label:'Diffuse Brightfield',short:'DBF'},
-  {key:'p',label:'Phasecontrast',short:'PC'},
-  {key:'d',label:'Darkfield',short:'DF'},
-  {key:'n',label:'Telecentric Brightfield',short:'TBF'},
+  {key:'h',label:'Telecentric Brightfield',short:'TBF'},
+  {key:'p',label:'Phase Contrast',short:'PC'},
+  {key:'d',label:'Dark Field',short:'DF'},
+  {key:'n',label:'Diffuse Brightfield',short:'DBF'},
 ] as const;
-const ACCEPTED=/\.(bmp|tif|tiff)$/i;
 
 export function RegistrationWorkspace({onClose}:{onClose:()=>void}){
   const[head,setHead]=useState(1);
@@ -27,8 +27,10 @@ export function RegistrationWorkspace({onClose}:{onClose:()=>void}){
   const[result,setResult]=useState<RegistrationResult|null>(null);
   const[uploaded,setUploaded]=useState<{head:number;datasetId:string;sampleId:string}|null>(null);
   const[busy,setBusy]=useState<'uploading'|'registering'|'saving'|'mode'|null>(null);
-  const[notice,setNotice]=useState('Select four images.');
+  const[notice,setNotice]=useState('Click any canvas to load 3–4 images, or add one image per slot.');
   const inputRefs=useRef<Partial<Record<Channel,HTMLInputElement|null>>>({});
+  const batchInputRef=useRef<HTMLInputElement|null>(null);
+  const clickedChannelRef=useRef<Channel>('h');
   const files=filesByHead[head]||EMPTY_FILES;
   const ready=CHANNELS.every(channel=>!!files[channel.key]);
   const matchingResult=result?.camera_head===head?result:null;
@@ -89,6 +91,26 @@ export function RegistrationWorkspace({onClose}:{onClose:()=>void}){
     setUploaded(null);
     setResult(current=>current?.camera_head===head?null:current);
     setNotice(`${CHANNELS.find(item=>item.key===channel)?.short} loaded.`);
+  }
+
+  function chooseCanvasFiles(selected:FileList|null){
+    if(!selected?.length||busy)return;
+    const chosen=Array.from(selected);
+    if(chosen.length===1){chooseFile(clickedChannelRef.current,chosen[0]);return}
+    const mapping=mapIlluminationImages(chosen);
+    if(!mapping.ok){setNotice(mapping.message);return}
+    const mapped=mapping.images;
+    setFilesByHead(current=>({...current,[head]:mapped}));
+    setUploaded(null);
+    setResult(current=>current?.camera_head===head?null:current);
+    const missing=CHANNELS.filter(channel=>!mapped[channel.key]).map(channel=>channel.label);
+    setNotice(missing.length?`${chosen.length} images matched. Add ${missing.join(', ')} manually to register.`:`Four illuminations matched automatically. Ready to register.`);
+  }
+
+  function openCanvasPicker(channel:Channel){
+    if(busy)return;
+    clickedChannelRef.current=channel;
+    batchInputRef.current?.click();
   }
 
   function removeFile(channel:Channel){
@@ -167,18 +189,18 @@ export function RegistrationWorkspace({onClose}:{onClose:()=>void}){
           </section>
         </aside>
 
-        <section className="registrationVisuals" aria-label="Uploaded image previews">{CHANNELS.map((channel,index)=><article className={`registrationPreview ${files[channel.key]?'has-image':''}`} key={channel.key}>
+        <section className="registrationVisuals" aria-label="Uploaded image previews"><input ref={batchInputRef} type="file" accept=".bmp,.tif,.tiff,image/bmp,image/tiff" multiple onChange={event=>{chooseCanvasFiles(event.target.files);event.target.value=''}} aria-label="Load one, three, or four registration images" hidden/>{CHANNELS.map((channel,index)=><article className={`registrationPreview ${files[channel.key]?'has-image':''}`} key={channel.key}>
           <header><span><i>{String(index+1).padStart(2,'0')}</i><b>{channel.label}</b></span></header>
           <div className="registrationPreviewFrame">
-            {files[channel.key]&&sourceUrls[channel.key]&&!failedPreviews[channel.key]?<img src={sourceUrls[channel.key]} alt={`${channel.label} registration preview`} onError={()=>setFailedPreviews(current=>({...current,[channel.key]:true}))}/>:<div className="registrationPreviewEmpty"><FileImage/>{files[channel.key]&&<b>{failedPreviews[channel.key]?'Preview unavailable':'Preparing preview…'}</b>}</div>}
-            {!files[channel.key]&&<button onClick={()=>inputRefs.current[channel.key]?.click()} aria-label={`Upload ${channel.label} BMP or TIFF image`} title="BMP or TIFF"><ImagePlus/>Upload</button>}
+            {files[channel.key]&&sourceUrls[channel.key]&&!failedPreviews[channel.key]?<img src={sourceUrls[channel.key]} draggable={false} alt={`${channel.label} registration preview`} onError={()=>setFailedPreviews(current=>({...current,[channel.key]:true}))}/>:<div className="registrationPreviewEmpty"><FileImage/>{files[channel.key]&&<b>{failedPreviews[channel.key]?'Preview unavailable':'Preparing preview…'}</b>}</div>}
+            <button className="registrationCanvasPicker" type="button" disabled={!!busy} onClick={()=>openCanvasPicker(channel.key)} aria-label={`Load images from ${channel.label} canvas. Select one image for this slot or three to four images for automatic illumination matching.`} title="Click to load 3–4 images automatically, or one image into this slot"><span><ImagePlus/>{files[channel.key]?'Load images':'Load 3–4 images'}</span></button>
           </div>
           <footer><span title={files[channel.key]?.name}>{files[channel.key]?.name||'—'}</span><div><button onClick={()=>inputRefs.current[channel.key]?.click()} title={`${files[channel.key]?'Replace':'Upload'} ${channel.label} image`} aria-label={`${files[channel.key]?'Replace':'Upload'} ${channel.label} image`}><ImagePlus/></button>{files[channel.key]&&<button onClick={()=>downloadLocalImage(files[channel.key]!)} title={`Download ${channel.label} source`} aria-label={`Download ${channel.label} source`}><Download/></button>}</div></footer>
         </article>)}</section>
       </div>
 
       <footer className="registrationFooter">
-        <div className="registrationNotice" role="status"><span className={busy?'processing':matchingResult?'ready':''}>{busy?<Loader2 className="spin"/>:matchingResult?<Check/>:<ShieldAlert/>}</span><p>{notice}</p></div>
+        <div className="registrationNotice" role="status"><span className={busy?'processing':matchingResult?'ready':''}>{busy?<Loader2 className="spin"/>:matchingResult?<Check/>:<ShieldAlert/>}</span><p title={notice}>{notice}</p></div>
         <div className="registrationActions">
           {system?.mode==='AUTO'&&<button className="registrationSecondary" disabled={!!busy} onClick={()=>void switchToSetup()}>Switch to Setup</button>}
           <button className="registrationSecondary" disabled={!!busy||!CHANNELS.some(channel=>files[channel.key])} onClick={()=>{setFilesByHead(current=>({...current,[head]:{}}));setUploaded(null);setResult(current=>current?.camera_head===head?null:current);setNotice('Images cleared.')}}><RotateCcw/>Clear</button>

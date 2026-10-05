@@ -3,7 +3,7 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {useRouter} from 'next/navigation';
 import {
-  Archive,BookOpen,Camera,ChartNoAxesCombined,Clock3,FolderArchive,History,ImageIcon,
+  Archive,BookOpen,Camera,ChartNoAxesCombined,FolderArchive,History,ImageIcon,
   Microscope,Search,Settings,ShieldCheck,SlidersHorizontal,Sparkles,Wrench,X
 } from 'lucide-react';
 import {manualUrl} from '@/lib/api';
@@ -17,10 +17,9 @@ const commands=[
   {name:'Focus + Resolution / Lighting',detail:'Hardware jig focus, resolution and illumination metrics',href:'/focus',icon:Sparkles,keys:''},
   {name:'Registration',detail:'Camera alignment, image scale, Inbox / Outbox',href:'/registration',icon:ImageIcon,keys:'G R'},
   {name:'Camera System',detail:'Camera assignment, exposure, ROI, triggerbox and lighting',href:'/setup',icon:Camera,keys:'G C'},
-  {name:'General Settings',detail:'PLC, triggerbox, CSV, image format and timeouts',href:'/settings',icon:Settings,keys:'G G'},
+  {name:'General Settings',detail:'PLC, trigger box, auto-logoff, SPC images and CSV memory',href:'/settings',icon:Settings,keys:'G G'},
   {name:'Access & Operation Mode',detail:'NoUser / Operator / Service / Administrator, AUTO / SETUP',href:'/',icon:ShieldCheck,keys:''},
-  {name:'System Messages & Version',detail:'Logs, version information and capability status',href:'/system',icon:Wrench,keys:'G Y'},
-  {name:'Trigger Timeout Model',detail:'Admin-configured sequential WT processing model',href:'/settings',icon:Clock3,keys:''},
+  {name:'Info · Version information',detail:'Software, inspection library and registration versions',href:'/system',icon:Wrench,keys:'G Y'},
   {name:'Open OKLIN3 Manual',detail:'Open the supplied operating manual',href:'manual',icon:BookOpen,keys:''},
   {name:'Image Display Controls',detail:'Pan, zoom, 1:1, crosshair, gray probe and defect focus',href:'/',icon:SlidersHorizontal,keys:''}
 ];
@@ -51,6 +50,11 @@ export function CommandPalette({open,onClose,onCustomize}:{open:boolean;onClose:
     onClose();
     if(href==='manual'){
       window.open(manualUrl(),'_blank');
+      return;
+    }
+    const popupEvent:Record<string,string>={'/settings':'lens-open-settings','/bv-test':'lens-open-bv-test','/system':'lens-open-info'};
+    if(popupEvent[href]){
+      window.dispatchEvent(new Event(popupEvent[href]));
       return;
     }
     router.push(href);

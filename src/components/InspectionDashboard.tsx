@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import { api, previewUrl, samplePreviewUrl, WS_API } from "@/lib/api";
 import { primePreview } from "@/lib/preview-cache";
+import { averageInferenceMs, formatInferenceMs, inferenceElapsedMs, INFERENCE_TIMING_DESCRIPTION } from "@/lib/inference-timing";
 import type {
   DatasetSummary,
   InspectionResult,
@@ -365,6 +366,7 @@ export function InspectionDashboard({
     [samples, current],
   );
   const currentResult = current ? resultMap.get(current) : undefined;
+  const currentInferenceTime = formatInferenceMs(inferenceElapsedMs(currentResult));
   const lastInspectionLabel = currentResult?.created_at
     ? new Date(currentResult.created_at).toLocaleString([], {
         year: "numeric",
@@ -408,8 +410,7 @@ export function InspectionDashboard({
   const warnRate = results.length ? (counts.WARN / results.length) * 100 : 0;
   const totalDefects = useMemo(() => results.reduce((total, item) => total + (item.defects?.length || 0), 0), [results]);
   const averageCycleMs = useMemo(() => {
-    const times = results.flatMap(item => item.channels || []).map(item => item.elapsed_ms).filter(value => Number.isFinite(value) && value >= 0);
-    return times.length ? times.reduce((total, value) => total + value, 0) / times.length : 0;
+    return averageInferenceMs(results);
   }, [results]);
   const activeGlobalWt = selectedGlobalWt || globalHistory.find(entry => entry.datasetId === datasetId && entry.sample.id === current)?.wt || 1;
   const inspectionIdentifiers = useMemo(() => {
@@ -1004,8 +1005,10 @@ export function InspectionDashboard({
             onImageFilter={()=>window.dispatchEvent(new Event("lens-open-image-filter"))}
             onRegistration={()=>window.dispatchEvent(new Event("lens-open-registration"))}
             onFocus={()=>window.dispatchEvent(new Event("lens-open-focus"))}
+            onSettings={()=>window.dispatchEvent(new Event("lens-open-settings"))}
+            onBvTest={()=>window.dispatchEvent(new Event("lens-open-bv-test"))}
             onDataset={()=>setLoader(true)}
-            onInfo={()=>setToast(`OKLIN3 · Version ${info?.version||"7.4.0"}`)}
+            onInfo={()=>window.dispatchEvent(new Event("lens-open-info"))}
             onExit={()=>setToast("Exit is disabled in the browser interface")}
             onUi={()=>window.dispatchEvent(new Event("lens-open-customizer"))}
           />
@@ -1279,6 +1282,7 @@ export function InspectionDashboard({
                 {measurementEntries.map(([key, value]) => (
                   <InfoRow key={key} label={measurementLabel(key)} value={formatMeasurement(key, value)} />
                 ))}
+                <InfoRow label="Inference time" value={currentInferenceTime} title={INFERENCE_TIMING_DESCRIPTION} />
               </div>
               <div className="inspectionDefectTitle">
                 <h3>Detected defects</h3>
@@ -1479,7 +1483,7 @@ export function InspectionDashboard({
                           {wtViewMode === "images" ? (
                             <div className="inspectionWtSquare">
                                 {item.src ? (
-                                  <img src={item.src} alt={item.name} />
+                                  <img src={item.src} draggable={false} alt={item.name} />
                                 ) : (
                                   <span className="inspectionMissingImage">
                                     No image
@@ -1534,8 +1538,11 @@ export function InspectionDashboard({
             Version: <b>{info?.version || "1.0.0"}</b>
           </span>
           <span>
-            Inspection Time:{" "}
+            Last inspection:{" "}
             <b>{lastInspectionLabel}</b>
+          </span>
+          <span title={INFERENCE_TIMING_DESCRIPTION}>
+            HALCON inference: <b>{currentInferenceTime}</b>
           </span>
           <em>{statusNow ? `${statusNow.toLocaleDateString()} · ${statusNow.toLocaleTimeString()}` : '—'}</em>
         </div>
@@ -1837,11 +1844,12 @@ export function InspectionDashboard({
                   />
                   <InfoRow label="Oven Nr." value={sample?.metadata.machine || "—"} />
                   <InfoRow label="EM Tray Nr." value={sample?.metadata.u_index || "—"} />
+                  <InfoRow label="Inference time" value={currentInferenceTime} title={INFERENCE_TIMING_DESCRIPTION} />
                 </div>
                 <div className="referenceLensPreview">
                   <div className="referencePreviewImage">
                     {detailPreviewSrc ? (
-                      <img src={detailPreviewSrc} alt="Current lens" />
+                      <img src={detailPreviewSrc} draggable={false} alt="Current lens" />
                     ) : null}
                   </div>
                   <button
@@ -1965,7 +1973,7 @@ export function InspectionDashboard({
                     style={{"--legend-color":configuredStatus.color} as React.CSSProperties}
                   >
                     <b>P{s.position}</b>
-                    <img src={src} alt={`Lens position ${s.position}`} />
+                    <img src={src} draggable={false} alt={`Lens position ${s.position}`} />
                     <i className="oakTrayStatusIcon" aria-label={configuredStatus.label} title={configuredStatus.label}/>
                     <em className="oakTrayStatus" title={configuredStatus.label}>{displayStatus === "IDLE" ? "Pending" : displayStatus}</em>
                     {defectCodes&&<em className="oakTrayDefect" title={defectNames.join(", ")}>{defectCodes}</em>}
@@ -2079,7 +2087,7 @@ export function InspectionDashboard({
                       <div className="inspectionOverviewStats">
                         <span><b>{results.length}</b><small>Inspected</small></span>
                         <span><b>{totalDefects}</b><small>Defects</small></span>
-                        <span><b>{averageCycleMs ? `${Math.round(averageCycleMs)}ms` : "—"}</b><small>Avg cycle</small></span>
+                        <span title={INFERENCE_TIMING_DESCRIPTION}><b>{formatInferenceMs(averageCycleMs)}</b><small>Avg inference</small></span>
                       </div>
                     </div>
                     <div className="inspectionStackedBar" aria-label={`OK ${yieldPct.toFixed(1)}%, NOK ${nokRate.toFixed(1)}%, warning ${warnRate.toFixed(1)}%`}>

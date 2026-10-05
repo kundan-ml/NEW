@@ -387,112 +387,112 @@
           "background": "",
           "opacity": 1,
           "border": "",
-          "radius": 0,
+          "radius": 23,
           "shadow": 1
         },
         "machine": {
           "background": "",
           "opacity": 1,
           "border": "",
-          "radius": 0,
+          "radius": 24,
           "shadow": 1
         },
         "viewer": {
           "background": "",
           "opacity": 1,
           "border": "",
-          "radius": 0,
+          "radius": 24,
           "shadow": 1
         },
         "details": {
           "background": "",
           "opacity": 1,
           "border": "",
-          "radius": 0,
+          "radius": 24,
           "shadow": 1
         },
         "logs": {
           "background": "",
           "opacity": 1,
           "border": "",
-          "radius": 0,
+          "radius": 24,
           "shadow": 1
         },
         "wtView": {
           "background": "",
           "opacity": 1,
           "border": "",
-          "radius": 0,
+          "radius": 24,
           "shadow": 1
         },
         "header": {
           "background": "",
           "opacity": 1,
           "border": "",
-          "radius": 0,
+          "radius": 23,
           "shadow": 1
         },
         "sidebar": {
           "background": "",
           "opacity": 1,
           "border": "",
-          "radius": 0,
+          "radius": 24,
           "shadow": 1
         },
         "matrixHead": {
           "background": "",
           "opacity": 1,
           "border": "",
-          "radius": 0,
+          "radius": 24,
           "shadow": 1
         },
         "viewerToolbar": {
           "background": "",
           "opacity": 1,
           "border": "",
-          "radius": 0,
+          "radius": 24,
           "shadow": 1
         },
         "bottomTabs": {
           "background": "",
           "opacity": 1,
           "border": "",
-          "radius": 0,
+          "radius": 24,
           "shadow": 1
         },
         "actionButtons": {
           "background": "",
           "opacity": 1,
           "border": "",
-          "radius": 0,
+          "radius": 24,
           "shadow": 1
         },
         "canvas": {
           "background": "",
           "opacity": 1,
           "border": "",
-          "radius": 0,
+          "radius": 24,
           "shadow": 1
         },
         "cards": {
           "background": "",
           "opacity": 1,
           "border": "",
-          "radius": 0,
+          "radius": 24,
           "shadow": 1
         },
         "dialogs": {
           "background": "",
           "opacity": 1,
           "border": "",
-          "radius": 0,
+          "radius": 23,
           "shadow": 1
         },
         "formControls": {
           "background": "",
           "opacity": 1,
           "border": "",
-          "radius": 0,
+          "radius": 24,
           "shadow": 1
         }
       }
@@ -1252,7 +1252,7 @@
   "glow": true,
   "sidebarCollapsed": true,
   "manualSkeleton": true,
-  "uiLocked": true,
+  "uiLocked": false,
   "sidebarWidth": 82,
   "headerHeight": 46,
   "okColor": "#44df83",
@@ -1514,7 +1514,7 @@
   "detailsWidth": 0.5786315219677027,
   "inspectionHistoryWidth": 570,
   "inspectionControlWidth": 297,
-  "inspectionDetailsWidth": 298,
+  "inspectionDetailsWidth": 302.640625,
   "trayHeight": 128,
   "bottomHeight": 340,
   "trendWidth": 1.230943636029419,

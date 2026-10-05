@@ -1,9 +1,11 @@
 'use client';
 
-import {useEffect,useRef,useState} from 'react';
-import {Activity,Camera,Crosshair,Download,FileImage,ImagePlus,Loader2,MousePointer2,RotateCcw,Save,SlidersHorizontal,Video,VideoOff,X,ZoomIn,ZoomOut} from 'lucide-react';
+import {useCallback,useEffect,useRef,useState} from 'react';
+import {Activity,Camera,Crosshair,Download,FileImage,ImagePlus,Loader2,MousePointer2,RotateCcw,Save,SlidersHorizontal,X,ZoomIn,ZoomOut} from 'lucide-react';
 import {api,dataPackageUrl,previewUrl} from '@/lib/api';
 import {createLocalImagePreview,downloadLocalImage} from '@/lib/local-image-preview';
+import {ILLUMINATION_IMAGE_PATTERN as ACCEPTED,mapIlluminationImages} from '@/lib/illumination-images';
+import {constrainImagePan} from '@/lib/image-pan';
 import type {Role,SystemInfo} from '@/types';
 
 type Channel='h'|'p'|'d'|'n';
@@ -16,10 +18,10 @@ type CameraConfig={head_count:number;cameras:CameraSlot[]};
 type ImageView={zoom:number;offsetX:number;offsetY:number;crosshair:boolean;probe:boolean};
 const DEFAULT_VIEW:ImageView={zoom:1,offsetX:0,offsetY:0,crosshair:true,probe:false};
 const CHANNELS=[
-  {key:'h',name:'Diffuse Brightfield',short:'DBF'},
+  {key:'h',name:'Telecentric Brightfield',short:'TBF'},
   {key:'p',name:'Phase Contrast',short:'PC'},
-  {key:'d',name:'Darkfield',short:'DF'},
-  {key:'n',name:'Telecentric Brightfield',short:'TBF'},
+  {key:'d',name:'Dark Field',short:'DF'},
+  {key:'n',name:'Diffuse Brightfield',short:'DBF'},
 ] as const;
 const TABS:{key:Tab;label:string}[]=[
   {key:'camera',label:'Camera System'},
@@ -28,9 +30,7 @@ const TABS:{key:Tab;label:string}[]=[
   {key:'focus-resolution',label:'Focus + Resolution'},
   {key:'lighting',label:'Lighting'},
 ];
-const ACCEPTED=/\.(bmp|tif|tiff)$/i;
 const EMPTY_FILES:Partial<Record<Channel,File>>={};
-const LENS_CONDITIONS=['Unplugged → unplugged','Plugged → plugged','Unplugged → plugged','Plugged → unplugged'] as const;
 const ROLE_RANK:Record<Role,number>={NoUser:0,Operator:1,Tester:1,Service:2,Administrator:3};
 const EXPECTED_METRICS:Record<TestTab,{key:string;label:string;minRole?:Role}[]>={
   general:[{key:'brightness',label:'Brightness'},{key:'contrast',label:'Contrast'}],
@@ -43,27 +43,61 @@ const visibleMetrics=(tab:TestTab,role:Role)=>EXPECTED_METRICS[tab].filter(metri
 export function FocusWorkspace({onClose}:{onClose:()=>void}){
   const[tab,setTab]=useState<Tab>('camera');
   const[head,setHead]=useState(1);
-  const[lensCondition,setLensCondition]=useState(0);
+  const[activeChannel,setActiveChannel]=useState<Channel>('h');
+  const[cameraSettingsPage,setCameraSettingsPage]=useState<'capture'|'sensor'>('capture');
   const[filesByHead,setFilesByHead]=useState<Record<number,Partial<Record<Channel,File>>>>({});
   const[results,setResults]=useState<Record<string,FocusResult>>({});
   const[uploadedByHead,setUploadedByHead]=useState<Record<number,{head:number;datasetId:string;sampleId:string}>>({});
   const[previews,setPreviews]=useState<Partial<Record<Channel,string>>>({});
   const[failedPreviews,setFailedPreviews]=useState<Partial<Record<Channel,boolean>>>({});
+  const[imageSizes,setImageSizes]=useState<Partial<Record<string,{src:string;width:number;height:number}>>>({});
   const[views,setViews]=useState<Record<string,ImageView>>({});
   const[system,setSystem]=useState<SystemInfo|null>(null);
   const[cameraConfig,setCameraConfig]=useState<CameraConfig|null>(null);
   const[busy,setBusy]=useState(false);
-  const[notice,setNotice]=useState('Load four BMP or TIFF images to check focus.');
+  const[notice,setNotice]=useState('Click any canvas to load 3–4 images, or add one image per slot.');
   const inputRefs=useRef<Partial<Record<Channel,HTMLInputElement|null>>>({});
-  const dragRef=useRef<{key:string;x:number;y:number;offsetX:number;offsetY:number}|null>(null);
+  const batchInputRef=useRef<HTMLInputElement|null>(null);
+  const clickedChannelRef=useRef<Channel>('h');
+  const suppressCanvasClickRef=useRef(false);
+  const dragRef=useRef<{key:string;x:number;y:number;offsetX:number;offsetY:number;moved:boolean}|null>(null);
   const pixelsRef=useRef<Record<string,{pixels:Uint8ClampedArray;width:number;height:number}>>({});
   const probeRefs=useRef<Record<string,HTMLSpanElement|null>>({});
+  const stageRefs=useRef<Partial<Record<string,HTMLDivElement|null>>>({});
   const files=filesByHead[head]||EMPTY_FILES;
   const uploaded=uploadedByHead[head]||null;
   const count=CHANNELS.filter(channel=>files[channel.key]).length;
   const testTab:TestTab=tab==='camera'?'general':tab;
   const hasResults=CHANNELS.some(channel=>!!results[`${head}:${testTab}:${channel.key}`]);
   const role=system?.session.role||'NoUser';
+
+  const constrainView=useCallback((key:string,next:ImageView):ImageView=>{
+    const stage=stageRefs.current[key],image=stage?.querySelector('img');
+    if(!stage||!image?.naturalWidth||!image.naturalHeight)return next;
+    const rect=stage.getBoundingClientRect();
+    if(rect.width<=0||rect.height<=0)return next;
+    const fit=Math.min(rect.width/image.naturalWidth,rect.height/image.naturalHeight);
+    const width=image.naturalWidth*fit*next.zoom,height=image.naturalHeight*fit*next.zoom;
+    const left=(rect.width-width)/2,top=(rect.height-height)/2;
+    const bounded=constrainImagePan(rect,{x:left+next.offsetX,y:top+next.offsetY,width,height});
+    return {...next,offsetX:bounded.x-left,offsetY:bounded.y-top};
+  },[]);
+
+  useEffect(()=>{
+    let frame=0;
+    const align=()=>setViews(current=>{
+      let next=current;
+      for(const channel of CHANNELS){
+        const key=`${head}:${channel.key}`,view=current[key]||DEFAULT_VIEW,bounded=constrainView(key,view);
+        if(view.offsetX!==bounded.offsetX||view.offsetY!==bounded.offsetY)next={...next,[key]:bounded};
+      }
+      return next;
+    });
+    const observer=new ResizeObserver(()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(align)});
+    for(const channel of CHANNELS){const stage=stageRefs.current[`${head}:${channel.key}`];if(stage)observer.observe(stage)}
+    align();
+    return()=>{cancelAnimationFrame(frame);observer.disconnect()};
+  },[head,tab,activeChannel,imageSizes,constrainView]);
 
   useEffect(()=>{
     const body=document.body.style.overflow;
@@ -97,7 +131,7 @@ export function FocusWorkspace({onClose}:{onClose:()=>void}){
   useEffect(()=>setFailedPreviews({}),[head,files,uploaded]);
 
   function chooseFile(channel:Channel,file?:File){
-    if(!file)return;
+    if(!file||busy)return;
     if(!ACCEPTED.test(file.name)){setNotice('Use BMP or TIFF images.');return}
     setFilesByHead(current=>({...current,[head]:{...(current[head]||{}),[channel]:file}}));
     const viewKey=`${head}:${channel}`;
@@ -108,11 +142,41 @@ export function FocusWorkspace({onClose}:{onClose:()=>void}){
     setNotice(`${CHANNELS.find(item=>item.key===channel)?.name} image loaded.`);
   }
 
+  function openCanvasPicker(channel:Channel){
+    if(busy)return;
+    clickedChannelRef.current=channel;
+    batchInputRef.current?.click();
+  }
+
+  function chooseCanvasFiles(selected:FileList|null){
+    if(!selected?.length||busy)return;
+    const chosen=Array.from(selected);
+    if(chosen.length===1){chooseFile(clickedChannelRef.current,chosen[0]);return}
+    const mapping=mapIlluminationImages(chosen);
+    if(!mapping.ok){setNotice(mapping.message);return}
+    const mapped=mapping.images;
+    // Replace the head's complete set so a missing fourth image cannot come
+    // from the previous lens. Results and image coordinates belong to that set.
+    setFilesByHead(current=>({...current,[head]:mapped}));
+    setViews(current=>Object.fromEntries(Object.entries(current).filter(([key])=>!key.startsWith(`${head}:`))));
+    for(const channel of CHANNELS)delete pixelsRef.current[`${head}:${channel.key}`];
+    dragRef.current=null;
+    setUploadedByHead(current=>{const next={...current};delete next[head];return next});
+    setResults(current=>Object.fromEntries(Object.entries(current).filter(([key])=>!key.startsWith(`${head}:`))));
+    if(!mapped[activeChannel]){
+      const first=CHANNELS.find(channel=>mapped[channel.key]);
+      if(first)setActiveChannel(first.key);
+    }
+    const missing=CHANNELS.filter(channel=>!mapped[channel.key]).map(channel=>channel.name);
+    setNotice(missing.length?`${chosen.length} images matched. Add ${missing.join(', ')} to run the focus check.`:'Four illuminations matched automatically. Ready for focus checks.');
+  }
+
   function changeView(key:string,patch:Partial<ImageView>){
-    setViews(current=>({...current,[key]:{...(current[key]||DEFAULT_VIEW),...patch}}));
+    setViews(current=>({...current,[key]:constrainView(key,{...(current[key]||DEFAULT_VIEW),...patch})}));
   }
 
   function cacheImagePixels(key:string,image:HTMLImageElement){
+    setImageSizes(current=>({...current,[key]:{src:image.getAttribute('src')||image.src,width:image.naturalWidth,height:image.naturalHeight}}));
     try{
       const canvas=document.createElement('canvas');
       const scale=Math.min(1,512/Math.max(image.naturalWidth,image.naturalHeight));
@@ -251,13 +315,13 @@ export function FocusWorkspace({onClose}:{onClose:()=>void}){
   }
 
   return <div className="focusModal" role="dialog" aria-modal="true" aria-label="Focus Check" onPointerDown={event=>{if(event.target===event.currentTarget)onClose()}}>
-    <div className="focusWindow focusWorkbench">
+    <div className={`focusWindow focusWorkbench ${tab==='camera'?'is-camera-tab':''}`}>
+      <input ref={batchInputRef} type="file" accept=".bmp,.tif,.tiff,image/bmp,image/tiff" multiple hidden aria-label="Load one, three, or four focus images" onChange={event=>{chooseCanvasFiles(event.target.files);event.target.value=''}}/>
       <datalist id="focus-known-macs">{Array.from(new Set(cameraConfig?.cameras.map(item=>item.mac_address).filter(value=>value&&value!=='UNASSIGNED')||[])).map(value=><option key={value} value={value}/>)}</datalist>
       <header className="focusHeader">
         <span className="focusHeaderIcon"><Activity/></span>
-        <div><small>OPTICAL WORKSPACE · 4.2</small><h2>Focus Check</h2></div>
-        <span className="focusHeaderMode"><i/>Offline image mode</span>
-        <span className="focusHeadPill">HEAD {String(head).padStart(2,'0')}</span>
+        <div><h2>Focus Check</h2></div>
+        <span className="focusHeaderMode"><i/>Offline</span>
         <button className="focusIconButton" onClick={onClose} aria-label="Close Focus Check"><X/></button>
       </header>
       <nav className="focusTabs" aria-label="Focus Check sections">{TABS.map(item=><button key={item.key} className={tab===item.key?'active':''} onClick={()=>setTab(item.key)}>{item.label}</button>)}</nav>
@@ -265,52 +329,52 @@ export function FocusWorkspace({onClose}:{onClose:()=>void}){
         <div className="focusHeads" aria-label="Camera head">{[1,2,3,4].map(value=><button key={value} className={head===value?'active':''} onClick={()=>setHead(value)}>Head {value}</button>)}</div>
         <span className="focusToolbarStatus"><i className={count===4?'ready':''}/>{count} / 4 images loaded</span>
       </div>
-      <div className="focusContext">
-        {tab==='lens'?<><b>Lens condition</b><div className="focusConditions">{LENS_CONDITIONS.map((condition,index)=><button key={condition} className={lensCondition===index?'active':''} onClick={()=>{setLensCondition(index);setNotice('Lens condition shown as reference; the offline backend uses one calculation profile.')}} title="Reference condition; offline backend uses one calculation profile">{condition}</button>)}</div></>:<><b>{TABS.find(item=>item.key===tab)?.label}</b><span>{tab==='camera'?'Camera assignment and capture parameters':tab==='general'?'Centre-line brightness and contrast':tab==='focus-resolution'?'Hardware jig · circle, cross and focus measurements':'Hardware jig · illumination and concentricity'}</span></>}
-        <em>{tab==='camera'?'SETUP':tab==='general'?'PROFILE':tab==='lens'?'LENS':'JIG'}</em>
-      </div>
+      <nav className="focusChannelRail" aria-label="Camera view">{CHANNELS.map(channel=><button key={channel.key} className={activeChannel===channel.key?'active':''} onClick={()=>setActiveChannel(channel.key)} title={channel.name}><span className={files[channel.key]?'loaded':''}/>{channel.short}</button>)}</nav>
       <section className="focusCameraGrid" aria-label="Four camera views">{CHANNELS.map((channel,index)=>{
         const value=results[`${head}:${testTab}:${channel.key}`];
         const camera=cameraConfig?.cameras.find(item=>item.head===head&&item.channel===channel.key);
         const imageUrl=uploaded?.head===head?previewUrl(uploaded.datasetId,uploaded.sampleId,channel.key):previews[channel.key];
         const viewKey=`${head}:${channel.key}`;
         const view=views[viewKey]||DEFAULT_VIEW;
-        return <article key={channel.key} className={`focusCameraCard ${value?`is-${value.status}`:''}`}>
+        const imageSize=imageSizes[viewKey];
+        return <article key={channel.key} className={`focusCameraCard ${value?`is-${value.status}`:''} ${activeChannel===channel.key?'is-active-channel':''}`}>
           <header className="focusCardHeader"><span className="focusCardNumber">{String(index+1).padStart(2,'0')}</span><b>{channel.name}</b><span className={`focusCardState ${value?`status-${value.status}`:''}`}>{value?value.status==='green'?'GOOD':value.status==='yellow'?'ACCEPTABLE':'OUT OF RANGE':files[channel.key]?'LOADED':'EMPTY'}</span></header>
-          <div className={`focusCardImage ${files[channel.key]?'can-pan':''}`}
-            onPointerDown={event=>{if(!files[channel.key]||(event.target as HTMLElement).closest('button'))return;dragRef.current={key:viewKey,x:event.clientX,y:event.clientY,offsetX:view.offsetX,offsetY:view.offsetY};event.currentTarget.setPointerCapture(event.pointerId)}}
-            onPointerMove={event=>{if(view.probe)updateProbe(viewKey,event);const drag=dragRef.current;if(drag?.key!==viewKey)return;changeView(viewKey,{offsetX:drag.offsetX+event.clientX-drag.x,offsetY:drag.offsetY+event.clientY-drag.y})}}
-            onPointerUp={()=>{dragRef.current=null}}
-            onPointerCancel={()=>{dragRef.current=null}}
+          <div className={`focusCardImage ${files[channel.key]?'can-pan':''}`} ref={element=>{stageRefs.current[viewKey]=element}}
+            onClick={event=>{if((event.target as Element).closest('button,.focusViewportTools'))return;if(suppressCanvasClickRef.current){suppressCanvasClickRef.current=false;return}openCanvasPicker(channel.key)}}
+            onPointerDown={event=>{if(event.button!==0||(event.target as Element).closest('button,.focusViewportTools'))return;suppressCanvasClickRef.current=false;if(!files[channel.key])return;dragRef.current={key:viewKey,x:event.clientX,y:event.clientY,offsetX:view.offsetX,offsetY:view.offsetY,moved:false};event.currentTarget.setPointerCapture(event.pointerId)}}
+            onPointerMove={event=>{if(view.probe)updateProbe(viewKey,event);const drag=dragRef.current;if(drag?.key!==viewKey)return;const dx=event.clientX-drag.x;const dy=event.clientY-drag.y;if(Math.hypot(dx,dy)>5)drag.moved=true;if(drag.moved)changeView(viewKey,{offsetX:drag.offsetX+dx,offsetY:drag.offsetY+dy})}}
+            onPointerUp={()=>{if(dragRef.current?.key===viewKey)suppressCanvasClickRef.current=dragRef.current.moved;dragRef.current=null}}
+            onPointerCancel={()=>{suppressCanvasClickRef.current=true;dragRef.current=null}}
             onWheel={event=>{if(!files[channel.key])return;event.preventDefault();changeView(viewKey,{zoom:Math.min(3,Math.max(1,Math.round((view.zoom+(event.deltaY<0?.1:-.1))*10)/10))})}}>
-            {files[channel.key]&&!failedPreviews[channel.key]&&imageUrl?<img src={imageUrl} alt={`${channel.name} focus image`} style={{transform:`translate(${view.offsetX}px, ${view.offsetY}px) scale(${view.zoom})`}} onLoad={event=>cacheImagePixels(viewKey,event.currentTarget)} onError={()=>setFailedPreviews(current=>({...current,[channel.key]:true}))}/>:<div className="focusImageEmpty"><FileImage/>{files[channel.key]?<span>{failedPreviews[channel.key]?'Preview unavailable':'Preparing preview…'}</span>:<button onClick={()=>inputRefs.current[channel.key]?.click()}><ImagePlus/>Load image</button>}</div>}
-            {(tab==='general'||tab==='focus-resolution')&&view.crosshair&&files[channel.key]&&!failedPreviews[channel.key]&&<span className="focusCrosshair" aria-hidden="true"/>}
+            {files[channel.key]&&!failedPreviews[channel.key]&&imageUrl?<img src={imageUrl} draggable={false} alt={`${channel.name} focus image`} style={{transform:`translate(${view.offsetX}px, ${view.offsetY}px) scale(${view.zoom})`}} onLoad={event=>cacheImagePixels(viewKey,event.currentTarget)} onError={()=>setFailedPreviews(current=>({...current,[channel.key]:true}))}/>:<div className="focusImageEmpty"><FileImage/>{files[channel.key]?<span>{failedPreviews[channel.key]?'Preview unavailable':'Preparing preview…'}</span>:<button type="button" disabled={busy} onClick={()=>openCanvasPicker(channel.key)} aria-label={`Load images from ${channel.name} canvas`}><ImagePlus/>Load 3–4 images</button>}</div>}
+            {files[channel.key]&&<button type="button" className="focusCanvasPicker" disabled={busy} onClick={()=>openCanvasPicker(channel.key)} aria-label={`Load images from ${channel.name} canvas. Select one image for this slot or three to four images for automatic illumination matching.`} title="Load 3–4 images automatically, or replace this image"><ImagePlus/></button>}
+            {view.crosshair&&files[channel.key]&&!failedPreviews[channel.key]&&imageUrl&&imageSize&&imageSize.src===imageUrl&&imageSize.width>0&&imageSize.height>0&&<svg className="focusImageGuides" viewBox={`0 0 ${imageSize.width} ${imageSize.height}`} preserveAspectRatio="xMidYMid meet" style={{transform:`translate(${view.offsetX}px, ${view.offsetY}px) scale(${view.zoom})`}} aria-hidden="true"><line x1="0" y1={imageSize.height/2} x2={imageSize.width} y2={imageSize.height/2} vectorEffect="non-scaling-stroke"/><line x1={imageSize.width/2} y1="0" x2={imageSize.width/2} y2={imageSize.height} vectorEffect="non-scaling-stroke"/></svg>}
             {files[channel.key]&&<div className="focusViewportTools" aria-label={`${channel.name} image controls`}><button title="Zoom out" aria-label={`Zoom out ${channel.name}`} onClick={()=>changeView(viewKey,{zoom:Math.max(1,Math.round((view.zoom-.1)*10)/10)})}><ZoomOut/></button><span>{Math.round(view.zoom*100)}%</span><button title="Zoom in" aria-label={`Zoom in ${channel.name}`} onClick={()=>changeView(viewKey,{zoom:Math.min(3,Math.round((view.zoom+.1)*10)/10)})}><ZoomIn/></button><button title="Reset view" aria-label={`Reset ${channel.name} view`} onClick={()=>changeView(viewKey,DEFAULT_VIEW)}><RotateCcw/></button><button className={view.crosshair?'active':''} title="Toggle crosshair" aria-label={`Toggle ${channel.name} crosshair`} onClick={()=>changeView(viewKey,{crosshair:!view.crosshair})}><Crosshair/></button><button className={view.probe?'active':''} title="Toggle image coordinates and gray value" aria-label={`Toggle ${channel.name} coordinates and gray value`} onClick={()=>changeView(viewKey,{probe:!view.probe})}><MousePointer2/></button></div>}
             {view.probe&&files[channel.key]&&<span className="focusCoordinate" ref={element=>{probeRefs.current[viewKey]=element}}>X — · Y — · Gray —</span>}
           </div>
           <div className="focusCardData">
-            {tab==='camera'?<div className="focusCameraParameters">
+            {tab==='camera'?<div className={`focusCameraParameters settings-${cameraSettingsPage}`}>
               {camera?<>
-                <label className="focusMacField">Assigned camera (MAC)<input list="focus-known-macs" aria-label={`${channel.name} MAC address`} value={camera.mac_address} disabled={system?.mode==='AUTO'} onChange={event=>updateCamera(camera.id,'mac_address',event.target.value)}/></label>
+                <label className="focusMacField"><span>Assigned camera</span><span className="focusFieldUnit">MAC</span><input list="focus-known-macs" aria-label={`${channel.name} MAC address`} value={camera.mac_address} disabled={system?.mode==='AUTO'} onChange={event=>updateCamera(camera.id,'mac_address',event.target.value)}/></label>
+                <div className="focusSettingsSwitch" role="tablist" aria-label={`${channel.name} camera settings group`}><button type="button" role="tab" aria-selected={cameraSettingsPage==='capture'} className={cameraSettingsPage==='capture'?'active':''} onClick={()=>setCameraSettingsPage('capture')}><SlidersHorizontal/>Capture</button><button type="button" role="tab" aria-selected={cameraSettingsPage==='sensor'} className={cameraSettingsPage==='sensor'?'active':''} onClick={()=>setCameraSettingsPage('sensor')}><Camera/>Sensor</button></div>
                 <div className="focusParameterGrid">
-                  {([{key:'exposure_us',label:'Exposure',unit:'µs',min:28,max:10000000},{key:'gain',label:'Gain',unit:'',min:0,max:490},{key:'black_level',label:'Black level',unit:'',min:0,max:600},{key:'current_a',label:'LED current',unit:'A',min:0,max:4},{key:'pulse_width_us',label:'Pulse width',unit:'µs',min:0,max:200000},{key:'led_channel',label:'LED channel',unit:'',min:1,max:16},{key:'width',label:'Width',unit:'px',min:1,max:2456},{key:'height',label:'Height',unit:'px',min:1,max:2058},{key:'offset_x',label:'Offset X',unit:'px',min:0,max:2455},{key:'offset_y',label:'Offset Y',unit:'px',min:0,max:2057},{key:'line_debouncer_time_us',label:'Debounce',unit:'µs',min:0,max:100}] as const).map(field=><label key={field.key}>{field.label}<span>{field.unit}</span><input type="number" min={field.min} max={field.max} step={field.key==='current_a'?'0.01':'1'} value={camera[field.key]} disabled={system?.mode==='AUTO'} onChange={event=>updateCamera(camera.id,field.key,event.target.value)}/></label>)}
+                  {([{key:'exposure_us',label:'Exposure',unit:'µs',min:28,max:10000000,group:'capture'},{key:'gain',label:'Gain',unit:'',min:0,max:490,group:'capture'},{key:'black_level',label:'Black level',unit:'',min:0,max:600,group:'capture'},{key:'current_a',label:'LED current',unit:'A',min:0,max:4,group:'capture'},{key:'pulse_width_us',label:'Pulse width',unit:'µs',min:0,max:200000,group:'capture'},{key:'led_channel',label:'LED channel',unit:'',min:1,max:16,group:'capture'},{key:'width',label:'Width',unit:'px',min:1,max:2456,group:'sensor'},{key:'height',label:'Height',unit:'px',min:1,max:2058,group:'sensor'},{key:'offset_x',label:'Offset X',unit:'px',min:0,max:2455,group:'sensor'},{key:'offset_y',label:'Offset Y',unit:'px',min:0,max:2057,group:'sensor'},{key:'line_debouncer_time_us',label:'Debounce',unit:'µs',min:0,max:100,group:'sensor'}] as const).map(field=><label key={field.key} data-focus-group={field.group}><span className="focusParameterLabel" title={field.label}>{field.label}</span><span className="focusFieldUnit">{field.unit}</span><input type="number" aria-label={`${channel.name} ${field.label}`} min={field.min} max={field.max} step={field.key==='current_a'?'0.01':'1'} value={camera[field.key]} disabled={system?.mode==='AUTO'} onChange={event=>updateCamera(camera.id,field.key,event.target.value)}/></label>)}
                 </div>
                 <button className="focusAssign" disabled={busy||system?.mode==='AUTO'||!camera.mac_address||camera.mac_address==='UNASSIGNED'} onClick={()=>void assignCamera(camera.id)}><Camera/>{camera.assigned?'Update assignment':'Assign camera'}</button>
-              </>:<div className="focusUnconfigured"><Camera/><b>No camera slot configured</b><span>Add a slot to enter assignment and capture settings.</span><button disabled={!cameraConfig||system?.mode==='AUTO'} onClick={()=>addCamera(channel.key)}>Add camera slot</button></div>}
+              </>:<div className="focusUnconfigured"><Camera/><b>Camera not assigned</b><button disabled={!cameraConfig||system?.mode==='AUTO'} onClick={()=>addCamera(channel.key)}>Add camera slot</button></div>}
             </div>:tab==='general'?<div className="focusGeneralData">
               <MetricRows tab={tab} result={value} role={role} onExplain={setNotice}/>
               <div className="focusProfiles"><ProfilePlot src={files[channel.key]&&!failedPreviews[channel.key]?imageUrl:undefined} axis="horizontal" view={view}/><ProfilePlot src={files[channel.key]&&!failedPreviews[channel.key]?imageUrl:undefined} axis="vertical" view={view}/></div>
-            </div>:<div className="focusTestData"><MetricRows tab={tab} result={value} role={role} onExplain={setNotice}/><div className="focusDataTail">{tab==='lens'?'Condition reference · offline profile':tab==='focus-resolution'?'Circle · cross · focus jig':'Halo · illumination'}</div></div>}
+            </div>:<div className="focusTestData"><MetricRows tab={tab} result={value} role={role} onExplain={setNotice}/></div>}
           </div>
-          <footer className="focusCardFooter"><span title={files[channel.key]?.name}>{files[channel.key]?.name||'BMP / TIFF image'}</span><input ref={element=>{inputRefs.current[channel.key]=element}} type="file" accept=".bmp,.tif,.tiff,image/bmp,image/tiff" hidden onChange={event=>{chooseFile(channel.key,event.target.files?.[0]);event.target.value=''}}/><button onClick={()=>inputRefs.current[channel.key]?.click()}><ImagePlus/>{files[channel.key]?'Replace':'Load'}</button></footer>
+          <footer className="focusCardFooter"><span title={files[channel.key]?.name}>{files[channel.key]?.name||'BMP / TIFF image'}</span><input ref={element=>{inputRefs.current[channel.key]=element}} type="file" accept=".bmp,.tif,.tiff,image/bmp,image/tiff" hidden aria-label={`Load ${channel.name} image`} onChange={event=>{chooseFile(channel.key,event.target.files?.[0]);event.target.value=''}}/><button disabled={busy} onClick={()=>inputRefs.current[channel.key]?.click()}><ImagePlus/>{files[channel.key]?'Replace':'Load'}</button></footer>
         </article>})}</section>
       <footer className="focusFooter focusCommandBar">
-        <div className="focusCaptureControls"><button disabled title="No live camera connected"><Camera/>Snap</button><button disabled title="No live camera connected"><Video/>Grab</button><span><VideoOff/>Camera offline</span></div>
-        <p role="status">{busy?<Loader2 className="focusSpin"/>:<span className="focusFooterDot"/>}{notice}</p>
+        <p role="status" title={notice}>{busy?<Loader2 className="focusSpin"/>:<span className="focusFooterDot"/>}{notice}</p>
         <div className="focusActions">
           <button className="focusSecondary" disabled={busy||count===0} onClick={()=>{setFilesByHead(current=>({...current,[head]:{}}));setResults(current=>Object.fromEntries(Object.entries(current).filter(([key])=>!key.startsWith(`${head}:`))));setUploadedByHead(current=>{const next={...current};delete next[head];return next});setNotice('Images cleared.')}}><RotateCcw/>Clear</button>
-          <button className="focusSecondary" disabled={count===0} onClick={saveImages}><Download/>Save images</button>
-          {tab==='camera'?<><button className="focusSecondary" disabled={busy||system?.mode!=='AUTO'} onClick={()=>void switchToSetup()}>Setup mode</button><button className="focusPrimary" disabled={busy||!cameraConfig||system?.mode==='AUTO'} onClick={()=>void saveCamera()}><Save/>Save to Outbox</button></>:<><button className="focusSecondary" disabled={!hasResults} onClick={saveValues}><Download/>Save values</button><button className="focusSecondary" disabled={!uploaded||uploaded.head!==head||busy} onClick={()=>void savePackage()}><Save/>Data package</button><button className="focusPrimary" disabled={busy||count!==4} onClick={()=>void evaluate()}>{busy?<Loader2 className="focusSpin"/>:<SlidersHorizontal/>}Run check</button></>}
+          <button className="focusSecondary" disabled={count===0} onClick={saveImages} title="Save loaded images"><Download/>Images</button>
+          {tab==='camera'?<><button className="focusSecondary" disabled={busy||system?.mode!=='AUTO'} onClick={()=>void switchToSetup()} title="Switch to setup mode">Setup</button><button className="focusPrimary" disabled={busy||!cameraConfig||system?.mode==='AUTO'} onClick={()=>void saveCamera()} title="Save camera configuration to Outbox"><Save/>Save setup</button></>:<><button className="focusSecondary" disabled={!hasResults} onClick={saveValues} title="Save focus values"><Download/>Values</button><button className="focusSecondary" disabled={!uploaded||uploaded.head!==head||busy} onClick={()=>void savePackage()} title="Download data package"><Save/>Package</button><button className="focusPrimary" disabled={busy||count!==4} onClick={()=>void evaluate()}>{busy?<Loader2 className="focusSpin"/>:<SlidersHorizontal/>}Run check</button></>}
         </div>
       </footer>
     </div>
