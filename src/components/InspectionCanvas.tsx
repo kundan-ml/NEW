@@ -5,6 +5,7 @@ import {createPortal} from 'react-dom';
 import {Crosshair,Focus,Maximize2,Minimize2,Minus,MousePointer2,Plus,RotateCcw,ScanSearch} from 'lucide-react';
 import type {Defect} from '@/types';
 import {constrainImagePan} from '@/lib/image-pan';
+import {fetchPreviewBlob} from '@/lib/preview-cache';
 
 type Probe={x:number;y:number;gray:number|null};
 type Props={imageUrl:string;defects:Defect[];selectedDefect?:number;showDefects?:boolean;showCrosshair?:boolean;onProbe?:(p:Probe)=>void};
@@ -60,8 +61,7 @@ export function InspectionCanvas({imageUrl,defects,selectedDefect=-1,showDefects
    }
    const controller=new AbortController();
    (async()=>{try{
-     const res=await fetch(imageUrl,{cache:'no-store',signal:controller.signal});if(!res.ok)throw new Error(`Image request failed (${res.status})`);
-     const blob=await res.blob();revoked=URL.createObjectURL(blob);const i=new Image();i.decoding='async';
+     const blob=await fetchPreviewBlob(imageUrl,controller.signal);if(controller.signal.aborted||requestId!==loadSequence.current)return;revoked=URL.createObjectURL(blob);const i=new Image();i.decoding='async';
      i.onload=()=>{if(requestId!==loadSequence.current)return;source.current=i;const p=document.createElement('canvas');p.width=i.naturalWidth;p.height=i.naturalHeight;const ctx=p.getContext('2d',{willReadFrequently:true});ctx?.drawImage(i,0,0);pixels.current=p;setState('ready');requestAnimationFrame(()=>restoreOrFit(imageUrl))};
      i.onerror=()=>{if(requestId!==loadSequence.current)return;setError('The browser could not decode this preview image.');setState(source.current?'ready':'error')};i.src=revoked;
    }catch(e){if(!controller.signal.aborted&&requestId===loadSequence.current){setError(e instanceof Error?e.message:'Unable to load image');setState(source.current?'ready':'error')}}})();

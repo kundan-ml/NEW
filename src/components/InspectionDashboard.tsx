@@ -36,8 +36,8 @@ import {
   Target,
   TriangleAlert,
 } from "lucide-react";
-import { api, previewUrl, samplePreviewUrl, WS_API } from "@/lib/api";
-import { primePreview } from "@/lib/preview-cache";
+import { api, previewUrl, sampleThumbnailUrl, thumbnailUrl, WS_API } from "@/lib/api";
+import { primePreview, warmPreviews } from "@/lib/preview-cache";
 import { averageInferenceMs, formatInferenceMs, inferenceElapsedMs, INFERENCE_TIMING_DESCRIPTION } from "@/lib/inference-timing";
 import type {
   DatasetSummary,
@@ -160,6 +160,8 @@ export function InspectionDashboard({
   const wsLiveRef = useRef(false);
   const wsResultOrdinalRef = useRef(0);
   const runTokenRef = useRef(0);
+  const selectionVersionRef = useRef(0);
+  const datasetSnapshotsRef = useRef(new Map<string, { samples: Sample[]; results: InspectionResult[] }>());
   const operationModeRef = useRef(operationMode);
   const wtCapacity = info?.settings.wt_capacity || 16;
 
@@ -183,19 +185,6 @@ export function InspectionDashboard({
     setNewPasswordConfirm("");
     setLoginError("");
   }, [loginOpen]);
-  useEffect(() => {
-    if (!datasetId || !samples.length) return;
-    for (const candidate of samples) {
-      const previewChannel = candidate.images[channel]
-        ? channel
-        : candidate.images.h
-          ? "h"
-          : candidate.images.d
-            ? "d"
-            : Object.keys(candidate.images)[0];
-      if (previewChannel && !candidate.images[previewChannel]?.relative_path?.startsWith("demo:")) void primePreview(previewUrl(datasetId, candidate.id, previewChannel)).catch(() => {});
-    }
-  }, [channel, datasetId, samples]);
   useEffect(() => {
     operationModeRef.current = operationMode;
   }, [operationMode]);
@@ -233,6 +222,7 @@ export function InspectionDashboard({
     const loaded = await Promise.all(ordered.map(async dataset => {
       try {
         const [sampleResponse, resultResponse] = await Promise.all([api.samples(dataset.id), api.results(dataset.id)]);
+        datasetSnapshotsRef.current.set(dataset.id, { samples: sampleResponse.items, results: resultResponse.items });
         const resultBySample = new Map(resultResponse.items.map(result => [result.sample_id, result]));
         return sampleResponse.items
           .sort((a, b) => a.wt_index - b.wt_index || a.position - b.position || a.id.localeCompare(b.id))
@@ -263,14 +253,15 @@ export function InspectionDashboard({
   }
   useEffect(()=>{if(datasets.length)void rebuildGlobalHistory(datasets)},[wtCapacity]);
   async function refreshDatasets(prefer?: string) {
+    const selectionVersion = ++selectionVersionRef.current;
     try {
       const ds = await api.datasets();
       setDatasets(ds);
       const rebuiltHistory = await rebuildGlobalHistory(ds);
+      if (selectionVersion !== selectionVersionRef.current) return [];
       if (prefer) setSelectedGlobalWt(rebuiltHistory.find(entry => entry.datasetId === prefer)?.wt ?? null);
       const id = prefer || datasetId || ds[0]?.id || "";
       if (id) {
-        setDatasetId(id);
         return await loadDataset(id);
       }
       setSamples([]); setResults([]); setCurrent(null);
@@ -281,22 +272,29 @@ export function InspectionDashboard({
     }
   }
   async function loadDataset(id: string) {
+    const selectionVersion = ++selectionVersionRef.current;
     runTokenRef.current += 1;
     wsRef.current?.close();
     wsRef.current = null;
     setJob(null);
     setBusy(false);
     try {
-      const [s, r] = await Promise.all([api.samples(id), api.results(id)]);
+      const cached = datasetSnapshotsRef.current.get(id);
+      const [s, r] = cached
+        ? [{ items: cached.samples }, { items: cached.results }]
+        : await Promise.all([api.samples(id), api.results(id)]);
+      if (selectionVersion !== selectionVersionRef.current) return [];
+      // Commit identity and metadata together, never new dataset + old frame.
+      setDatasetId(id);
       setSamples(s.items);
       setResults(r.items);
       if (s.items.length) {
         setCurrent((c) =>
           s.items.some((x) => x.id === c) ? c : s.items[0].id,
         );
-        const first = s.items[0];
+        const first = s.items.find(item => item.id === current) || s.items[0];
         setChannel(
-          first.images.h
+          first.images[channel] ? channel : first.images.h
             ? "h"
             : first.images.d
               ? "d"
@@ -307,6 +305,7 @@ export function InspectionDashboard({
       }
       return s.items;
     } catch (e) {
+      if (selectionVersion !== selectionVersionRef.current) return [];
       setToast(`Dataset load failed: ${(e as Error).message}`);
       setSamples([]); setResults([]); setCurrent(null);
       return [];
@@ -424,6 +423,23 @@ export function InspectionDashboard({
     };
   }, [activeGlobalWt, channel, sample]);
   const wtEntries = useMemo(() => globalHistory.filter(entry => entry.wt === activeGlobalWt), [globalHistory, activeGlobalWt]);
+  useEffect(() => {
+    if (!wtEntries.length) return;
+    const controller = new AbortController();
+    const urlsFor = (allChannels: boolean) => wtEntries.flatMap(entry => Object.keys(entry.sample.images)
+      .filter(candidate => (allChannels ? candidate !== channel : candidate === channel)
+        && !entry.sample.images[candidate].relative_path.startsWith("demo:"))
+      .map(candidate => thumbnailUrl(entry.datasetId, entry.sample.id, candidate)));
+    // Only the active tray is warmed. Other illuminations follow at low
+    // concurrency, so switching back is served from memory/browser cache.
+    const active = warmPreviews(urlsFor(false), controller.signal, 3);
+    const timer = window.setTimeout(() => {
+      void active.then(() => {
+        if (!controller.signal.aborted) return warmPreviews(urlsFor(true), controller.signal, 2);
+      });
+    }, 500);
+    return () => { controller.abort(); window.clearTimeout(timer); };
+  }, [wtEntries, channel]);
   const visibleGlobalHistory = useMemo(() => {
     if (!liveDatasetId) return globalHistory;
     const liveEntries=globalHistory.filter(entry=>entry.datasetId===liveDatasetId);
@@ -461,7 +477,7 @@ export function InspectionDashboard({
           name:
             image?.filename ||
             `Position ${position} · No ${channel.toUpperCase()} image`,
-          src: visibleSample && image && entry ? samplePreviewUrl(entry.datasetId, visibleSample, channel) : "",
+          src: visibleSample && image && entry ? sampleThumbnailUrl(entry.datasetId, visibleSample, channel) : "",
         };
       }),
     [wtEntries, datasetId, channel, resultMap, liveDatasetId],
@@ -481,7 +497,7 @@ export function InspectionDashboard({
         ? "d"
         : Object.keys(sample?.images || {})[0] || "h";
   const detailPreviewSrc = sample
-    ? samplePreviewUrl(datasetId, sample, currentPreviewChannel)
+    ? sampleThumbnailUrl(datasetId, sample, currentPreviewChannel)
     : "";
   const filteredLogs = useMemo(
     () =>
@@ -609,6 +625,7 @@ export function InspectionDashboard({
       const firstTray = globalHistory.find((entry) => entry.datasetId === targetDatasetId)?.wt;
       if (firstTray) setSelectedGlobalWt(firstTray);
       const j = await api.run(targetDatasetId);
+      if (token !== runTokenRef.current) return;
       setLiveDatasetId(targetDatasetId);
       setResults([]);
       setSelectedGlobalWt(null);
@@ -616,14 +633,18 @@ export function InspectionDashboard({
       setToast(`Run All started · 0 of ${j.total} lenses`);
       const ws = new WebSocket(`${WS_API}/ws/jobs/${j.id}`);
       wsRef.current = ws;
-      ws.onopen=()=>{wsLiveRef.current=true};
-      ws.onmessage = async (e) => {
+      ws.onopen=()=>{if (token === runTokenRef.current && wsRef.current === ws) wsLiveRef.current=true};
+      ws.onmessage = (e) => {
+        if (token !== runTokenRef.current || wsRef.current !== ws) return;
         const m = JSON.parse(e.data);
         if (m.job) setJob(m.job);
         if (m.result) {
           const resultOrdinal=++wsResultOrdinalRef.current;
           const resultSample=samples.find(item=>item.id===m.result.sample_id);
-          if(resultSample){const previewChannel=resultSample.images[channel]?channel:resultSample.images.h?"h":resultSample.images.d?"d":Object.keys(resultSample.images)[0];if(previewChannel&&!resultSample.images[previewChannel]?.relative_path?.startsWith("demo:"))await primePreview(previewUrl(targetDatasetId,resultSample.id,previewChannel)).catch(()=>{})}
+          // Publish results immediately; image transfer must not stall the
+          // ordered inference stream. The canvas retains its previous frame
+          // until the next full-quality image is decoded.
+          if(resultSample&&operationModeRef.current === "AUTO"){const previewChannel=resultSample.images[channel]?channel:resultSample.images.h?"h":resultSample.images.d?"d":Object.keys(resultSample.images)[0];if(previewChannel&&!resultSample.images[previewChannel]?.relative_path?.startsWith("demo:"))void primePreview(previewUrl(targetDatasetId,resultSample.id,previewChannel)).catch(()=>{})}
           setResults((prev) => [
             ...prev.filter((x) => x.sample_id !== m.result.sample_id),
             m.result,
@@ -649,11 +670,12 @@ export function InspectionDashboard({
         }
       };
       ws.onerror = () => {
+        if (wsRef.current !== ws) return;
         wsLiveRef.current=false;
         ws.close();
         if (wsRef.current === ws) wsRef.current = null;
       };
-      ws.onclose=()=>{wsLiveRef.current=false};
+      ws.onclose=()=>{if (wsRef.current === ws) wsLiveRef.current=false};
       void monitorJob(j.id, targetDatasetId, token);
     } catch (e) {
       setToast((e as Error).message);
@@ -718,6 +740,8 @@ export function InspectionDashboard({
     try {
       const response = await api.clearHistory();
       runTokenRef.current += 1;
+      selectionVersionRef.current += 1;
+      datasetSnapshotsRef.current.clear();
       wsRef.current?.close();
       wsRef.current = null;
       setDatasetId(""); setDatasets([]); setSamples([]); setResults([]); setGlobalHistory([]); setCurrent(null); setSelectedGlobalWt(null); setLiveDatasetId(null); setJob(null);
@@ -767,6 +791,7 @@ export function InspectionDashboard({
     finally {setBusy(false)}
   }
   function select(id: string) {
+    selectionVersionRef.current += 1;
     setCurrent(id);
     setSelectedDefect(-1);
     const s = samples.find((x) => x.id === id);
@@ -777,11 +802,22 @@ export function InspectionDashboard({
         s.images.h ? "h" : s.images.d ? "d" : Object.keys(s.images)[0] || "h",
       );
   }
-  async function selectHistoryEntry(entry: GlobalHistoryEntry) {
+  function selectHistoryEntry(entry: GlobalHistoryEntry) {
+    selectionVersionRef.current += 1;
     setSelectedGlobalWt(entry.wt);
     if (entry.datasetId !== datasetId) {
+      runTokenRef.current += 1;
+      wsRef.current?.close();
+      wsRef.current = null;
+      wsLiveRef.current = false;
+      setJob(null);
+      setBusy(false);
+      // History is already loaded. Reuse it instead of waiting for another
+      // samples/results round trip every time the operator picks a tray.
+      const entries = globalHistory.filter(row => row.datasetId === entry.datasetId);
       setDatasetId(entry.datasetId);
-      await loadDataset(entry.datasetId);
+      setSamples(entries.map(row => row.sample));
+      setResults(entries.flatMap(row => row.result ? [row.result] : []));
     }
     setCurrent(entry.sample.id);
     setSelectedDefect(-1);
@@ -1483,7 +1519,7 @@ export function InspectionDashboard({
                           {wtViewMode === "images" ? (
                             <div className="inspectionWtSquare">
                                 {item.src ? (
-                                  <img src={item.src} draggable={false} alt={item.name} />
+                                  <img src={item.src} decoding="async" loading="eager" draggable={false} alt={item.name} />
                                 ) : (
                                   <span className="inspectionMissingImage">
                                     No image
@@ -1932,25 +1968,16 @@ export function InspectionDashboard({
               </div>
             )}
             <div className="oakTrayStrip">
-              {Array.from({ length: wtCapacity }, (_, i) => {
-                const s = wtSamples.find((x) => x.position === i + 1);
-                const liveEntry = wtEntries.find((entry) => entry.position === i + 1);
-                // Samples arrive with the upload, but their image tile should only
-                // appear after that individual frame has completed inference.
-                const awaitingLiveResult = Boolean(
-                  s &&
-                  liveEntry?.datasetId === liveDatasetId &&
-                  liveEntry.datasetId === datasetId &&
-                  !resultMap.has(s.id),
-                );
-                if (!s || awaitingLiveResult)
+              {wtChannelImages.map((item, i) => {
+                const s = item.sample;
+                if (!s || !item.image)
                   return (
                     <div key={i} className="oakTrayCell empty">
                       <b>{i + 1}</b>
                       <i />
                     </div>
                   );
-                const r = resultMap.get(s.id),
+                const r = item.result,
                   rawStatus:Status = r?.status || "IDLE",
                   firstDefect = r?.defects?.[0],
                   assignedOutcome = firstDefect ? defectDefinition(firstDefect.name)?.outcome : undefined,
@@ -1958,22 +1985,17 @@ export function InspectionDashboard({
                   configuredStatus = firstDefect ? defectSymbol(firstDefect.name) : statusSymbol(displayStatus),
                   defectNames = uniqueDefectNames(r?.defects?.map(defect=>defect.name)||[]),
                   defectCodes = defectNames.map(defectInitials).filter(Boolean).join(", "),
-                  ch = s.images.h
-                    ? "h"
-                    : s.images.d
-                      ? "d"
-                      : Object.keys(s.images)[0],
-                  src = samplePreviewUrl(datasetId, s, ch);
+                  src = item.src;
                 return (
                   <button
                     className={`oakTrayCell ${displayStatus.toLowerCase()} ${s.id === current ? "selected" : ""}`}
-                    key={s.id}
-                    onClick={() => select(s.id)}
+                    key={`${item.entry?.datasetId}-${s.id}`}
+                    onClick={() => { if (item.entry) selectHistoryEntry(item.entry); }}
                     title={`Position ${s.position} · ${firstDefect?.name || configuredStatus.label}`}
                     style={{"--legend-color":configuredStatus.color} as React.CSSProperties}
                   >
                     <b>P{s.position}</b>
-                    <img src={src} draggable={false} alt={`Lens position ${s.position}`} />
+                    <img src={src} decoding="async" loading="eager" draggable={false} alt={`Lens position ${s.position}`} />
                     <i className="oakTrayStatusIcon" aria-label={configuredStatus.label} title={configuredStatus.label}/>
                     <em className="oakTrayStatus" title={configuredStatus.label}>{displayStatus === "IDLE" ? "Pending" : displayStatus}</em>
                     {defectCodes&&<em className="oakTrayDefect" title={defectNames.join(", ")}>{defectCodes}</em>}

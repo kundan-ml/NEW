@@ -43,7 +43,9 @@ export const api={
  bvScripts:()=>request<any>('/bv/scripts')
 };
 export const previewUrl=(did:string,sid:string,ch:string)=>`/api/image?datasetId=${encodeURIComponent(did)}&sampleId=${encodeURIComponent(sid)}&channel=${encodeURIComponent(ch)}`;
+export const thumbnailUrl=(did:string,sid:string,ch:string)=>`${previewUrl(did,sid,ch)}&thumbnail=1`;
 export const samplePreviewUrl=(did:string,sample:Sample,ch:string)=>sample.images[ch]?.relative_path?.startsWith('demo:')?sample.images[ch].relative_path:resolvedPreviewUrl(previewUrl(did,sample.id,ch));
+export const sampleThumbnailUrl=(did:string,sample:Sample,ch:string)=>sample.images[ch]?.relative_path?.startsWith('demo:')?sample.images[ch].relative_path:thumbnailUrl(did,sample.id,ch);
 export const archiveUrl=(did:string)=>`${API}/actions/archive/${did}`;
 export const manualUrl=()=>`${API}/system/manual`;
 export const focusValuesUrl=(did:string,sid:string,ch:string,tab:string)=>`${API}/setup/focus/save-values`; // POST endpoint; use api helper if needed
