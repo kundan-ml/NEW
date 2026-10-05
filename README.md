@@ -87,6 +87,34 @@ NEXT_PUBLIC_APP_NAME=DSM BV 4Cam Inspection System
 
 `BACKEND_API_URL` is used by the Next.js image proxy so the HTML5 canvas receives a same-origin image and can safely inspect pixels.
 
+## Fast tray image loading
+
+Classic and Modern WT View use aspect-preserving WebP thumbnails (maximum
+384 px per side), while the inspection canvas keeps the full-resolution,
+lossless image for zoom, overlays, and gray-value probing. Thumbnail URLs
+add `thumbnail=1` to `/api/image`; ordinary image URLs remain full quality.
+
+Only the active tray is warmed, followed by its other illuminations. The
+selected lens's alternate full-quality illuminations warm separately when
+inspection is idle. In-flight requests are shared, obsolete downloads are
+cancelled once no consumer needs them, and byte-bounded caches avoid retaining
+whole datasets in memory. Frame URLs stay stable for pan/zoom persistence.
+Historical tray selection reuses already-loaded metadata without another
+samples/results round trip. WebSocket result updates do not wait for images.
+
+Restart the backend after updating its preview service to enable native
+`width=384&format=webp` previews. The proxy also supports older PNG-only backends,
+but native thumbnails avoid transferring full PNGs between the servers.
+Browser/proxy caches expire after five minutes; mutable local-path image
+replacements may take up to this interval to appear under an unchanged URL.
+
+Loading regression checks:
+
+```bash
+node scripts/check-preview-cache.cjs
+node scripts/check-image-proxy.cjs
+```
+
 ## Run
 
 ```bash

@@ -37,7 +37,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { api, previewUrl, sampleThumbnailUrl, thumbnailUrl, WS_API } from "@/lib/api";
-import { primePreview, warmPreviews } from "@/lib/preview-cache";
+import { warmPreviews } from "@/lib/preview-cache";
 import { averageInferenceMs, formatInferenceMs, inferenceElapsedMs, INFERENCE_TIMING_DESCRIPTION } from "@/lib/inference-timing";
 import type {
   DatasetSummary,
@@ -161,6 +161,7 @@ export function InspectionDashboard({
   const wsResultOrdinalRef = useRef(0);
   const runTokenRef = useRef(0);
   const selectionVersionRef = useRef(0);
+  const historyVersionRef = useRef(0);
   const datasetSnapshotsRef = useRef(new Map<string, { samples: Sample[]; results: InspectionResult[] }>());
   const operationModeRef = useRef(operationMode);
   const wtCapacity = info?.settings.wt_capacity || 16;
@@ -218,17 +219,19 @@ export function InspectionDashboard({
     }
   }, [datasetId, operationMode, refreshSystem]);
   async function rebuildGlobalHistory(allDatasets: DatasetSummary[]) {
+    const historyVersion = ++historyVersionRef.current;
     const ordered = [...allDatasets].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
     const loaded = await Promise.all(ordered.map(async dataset => {
       try {
         const [sampleResponse, resultResponse] = await Promise.all([api.samples(dataset.id), api.results(dataset.id)]);
-        datasetSnapshotsRef.current.set(dataset.id, { samples: sampleResponse.items, results: resultResponse.items });
+        if (historyVersion === historyVersionRef.current) datasetSnapshotsRef.current.set(dataset.id, { samples: sampleResponse.items, results: resultResponse.items });
         const resultBySample = new Map(resultResponse.items.map(result => [result.sample_id, result]));
         return sampleResponse.items
           .sort((a, b) => a.wt_index - b.wt_index || a.position - b.position || a.id.localeCompare(b.id))
           .map(sample => ({ datasetId: dataset.id, sample, result: resultBySample.get(sample.id) }));
       } catch { return [] }
     }));
+    if (historyVersion !== historyVersionRef.current) return [];
     // WT numbers remain global, while each uploaded dataset begins a fresh tray
     // at P1.  Never let a partially filled previous upload make the next upload
     // start at P9/P10/etc.
@@ -256,6 +259,7 @@ export function InspectionDashboard({
     const selectionVersion = ++selectionVersionRef.current;
     try {
       const ds = await api.datasets();
+      if (selectionVersion !== selectionVersionRef.current) return [];
       setDatasets(ds);
       const rebuiltHistory = await rebuildGlobalHistory(ds);
       if (selectionVersion !== selectionVersionRef.current) return [];
@@ -276,6 +280,7 @@ export function InspectionDashboard({
     runTokenRef.current += 1;
     wsRef.current?.close();
     wsRef.current = null;
+    wsLiveRef.current = false;
     setJob(null);
     setBusy(false);
     try {
@@ -322,8 +327,11 @@ export function InspectionDashboard({
       .catch(() => { });
     return () => {
       runTokenRef.current += 1;
+      selectionVersionRef.current += 1;
+      historyVersionRef.current += 1;
       wsRef.current?.close();
       wsRef.current = null;
+      wsLiveRef.current = false;
     };
   }, []);
 
@@ -423,13 +431,14 @@ export function InspectionDashboard({
     };
   }, [activeGlobalWt, channel, sample]);
   const wtEntries = useMemo(() => globalHistory.filter(entry => entry.wt === activeGlobalWt), [globalHistory, activeGlobalWt]);
+  const trayThumbnailScope = JSON.stringify(wtEntries.flatMap(entry => Object.keys(entry.sample.images)
+    .filter(candidate => !entry.sample.images[candidate].relative_path.startsWith("demo:"))
+    .map(candidate => ({ channel: candidate, url: thumbnailUrl(entry.datasetId, entry.sample.id, candidate) }))));
   useEffect(() => {
-    if (!wtEntries.length) return;
+    const previews = JSON.parse(trayThumbnailScope) as { channel: string; url: string }[];
+    if (!previews.length) return;
     const controller = new AbortController();
-    const urlsFor = (allChannels: boolean) => wtEntries.flatMap(entry => Object.keys(entry.sample.images)
-      .filter(candidate => (allChannels ? candidate !== channel : candidate === channel)
-        && !entry.sample.images[candidate].relative_path.startsWith("demo:"))
-      .map(candidate => thumbnailUrl(entry.datasetId, entry.sample.id, candidate)));
+    const urlsFor = (allChannels: boolean) => previews.filter(preview => allChannels ? preview.channel !== channel : preview.channel === channel).map(preview => preview.url);
     // Only the active tray is warmed. Other illuminations follow at low
     // concurrency, so switching back is served from memory/browser cache.
     const active = warmPreviews(urlsFor(false), controller.signal, 3);
@@ -439,7 +448,7 @@ export function InspectionDashboard({
       });
     }, 500);
     return () => { controller.abort(); window.clearTimeout(timer); };
-  }, [wtEntries, channel]);
+  }, [trayThumbnailScope, channel]);
   const visibleGlobalHistory = useMemo(() => {
     if (!liveDatasetId) return globalHistory;
     const liveEntries=globalHistory.filter(entry=>entry.datasetId===liveDatasetId);
@@ -449,7 +458,6 @@ export function InspectionDashboard({
     const newestStartedWt=inferredWts.length?Math.max(...inferredWts):firstLiveWt;
     return globalHistory.filter(entry=>entry.datasetId!==liveDatasetId||entry.wt<=newestStartedWt);
   },[globalHistory,liveDatasetId,resultMap]);
-  const wtSamples = useMemo(() => wtEntries.map(entry => entry.sample), [wtEntries]);
   const wtChannelImages = useMemo(
     () =>
       Array.from({ length: wtCapacity }, (_, i) => {
@@ -526,6 +534,17 @@ export function InspectionDashboard({
   const displayNok = nokRate;
   const isRunning =
     busy || job?.status === "queued" || job?.status === "running";
+  useEffect(() => {
+    if (!datasetId || !sample || isRunning) return;
+    const controller = new AbortController();
+    // Other illuminations of this selected lens only, not the whole dataset.
+    const timer = window.setTimeout(() => {
+      const urls = Object.keys(sample.images).filter(candidate => candidate !== channel && !sample.images[candidate].relative_path.startsWith("demo:"))
+        .map(candidate => previewUrl(datasetId, sample.id, candidate));
+      void warmPreviews(urls, controller.signal, 1);
+    }, 750);
+    return () => { controller.abort(); window.clearTimeout(timer); };
+  }, [datasetId, sample, channel, isRunning]);
   const halconOnline = Boolean(info?.bridge && !/offline|unavailable|none|disconnected/i.test(info.bridge));
   const jobProgress = job?.total
     ? Math.min(100, (job.completed / job.total) * 100)
@@ -539,12 +558,13 @@ export function InspectionDashboard({
     }, 250);
   }
 
-  async function refreshRunOutputs(did: string) {
+  async function refreshRunOutputs(did: string, token: number) {
     const [r, l, s] = await Promise.allSettled([
       api.results(did),
       api.logs(),
       api.storageState(),
     ]);
+    if (token !== runTokenRef.current) return;
     if (r.status === "fulfilled") setResults(r.value.items);
     if (l.status === "fulfilled") setLogs(l.value.items.reverse());
     if (s.status === "fulfilled") setStorage(s.value);
@@ -578,9 +598,11 @@ export function InspectionDashboard({
           }
         }
         if (terminal) {
-          await refreshRunOutputs(did);
+          await refreshRunOutputs(did, token);
+          if (token !== runTokenRef.current) return;
           wsRef.current?.close();
           wsRef.current = null;
+          wsLiveRef.current = false;
           if (latest.status === "completed")
             setToast(
               `Run All completed · ${latest.completed} of ${latest.total} lenses inspected`,
@@ -620,6 +642,7 @@ export function InspectionDashboard({
       runTokenRef.current = token;
       wsResultOrdinalRef.current=0;
       wsRef.current?.close();
+      wsLiveRef.current = false;
       // A newly started lot must not keep the previous tray visible while it is
       // waiting for its first inspection result.
       const firstTray = globalHistory.find((entry) => entry.datasetId === targetDatasetId)?.wt;
@@ -640,11 +663,9 @@ export function InspectionDashboard({
         if (m.job) setJob(m.job);
         if (m.result) {
           const resultOrdinal=++wsResultOrdinalRef.current;
-          const resultSample=samples.find(item=>item.id===m.result.sample_id);
           // Publish results immediately; image transfer must not stall the
           // ordered inference stream. The canvas retains its previous frame
           // until the next full-quality image is decoded.
-          if(resultSample&&operationModeRef.current === "AUTO"){const previewChannel=resultSample.images[channel]?channel:resultSample.images.h?"h":resultSample.images.d?"d":Object.keys(resultSample.images)[0];if(previewChannel&&!resultSample.images[previewChannel]?.relative_path?.startsWith("demo:"))void primePreview(previewUrl(targetDatasetId,resultSample.id,previewChannel)).catch(()=>{})}
           setResults((prev) => [
             ...prev.filter((x) => x.sample_id !== m.result.sample_id),
             m.result,
@@ -741,9 +762,11 @@ export function InspectionDashboard({
       const response = await api.clearHistory();
       runTokenRef.current += 1;
       selectionVersionRef.current += 1;
+      historyVersionRef.current += 1;
       datasetSnapshotsRef.current.clear();
       wsRef.current?.close();
       wsRef.current = null;
+      wsLiveRef.current = false;
       setDatasetId(""); setDatasets([]); setSamples([]); setResults([]); setGlobalHistory([]); setCurrent(null); setSelectedGlobalWt(null); setLiveDatasetId(null); setJob(null);
       await refreshDatasets();
       setToast(`History cleared · ${response.removed.catalogs || 0} datasets and ${response.removed.results || 0} result files removed`);

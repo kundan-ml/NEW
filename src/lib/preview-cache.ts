@@ -1,7 +1,8 @@
 type CachedPreview = { blob: Blob; expiresAt: number };
+type PendingPreview = { promise: Promise<Blob>; controller: AbortController; consumers: number };
 
 const previewCache = new Map<string, CachedPreview>();
-const pendingPreviews = new Map<string, Promise<Blob>>();
+const pendingPreviews = new Map<string, PendingPreview>();
 const MAX_PREVIEWS = 160;
 const MAX_PREVIEW_BYTES = 48 * 1024 * 1024;
 const PREVIEW_TTL_MS = 5 * 60 * 1000;
@@ -13,13 +14,28 @@ function removePreview(url: string): void {
   previewCache.delete(url);
 }
 
-function observeRequest(request: Promise<Blob>, signal?: AbortSignal): Promise<Blob> {
-  if (!signal) return request;
-  if (signal.aborted) return Promise.reject(new DOMException('Preview request cancelled', 'AbortError'));
+function observeRequest(request: PendingPreview, signal?: AbortSignal): Promise<Blob> {
+  if (signal?.aborted) return Promise.reject(new DOMException('Preview request cancelled', 'AbortError'));
+  request.consumers += 1;
   return new Promise((resolve, reject) => {
-    const abort = () => reject(new DOMException('Preview request cancelled', 'AbortError'));
-    signal.addEventListener('abort', abort, { once: true });
-    request.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+    let settled = false;
+    const release = () => {
+      if (settled) return false;
+      settled = true;
+      request.consumers -= 1;
+      signal?.removeEventListener('abort', abort);
+      return true;
+    };
+    const abort = () => {
+      if (!release()) return;
+      reject(new DOMException('Preview request cancelled', 'AbortError'));
+      if (request.consumers === 0) request.controller.abort();
+    };
+    signal?.addEventListener('abort', abort, { once: true });
+    request.promise.then(
+      blob => { if (release()) resolve(blob); },
+      error => { if (release()) reject(error); },
+    );
   });
 }
 
@@ -36,9 +52,11 @@ export function fetchPreviewBlob(url: string, signal?: AbortSignal): Promise<Blo
   }
   if (cached) removePreview(url);
   const pending = pendingPreviews.get(url);
-  if (pending) return observeRequest(pending, signal);
-  // Cancel consumers independently; another canvas may share this download.
-  const request = fetch(url, { cache: 'default', signal: AbortSignal.timeout(15000) })
+  if (pending && !pending.controller.signal.aborted) return observeRequest(pending, signal);
+  const controller = new AbortController();
+  // Cancel obsolete tray work only when no canvas/preloader still needs it.
+  const request: PendingPreview = { controller, consumers: 0, promise: Promise.resolve(new Blob()) };
+  request.promise = fetch(url, { cache: 'default', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]) })
     .then(async response => {
       if (!response.ok) throw new Error(`Preview request failed (${response.status})`);
       const blob = await response.blob();
@@ -53,7 +71,7 @@ export function fetchPreviewBlob(url: string, signal?: AbortSignal): Promise<Blo
         }
       }
       return blob;
-    }).finally(() => pendingPreviews.delete(url));
+    }).finally(() => { if (pendingPreviews.get(url) === request) pendingPreviews.delete(url); });
   pendingPreviews.set(url, request);
   return observeRequest(request, signal);
 }

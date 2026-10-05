@@ -56,13 +56,13 @@ export function InspectionCanvas({imageUrl,defects,selectedDefect=-1,showDefects
        if(status!=='OK'){ctx.strokeStyle=status==='NOK'?'#ff2f8f':'#f2b94b';ctx.lineWidth=6;ctx.lineCap='round';[[.78,.24,.89,.33],[.75,.72,.86,.68],[.22,.71,.27,.75]].slice(0,status==='NOK'?3:1).forEach(([x1,y1,x2,y2])=>{ctx.beginPath();ctx.moveTo(x1*900,y1*900);ctx.quadraticCurveTo((x1+x2)*450+12,y1*900-18,x2*900,y2*900);ctx.stroke()})}
        ctx.strokeStyle='rgba(255,255,255,.88)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(430,450);ctx.lineTo(470,450);ctx.moveTo(450,430);ctx.lineTo(450,470);ctx.stroke();
      }
-     const i=new Image();i.decoding='async';i.onload=()=>{if(requestId!==loadSequence.current)return;source.current=i;pixels.current=p;setState('ready');requestAnimationFrame(()=>restoreOrFit(imageUrl))};i.src=p.toDataURL('image/png');
+     const i=new Image();i.decoding='async';i.onload=()=>{if(requestId!==loadSequence.current)return;source.current=i;pixels.current=p;setState('ready');requestAnimationFrame(()=>{if(requestId===loadSequence.current)restoreOrFit(imageUrl)})};i.src=p.toDataURL('image/png');
      return;
    }
    const controller=new AbortController();
    (async()=>{try{
      const blob=await fetchPreviewBlob(imageUrl,controller.signal);if(controller.signal.aborted||requestId!==loadSequence.current)return;revoked=URL.createObjectURL(blob);const i=new Image();i.decoding='async';
-     i.onload=()=>{if(requestId!==loadSequence.current)return;source.current=i;const p=document.createElement('canvas');p.width=i.naturalWidth;p.height=i.naturalHeight;const ctx=p.getContext('2d',{willReadFrequently:true});ctx?.drawImage(i,0,0);pixels.current=p;setState('ready');requestAnimationFrame(()=>restoreOrFit(imageUrl))};
+     i.onload=()=>{if(requestId!==loadSequence.current)return;source.current=i;const p=document.createElement('canvas');p.width=i.naturalWidth;p.height=i.naturalHeight;const ctx=p.getContext('2d',{willReadFrequently:true});ctx?.drawImage(i,0,0);pixels.current=p;setState('ready');requestAnimationFrame(()=>{if(requestId===loadSequence.current)restoreOrFit(imageUrl)})};
      i.onerror=()=>{if(requestId!==loadSequence.current)return;setError('The browser could not decode this preview image.');setState(source.current?'ready':'error')};i.src=revoked;
    }catch(e){if(!controller.signal.aborted&&requestId===loadSequence.current){setError(e instanceof Error?e.message:'Unable to load image');setState(source.current?'ready':'error')}}})();
    return()=>{controller.abort();if(revoked)URL.revokeObjectURL(revoked)};
@@ -97,7 +97,7 @@ export function InspectionCanvas({imageUrl,defects,selectedDefect=-1,showDefects
    pinch.current={distance:Math.max(1,Math.hypot(a.x-b.x,a.y-b.y)),scale:v.scale,imageX:(midX-v.x)/v.scale,imageY:(midY-v.y)/v.scale};
    setDrag(null);
  }
- function updateProbe(e:React.PointerEvent){const h=host.current,i=source.current,p=pixels.current;if(!h||!i||!p||state!=='ready')return;const r=h.getBoundingClientRect(),px=e.clientX-r.left,py=e.clientY-r.top,ix=Math.floor((px-view.x)/view.scale),iy=Math.floor((py-view.y)/view.scale);if(ix<0||iy<0||ix>=i.naturalWidth||iy>=i.naturalHeight){setProbe(null);return}let gray:number|null=null;try{const d=p.getContext('2d',{willReadFrequently:true})?.getImageData(ix,iy,1,1).data;if(d)gray=Math.round(.299*d[0]+.587*d[1]+.114*d[2])}catch{}const next={x:ix,y:iy,gray};setProbe(next);onProbe?.(next)}
+ function updateProbe(e:React.PointerEvent){const h=host.current,i=source.current,p=pixels.current;if(!h||!i||!p||state!=='ready'||activeImage.current!==imageUrl)return;const r=h.getBoundingClientRect(),px=e.clientX-r.left,py=e.clientY-r.top,ix=Math.floor((px-view.x)/view.scale),iy=Math.floor((py-view.y)/view.scale);if(ix<0||iy<0||ix>=i.naturalWidth||iy>=i.naturalHeight){setProbe(null);return}let gray:number|null=null;try{const d=p.getContext('2d',{willReadFrequently:true})?.getImageData(ix,iy,1,1).data;if(d)gray=Math.round(.299*d[0]+.587*d[1]+.114*d[2])}catch{}const next={x:ix,y:iy,gray};setProbe(next);onProbe?.(next)}
  function pointerMove(e:React.PointerEvent){
    const pointer=activePointers.current.get(e.pointerId);
    if(pointer){pointer.x=e.clientX;pointer.y=e.clientY}
@@ -127,7 +127,7 @@ export function InspectionCanvas({imageUrl,defects,selectedDefect=-1,showDefects
    setDrag(remaining?{sx:remaining.x,sy:remaining.y,vx:v.x,vy:v.y}:null);
  }
  function oneToOne(){const h=host.current,i=source.current;if(!h||!i)return;const r=h.getBoundingClientRect();setView({scale:1,x:(r.width-i.naturalWidth)/2,y:(r.height-i.naturalHeight)/2})}
- function focusDefect(){const i=source.current,h=host.current,d=defects[selectedDefect];if(!i||!h||!d?.bbox_xywh_norm)return;const[x,y,w,hh]=d.bbox_xywh_norm,r=h.getBoundingClientRect();const targetW=Math.max(w*i.naturalWidth,60),targetH=Math.max(hh*i.naturalHeight,60),s=Math.min(r.width*.58/targetW,r.height*.58/targetH,8);const cx=(x+w/2)*i.naturalWidth,cy=(y+hh/2)*i.naturalHeight;setView({scale:s,x:r.width/2-cx*s,y:r.height/2-cy*s})}
+ function focusDefect(){const i=source.current,h=host.current,d=defects[selectedDefect];if(!i||!h||!d?.bbox_xywh_norm||activeImage.current!==imageUrl)return;const[x,y,w,hh]=d.bbox_xywh_norm,r=h.getBoundingClientRect();const targetW=Math.max(w*i.naturalWidth,60),targetH=Math.max(hh*i.naturalHeight,60),s=Math.min(r.width*.58/targetW,r.height*.58/targetH,8);const cx=(x+w/2)*i.naturalWidth,cy=(y+hh/2)*i.naturalHeight;setView({scale:s,x:r.width/2-cx*s,y:r.height/2-cy*s})}
  function toggleExpanded(){if(!expanded){const r=host.current?.getBoundingClientRect();if(r&&r.width>0&&r.height>0)setPopupAspect(Math.max(.55,Math.min(2.4,r.width/r.height)))}setExpanded(value=>!value)}
  const canvasView=<div className={`canvasHost canvas-${state} ${expanded?'canvasPopupHost':''}`} ref={host} onWheel={wheel} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerEnd} onPointerCancel={pointerEnd} onPointerLeave={e=>{if(e.pointerType==='mouse'&&!activePointers.current.has(e.pointerId))setProbe(null)}} onDoubleClick={fit}>
    <canvas ref={canvas}/><div className="scanBeam" aria-hidden/>
