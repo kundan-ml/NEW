@@ -36,7 +36,7 @@ import {
   Target,
   TriangleAlert,
 } from "lucide-react";
-import { api, previewUrl, sampleThumbnailUrl, thumbnailUrl, WS_API } from "@/lib/api";
+import { api, previewUrl, sampleThumbnailUrl, thumbnailUrl } from "@/lib/api";
 import { warmPreviews } from "@/lib/preview-cache";
 import { averageInferenceMs, formatInferenceMs, inferenceElapsedMs, INFERENCE_TIMING_DESCRIPTION } from "@/lib/inference-timing";
 import type {
@@ -58,6 +58,7 @@ import { StatusMatrix, type GlobalHistoryEntry } from "./StatusMatrix";
 import { TopBar } from "./TopBar";
 import { TrendChart } from "./TrendChart";
 import { useUI } from "./UIProvider";
+import { useSharedInspection } from "./useSharedInspection";
 
 type WorkspaceTab = "quality" | "activity" | "control";
 type InspectionBottomTab = "messages" | "wt" | "trend";
@@ -156,14 +157,17 @@ export function InspectionDashboard({
   const [newPasswordConfirm, setNewPasswordConfirm] = useState("");
   const [newUserRole, setNewUserRole] = useState<"Operator" | "Tester">("Operator");
   const [statusNow, setStatusNow] = useState<Date | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-  const wsLiveRef = useRef(false);
-  const wsResultOrdinalRef = useRef(0);
-  const runTokenRef = useRef(0);
+  const { snapshot: sharedInspection, resync: resyncInspection } = useSharedInspection();
+  const sharedInspectionRef = useRef(sharedInspection);
+  sharedInspectionRef.current = sharedInspection;
+  const sharedKey = sharedInspection?.job ? `${sharedInspection.stream_id}:${sharedInspection.job.id}` : "";
+  const [hydratedSharedKey, setHydratedSharedKey] = useState("");
+  const [hydrationRetry, setHydrationRetry] = useState(0);
+  const discoveredSharedKeyRef = useRef("");
+  const appliedSharedRef = useRef({ key: "", latestFrame: "", terminal: "" });
   const selectionVersionRef = useRef(0);
   const historyVersionRef = useRef(0);
   const datasetSnapshotsRef = useRef(new Map<string, { samples: Sample[]; results: InspectionResult[] }>());
-  const operationModeRef = useRef(operationMode);
   const wtCapacity = info?.settings.wt_capacity || 16;
 
   useEffect(() => {
@@ -186,9 +190,6 @@ export function InspectionDashboard({
     setNewPasswordConfirm("");
     setLoginError("");
   }, [loginOpen]);
-  useEffect(() => {
-    operationModeRef.current = operationMode;
-  }, [operationMode]);
   useEffect(() => {
     setStatusNow(new Date());
     const timer = window.setInterval(() => setStatusNow(new Date()), 1000);
@@ -218,18 +219,32 @@ export function InspectionDashboard({
       setToast(error instanceof Error ? error.message : "Unable to change operating mode");
     }
   }, [datasetId, operationMode, refreshSystem]);
-  async function rebuildGlobalHistory(allDatasets: DatasetSummary[]) {
+  async function rebuildGlobalHistory(allDatasets: DatasetSummary[], selectNewest = true, reuseMetadata = false) {
     const historyVersion = ++historyVersionRef.current;
     const ordered = [...allDatasets].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
     const loaded = await Promise.all(ordered.map(async dataset => {
       try {
-        const [sampleResponse, resultResponse] = await Promise.all([api.samples(dataset.id), api.results(dataset.id)]);
-        if (historyVersion === historyVersionRef.current) datasetSnapshotsRef.current.set(dataset.id, { samples: sampleResponse.items, results: resultResponse.items });
-        const resultBySample = new Map(resultResponse.items.map(result => [result.sample_id, result]));
+        const sharedAtStart = sharedInspectionRef.current;
+        const existing = datasetSnapshotsRef.current.get(dataset.id);
+        const requiredSamples = Math.max(dataset.sample_count,
+          sharedAtStart?.job?.dataset_id === dataset.id ? sharedAtStart.job.total : 0);
+        const cached = reuseMetadata && existing && existing.samples.length >= requiredSamples ? existing : undefined;
+        const [sampleResponse, resultResponse] = cached
+          ? [{ items: cached.samples }, { items: cached.results }]
+          : await Promise.all([api.samples(dataset.id, Math.max(1000, dataset.sample_count,
+            sharedAtStart?.job?.dataset_id === dataset.id ? sharedAtStart.job.total : 0)), sharedAtStart?.job?.dataset_id === dataset.id
+            ? Promise.resolve({ items: sharedAtStart.results }) : api.results(dataset.id)]);
+        const shared = sharedInspectionRef.current;
+        const latestResults = shared?.job?.dataset_id === dataset.id ? shared.results : resultResponse.items;
+        if (historyVersion === historyVersionRef.current) datasetSnapshotsRef.current.set(dataset.id, { samples: sampleResponse.items, results: latestResults });
+        const resultBySample = new Map(latestResults.map(result => [result.sample_id, result]));
         return sampleResponse.items
           .sort((a, b) => a.wt_index - b.wt_index || a.position - b.position || a.id.localeCompare(b.id))
           .map(sample => ({ datasetId: dataset.id, sample, result: resultBySample.get(sample.id) }));
-      } catch { return [] }
+      } catch (error) {
+        if (dataset.id === sharedInspectionRef.current?.job?.dataset_id) throw error;
+        return [];
+      }
     }));
     if (historyVersion !== historyVersionRef.current) return [];
     // WT numbers remain global, while each uploaded dataset begins a fresh tray
@@ -249,10 +264,20 @@ export function InspectionDashboard({
       wtOffset += localWtCount;
       return entries;
     });
-    setGlobalHistory(flat);
+    // Results may have streamed while another dataset's metadata was loading.
+    // Reconcile again at commit, not with a stale HTTP results response.
+    const shared = sharedInspectionRef.current;
+    const liveResults = new Map(shared?.results.map(result => [result.sample_id, result]) || []);
+    const committed = flat.map(entry => entry.datasetId === shared?.job?.dataset_id
+      ? { ...entry, result: liveResults.get(entry.sample.id) } : entry);
+    if (shared?.job) {
+      const cached = datasetSnapshotsRef.current.get(shared.job.dataset_id);
+      if (cached) datasetSnapshotsRef.current.set(shared.job.dataset_id, { ...cached, results: shared.results });
+    }
+    setGlobalHistory(committed);
     const newestWt = flat.length ? Math.max(...flat.map((entry) => entry.wt)) : null;
-    setSelectedGlobalWt(currentWt => currentWt && newestWt && currentWt <= newestWt ? currentWt : newestWt);
-    return flat;
+    if (selectNewest) setSelectedGlobalWt(currentWt => currentWt && newestWt && currentWt <= newestWt ? currentWt : newestWt);
+    return committed;
   }
   useEffect(()=>{if(datasets.length)void rebuildGlobalHistory(datasets)},[wtCapacity]);
   async function refreshDatasets(prefer?: string) {
@@ -260,6 +285,7 @@ export function InspectionDashboard({
     try {
       const ds = await api.datasets();
       if (selectionVersion !== selectionVersionRef.current) return [];
+      if (!prefer && sharedInspectionRef.current?.job) return [];
       setDatasets(ds);
       const rebuiltHistory = await rebuildGlobalHistory(ds);
       if (selectionVersion !== selectionVersionRef.current) return [];
@@ -277,12 +303,6 @@ export function InspectionDashboard({
   }
   async function loadDataset(id: string) {
     const selectionVersion = ++selectionVersionRef.current;
-    runTokenRef.current += 1;
-    wsRef.current?.close();
-    wsRef.current = null;
-    wsLiveRef.current = false;
-    setJob(null);
-    setBusy(false);
     try {
       const cached = datasetSnapshotsRef.current.get(id);
       const [s, r] = cached
@@ -326,14 +346,118 @@ export function InspectionDashboard({
       })
       .catch(() => { });
     return () => {
-      runTokenRef.current += 1;
       selectionVersionRef.current += 1;
       historyVersionRef.current += 1;
-      wsRef.current?.close();
-      wsRef.current = null;
-      wsLiveRef.current = false;
     };
   }, []);
+
+  // Subscribe independently of the selected historical frame. Only a new
+  // backend job/generation loads metadata; incoming frames use that cache.
+  useEffect(() => {
+    if (!sharedInspection) return;
+    const sharedJob = sharedInspection.job;
+    setJob(sharedJob);
+    if (!sharedJob) {
+      if (discoveredSharedKeyRef.current || appliedSharedRef.current.key) {
+        discoveredSharedKeyRef.current = "";
+        selectionVersionRef.current += 1;
+        historyVersionRef.current += 1;
+        setHydratedSharedKey("");
+        datasetSnapshotsRef.current.clear();
+        setLiveDatasetId(null);
+        setDatasetId(""); setSamples([]); setResults([]); setCurrent(null);
+        setGlobalHistory([]); setSelectedGlobalWt(null);
+        appliedSharedRef.current = { key: "", latestFrame: "", terminal: "" };
+        void refreshDatasets();
+      }
+      return;
+    }
+    discoveredSharedKeyRef.current = sharedKey;
+    selectionVersionRef.current += 1;
+    historyVersionRef.current += 1;
+    setHydratedSharedKey("");
+    setLiveDatasetId(sharedJob.dataset_id);
+    const bySample = new Map(sharedInspection.results.map(result => [result.sample_id, result]));
+    setGlobalHistory(previous => previous.map(entry => entry.datasetId === sharedJob.dataset_id
+      ? { ...entry, result: bySample.get(entry.sample.id) } : entry));
+    if (datasetId === sharedJob.dataset_id) setResults(sharedInspection.results);
+    // A rerun already has complete tray metadata. Reset to P1 immediately and
+    // reuse it; don't download the whole catalog again for every run.
+    const existingMetadata = datasetSnapshotsRef.current.get(sharedJob.dataset_id);
+    if (existingMetadata && existingMetadata.samples.length >= sharedJob.total
+      && globalHistory.some(entry => entry.datasetId === sharedJob.dataset_id)) {
+      setHydratedSharedKey(sharedKey);
+      return;
+    }
+    let cancelled = false;
+    const isCurrent = () => !cancelled && `${sharedInspectionRef.current?.stream_id}:${sharedInspectionRef.current?.job?.id}` === sharedKey;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    void (async () => {
+      try {
+        const allDatasets = await api.datasets();
+        if (!isCurrent()) return;
+        setDatasets(allDatasets);
+        await rebuildGlobalHistory(allDatasets, false, true);
+        if (!isCurrent()) return;
+        // An active job can be announced before the catalog request completes.
+        if (!datasetSnapshotsRef.current.has(sharedJob.dataset_id)) {
+          const response = await api.samples(sharedJob.dataset_id, Math.max(1000, sharedJob.total));
+          if (!isCurrent()) return;
+          datasetSnapshotsRef.current.set(sharedJob.dataset_id, { samples: response.items, results: [] });
+        }
+        setHydratedSharedKey(sharedKey);
+      } catch {
+        // Keep the last decoded canvas while metadata recovers, without losing
+        // newer frames already buffered in the shared snapshot.
+        if (isCurrent()) retryTimer = setTimeout(() => setHydrationRetry(value => value + 1), 1500);
+      }
+    })();
+    return () => { cancelled = true; clearTimeout(retryTimer); };
+  }, [sharedKey, sharedInspection?.stream_id, hydrationRetry]);
+
+  useEffect(() => {
+    if (!sharedInspection?.job) return;
+    const sharedJob = sharedInspection.job;
+    setJob(sharedJob);
+    if (hydratedSharedKey !== sharedKey) return;
+    const cached = datasetSnapshotsRef.current.get(sharedJob.dataset_id);
+    if (!cached) return;
+    datasetSnapshotsRef.current.set(sharedJob.dataset_id, { ...cached, results: sharedInspection.results });
+    const bySample = new Map(sharedInspection.results.map(result => [result.sample_id, result]));
+    setGlobalHistory(previous => previous.map(entry => entry.datasetId === sharedJob.dataset_id
+      ? { ...entry, result: bySample.get(entry.sample.id) } : entry));
+    const newest = sharedInspection.results.at(-1);
+    const latestFrame = newest ? `${newest.sample_id}:${newest.created_at}` : "";
+    const firstAttach = appliedSharedRef.current.key !== sharedKey;
+    const newFrame = latestFrame !== appliedSharedRef.current.latestFrame;
+    const running = sharedJob.status === "queued" || sharedJob.status === "running";
+    // Local MANUAL controls how uploads start, not whether another operator's
+    // live inspection is visible. Idle historical browsing remains untouched.
+    if (firstAttach || newFrame) {
+      selectionVersionRef.current += 1;
+      setDatasetId(sharedJob.dataset_id);
+      setSamples(cached.samples);
+      setResults(sharedInspection.results);
+      setCurrent(newest?.sample_id || cached.samples[0]?.id || null);
+      setSelectedGlobalWt(null);
+      setSelectedDefect(-1);
+      const latestSample = cached.samples.find(item => item.id === newest?.sample_id) || cached.samples[0];
+      if (latestSample) setChannel(previous => latestSample.images[previous] ? previous
+        : latestSample.images.h ? "h" : Object.keys(latestSample.images)[0] || "h");
+    } else if (datasetId === sharedJob.dataset_id) {
+      setResults(sharedInspection.results);
+    }
+    const terminal = running ? "" : `${sharedKey}:${sharedJob.status}`;
+    if (terminal && appliedSharedRef.current.terminal !== terminal) {
+      const stillCurrent = () => `${sharedInspectionRef.current?.stream_id}:${sharedInspectionRef.current?.job?.id}` === sharedKey;
+      void api.logs().then(response => { if (stillCurrent()) setLogs(response.items.reverse()); }).catch(() => {});
+      void api.storageState().then(response => { if (stillCurrent()) setStorage(response); }).catch(() => {});
+      if (!firstAttach) setToast(sharedJob.status === "failed"
+        ? `Inspection failed: ${sharedJob.error || "Unknown processing error"}`
+        : `Inspection ${sharedJob.status} · ${sharedJob.completed} of ${sharedJob.total} lenses`);
+    }
+    appliedSharedRef.current = { key: sharedKey, latestFrame, terminal };
+  }, [sharedInspection, hydratedSharedKey, sharedKey]);
 
   const resultMap = useMemo(
     () => new Map(results.map((r) => [r.sample_id, r])),
@@ -364,6 +488,8 @@ export function InspectionDashboard({
     if (!datasetId) return;
     setGlobalHistory(previous => previous.map(entry => {
       if (entry.datasetId !== datasetId) return entry;
+      const sharedJob = sharedInspectionRef.current?.job;
+      if (entry.datasetId === sharedJob?.dataset_id && (sharedJob.status === "running" || sharedJob.status === "queued")) return entry;
       const liveResult=resultMap.get(entry.sample.id);
       return {...entry,result:datasetId===liveDatasetId?liveResult:liveResult||entry.result};
     }));
@@ -454,10 +580,10 @@ export function InspectionDashboard({
     const liveEntries=globalHistory.filter(entry=>entry.datasetId===liveDatasetId);
     if (!liveEntries.length) return globalHistory.filter(entry=>entry.datasetId!==liveDatasetId);
     const firstLiveWt=Math.min(...liveEntries.map(entry=>entry.wt));
-    const inferredWts=liveEntries.filter(entry=>resultMap.has(entry.sample.id)).map(entry=>entry.wt);
+    const inferredWts=liveEntries.filter(entry=>entry.result).map(entry=>entry.wt);
     const newestStartedWt=inferredWts.length?Math.max(...inferredWts):firstLiveWt;
     return globalHistory.filter(entry=>entry.datasetId!==liveDatasetId||entry.wt<=newestStartedWt);
-  },[globalHistory,liveDatasetId,resultMap]);
+  },[globalHistory,liveDatasetId]);
   const wtChannelImages = useMemo(
     () =>
       Array.from({ length: wtCapacity }, (_, i) => {
@@ -470,7 +596,7 @@ export function InspectionDashboard({
               ? resultMap.get(s.id)
               : resultMap.get(s.id) || entry.result
             : entry?.result,
-          waitingForLiveResult = entry?.datasetId === liveDatasetId && entry.datasetId === datasetId && !result,
+          waitingForLiveResult = entry?.datasetId === liveDatasetId && !result,
           visibleSample = waitingForLiveResult ? undefined : s,
           image = waitingForLiveResult ? undefined : availableImage,
           defect = result?.defects?.[0]?.name || "No defect";
@@ -558,146 +684,20 @@ export function InspectionDashboard({
     }, 250);
   }
 
-  async function refreshRunOutputs(did: string, token: number) {
-    const [r, l, s] = await Promise.allSettled([
-      api.results(did),
-      api.logs(),
-      api.storageState(),
-    ]);
-    if (token !== runTokenRef.current) return;
-    if (r.status === "fulfilled") setResults(r.value.items);
-    if (l.status === "fulfilled") setLogs(l.value.items.reverse());
-    if (s.status === "fulfilled") setStorage(s.value);
-  }
-
-  async function monitorJob(jobId: string, did: string, token: number) {
-    let lastCompleted = -1,
-      failures = 0;
-    while (runTokenRef.current === token) {
-      try {
-        const latest = await api.job(jobId);
-        if (runTokenRef.current !== token) return;
-        setJob(latest);
-        failures = 0;
-        const terminal = ["completed", "failed", "cancelled"].includes(
-          latest.status,
-        );
-        if ((!wsLiveRef.current && latest.completed !== lastCompleted) || terminal) {
-          lastCompleted = latest.completed;
-          const r = terminal || !wsLiveRef.current ? await api.results(did) : null;
-          if (r && runTokenRef.current === token) {
-            setResults(r.items);
-            const newest = [...r.items].sort((a, b) =>
-              new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-            ).at(-1);
-            if (operationModeRef.current === "AUTO" && newest) {
-              setSelectedGlobalWt(null);
-              setCurrent(newest.sample_id);
-              setSelectedDefect(-1);
-            }
-          }
-        }
-        if (terminal) {
-          await refreshRunOutputs(did, token);
-          if (token !== runTokenRef.current) return;
-          wsRef.current?.close();
-          wsRef.current = null;
-          wsLiveRef.current = false;
-          if (latest.status === "completed")
-            setToast(
-              `Run All completed · ${latest.completed} of ${latest.total} lenses inspected`,
-            );
-          else if (latest.status === "failed")
-            setToast(
-              `Inspection failed: ${latest.error || "Unknown processing error"}`,
-            );
-          else
-            setToast(
-              `Inspection stopped · ${latest.completed} of ${latest.total} lenses completed`,
-            );
-          return;
-        }
-      } catch (e) {
-        failures += 1;
-        if (failures >= 4) {
-          setToast(
-            `Unable to read inspection progress: ${(e as Error).message}`,
-          );
-          return;
-        }
-      }
-      await new Promise((resolve) => window.setTimeout(resolve, 450));
-    }
-  }
-
   async function run(targetDatasetId = datasetId, targetSampleCount = samples.length) {
-    if (!targetDatasetId || isRunning) return;
+    const sharedStatus = sharedInspectionRef.current?.job?.status;
+    if (!targetDatasetId || isRunning || sharedStatus === "queued" || sharedStatus === "running") return;
     if (!targetSampleCount) {
       setToast("This lot contains no supported inspection images.");
       return;
     }
     setBusy(true);
     try {
-      const token = runTokenRef.current + 1;
-      runTokenRef.current = token;
-      wsResultOrdinalRef.current=0;
-      wsRef.current?.close();
-      wsLiveRef.current = false;
-      // A newly started lot must not keep the previous tray visible while it is
-      // waiting for its first inspection result.
-      const firstTray = globalHistory.find((entry) => entry.datasetId === targetDatasetId)?.wt;
-      if (firstTray) setSelectedGlobalWt(firstTray);
       const j = await api.run(targetDatasetId);
-      if (token !== runTokenRef.current) return;
-      setLiveDatasetId(targetDatasetId);
-      setResults([]);
-      setSelectedGlobalWt(null);
-      setJob(j);
-      setToast(`Run All started · 0 of ${j.total} lenses`);
-      const ws = new WebSocket(`${WS_API}/ws/jobs/${j.id}`);
-      wsRef.current = ws;
-      ws.onopen=()=>{if (token === runTokenRef.current && wsRef.current === ws) wsLiveRef.current=true};
-      ws.onmessage = (e) => {
-        if (token !== runTokenRef.current || wsRef.current !== ws) return;
-        const m = JSON.parse(e.data);
-        if (m.job) setJob(m.job);
-        if (m.result) {
-          const resultOrdinal=++wsResultOrdinalRef.current;
-          // Publish results immediately; image transfer must not stall the
-          // ordered inference stream. The canvas retains its previous frame
-          // until the next full-quality image is decoded.
-          setResults((prev) => [
-            ...prev.filter((x) => x.sample_id !== m.result.sample_id),
-            m.result,
-          ]);
-          if (operationModeRef.current === "AUTO"&&resultOrdinal===wsResultOrdinalRef.current) {
-            setSelectedGlobalWt(null);
-            setCurrent(m.result.sample_id);
-            setSelectedDefect(-1);
-          }
-        }
-        if (["completed", "failed", "cancelled"].includes(m.type)) {
-          api
-            .logs()
-            .then((x) => setLogs(x.items.reverse()))
-            .catch(() => { });
-          api
-            .storageState()
-            .then(setStorage)
-            .catch(() => { });
-          ws.close();
-          wsLiveRef.current=false;
-          if (wsRef.current === ws) wsRef.current = null;
-        }
-      };
-      ws.onerror = () => {
-        if (wsRef.current !== ws) return;
-        wsLiveRef.current=false;
-        ws.close();
-        if (wsRef.current === ws) wsRef.current = null;
-      };
-      ws.onclose=()=>{if (wsRef.current === ws) wsLiveRef.current=false};
-      void monitorJob(j.id, targetDatasetId, token);
+      setToast(`Inspection ${j.status} · ${j.completed} of ${j.total} lenses`);
+      // Every client (including this starter) consumes the exact same stream.
+      // Discover fast/finished jobs even if their socket event was missed.
+      resyncInspection();
     } catch (e) {
       setToast((e as Error).message);
     } finally {
@@ -760,15 +760,12 @@ export function InspectionDashboard({
     setBusy(true);
     try {
       const response = await api.clearHistory();
-      runTokenRef.current += 1;
       selectionVersionRef.current += 1;
       historyVersionRef.current += 1;
       datasetSnapshotsRef.current.clear();
-      wsRef.current?.close();
-      wsRef.current = null;
-      wsLiveRef.current = false;
       setDatasetId(""); setDatasets([]); setSamples([]); setResults([]); setGlobalHistory([]); setCurrent(null); setSelectedGlobalWt(null); setLiveDatasetId(null); setJob(null);
       await refreshDatasets();
+      resyncInspection();
       setToast(`History cleared · ${response.removed.catalogs || 0} datasets and ${response.removed.results || 0} result files removed`);
     } catch (error) {
       setToast(`Unable to clear history: ${(error as Error).message}`);
@@ -829,12 +826,6 @@ export function InspectionDashboard({
     selectionVersionRef.current += 1;
     setSelectedGlobalWt(entry.wt);
     if (entry.datasetId !== datasetId) {
-      runTokenRef.current += 1;
-      wsRef.current?.close();
-      wsRef.current = null;
-      wsLiveRef.current = false;
-      setJob(null);
-      setBusy(false);
       // History is already loaded. Reuse it instead of waiting for another
       // samples/results round trip every time the operator picks a tray.
       const entries = globalHistory.filter(row => row.datasetId === entry.datasetId);

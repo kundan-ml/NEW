@@ -1,7 +1,30 @@
-import type {DatasetSummary,InspectionResult,Job,LogRow,RegistrationResult,Sample,StatusSymbolLegend,SystemInfo,StorageRuntime} from '@/types';
+import type {DatasetSummary,InspectionResult,InspectionHeartbeat,InspectionStreamCursor,LiveInspectionSnapshot,Job,LogRow,RegistrationResult,Sample,StatusSymbolLegend,SystemInfo,StorageRuntime} from '@/types';
 import {resolvedPreviewUrl} from './preview-cache';
-export const API=process.env.NEXT_PUBLIC_API_URL||'http://localhost:8000/api/v1';
-export const WS_API=API.replace(/^http/,'ws');
+const backendApi=process.env.NEXT_PUBLIC_API_URL||'http://localhost:8000/api/v1';
+// The web server, not each operator's PC, resolves the inspection backend.
+// This also keeps HTTPS deployments free of mixed-content HTTP API calls.
+export const API=typeof window==='undefined'?backendApi:'/api/backend';
+
+export function sharedInspectionSocketUrl():string|null{
+  if(typeof window==='undefined')return null;
+  try{
+    const url=new URL(process.env.NEXT_PUBLIC_WS_URL||backendApi,window.location.origin);
+    if(!['http:','https:','ws:','wss:'].includes(url.protocol)||url.username||url.password)return null;
+    const loopback=(hostname:string)=>hostname==='localhost'||hostname==='127.0.0.1'||hostname==='[::1]'||hostname==='::1';
+    // A LAN browser must never connect to its own localhost:8000. For local
+    // installations the frontend and inspection service share the server host.
+    if(loopback(url.hostname)&&!loopback(window.location.hostname))url.hostname=window.location.hostname;
+    url.protocol=url.protocol==='https:'||url.protocol==='wss:'?'wss:':'ws:';
+    // Next's HTTP proxy cannot tunnel WebSocket upgrades. On HTTPS with a plain
+    // HTTP backend callers use the same-origin snapshot fallback instead.
+    if(window.location.protocol==='https:'&&url.protocol!=='wss:')return null;
+    url.search='';url.hash='';
+    return `${url.toString().replace(/\/+$/,'')}/ws/inspection`;
+  }catch{return null}
+}
+
+const socketUrl=sharedInspectionSocketUrl();
+export const WS_API=socketUrl?socketUrl.replace(/\/ws\/inspection$/,''):'';
 async function request<T>(path:string,init?:RequestInit):Promise<T>{
   const controller=new AbortController();
   const isUpload=typeof FormData!=='undefined'&&init?.body instanceof FormData;
@@ -14,12 +37,13 @@ async function request<T>(path:string,init?:RequestInit):Promise<T>{
   finally{window.clearTimeout(timeout)}
 }
 export const api={
+ liveInspection:(cursor?:InspectionStreamCursor,signal?:AbortSignal)=>request<LiveInspectionSnapshot|InspectionHeartbeat>(`/inspection/live${cursor?`?stream_id=${encodeURIComponent(cursor.stream_id)}&after_sequence=${cursor.sequence}`:''}`,{signal}),
  system:()=>request<SystemInfo>('/system/info'),capabilities:()=>request<any[]>('/system/capabilities'),setMode:(mode:'AUTO'|'SETUP')=>request<any>('/system/mode',{method:'POST',body:JSON.stringify({mode})}),
  login:(username:string,password:string)=>request<any>('/auth/login',{method:'POST',body:JSON.stringify({username,password})}),logout:()=>request<any>('/auth/logout',{method:'POST'}),
  createUser:(username:string,password:string,role:'Operator'|'Tester')=>request<{username:string;role:string}>('/auth/users',{method:'POST',body:JSON.stringify({username,password,role})}),
  version:()=>request<any>('/system/version'),timeoutTable:()=>request<any>('/system/timeout-table'),folderStructure:()=>request<any>('/system/folder-structure'),
  trayLayout:()=>request<{images_per_tray:number;supported_images_per_tray:number[]}>('/system/tray-layout'),setWtCapacity:(capacity:number)=>request<{capacity:number;supported:number[]}>('/system/wt-capacity',{method:'PUT',body:JSON.stringify({capacity})}),
- datasets:async()=>{const rows=await request<DatasetSummary[]>('/datasets');return rows.filter(row=>row.source_type!=='setup-upload'&&!(row.source_type==='upload'&&/^(?:Registration|Focus Check) · Camera Head [1-4]$/.test(row.name)))},samples:(id:string)=>request<{total:number;items:Sample[]}>(`/datasets/${id}/samples?limit=1000`),results:(id:string)=>request<{items:InspectionResult[]}>(`/results/${id}?limit=1000`),
+ datasets:async()=>{const rows=await request<DatasetSummary[]>('/datasets');return rows.filter(row=>row.source_type!=='setup-upload'&&!(row.source_type==='upload'&&/^(?:Registration|Focus Check) · Camera Head [1-4]$/.test(row.name)))},samples:(id:string,limit=1000)=>request<{total:number;items:Sample[]}>(`/datasets/${id}/samples?limit=${limit}`),results:(id:string)=>request<{items:InspectionResult[]}>(`/results/${id}?limit=1000`),
  loadPath:(path:string,name?:string)=>request<any>('/datasets/from-path',{method:'POST',body:JSON.stringify({path,name})}),
  uploadFolder:async(files:FileList,name:string)=>{
    const images=Array.from(files).filter(file=>/\.(?:bmp|tiff?)$/i.test(file.name));

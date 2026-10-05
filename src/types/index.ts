@@ -7,6 +7,12 @@ export interface Defect{name:string;confidence:number;bbox_xywh_norm?:number[];p
 export interface ChannelResult{channel:string;image_path:string;status:'OK'|'NOK'|'WARN';defects:Defect[];measurements:Record<string,string|number>;engine:string;elapsed_ms:number}
 export interface InspectionResult{dataset_id:string;sample_id:string;position:number;wt_index:number;category:string;status:'OK'|'NOK'|'WARN';expected_label?:string;channels:ChannelResult[];defects:Defect[];created_at:string}
 export interface Job{id:string;dataset_id:string;status:'queued'|'running'|'completed'|'failed'|'cancelled';total:number;completed:number;current_sample_id?:string;error?:string;summary:Record<string,number>}
+export interface InspectionStreamCursor {stream_id:string;sequence:number}
+export interface LiveInspectionSnapshot extends InspectionStreamCursor {type:'snapshot';current_job_id?:string|null;job:Job|null;results:InspectionResult[]}
+export interface InspectionHeartbeat extends InspectionStreamCursor {type:'heartbeat';current_job_id?:string|null}
+export interface InspectionResync extends InspectionStreamCursor {type:'resync'}
+export interface InspectionJobEvent extends InspectionStreamCursor {type:'started'|'progress'|'result'|'completed'|'failed'|'cancelled';current_job_id:string|null;job:Job;result?:InspectionResult}
+export type LiveInspectionMessage=LiveInspectionSnapshot|InspectionHeartbeat|InspectionResync|InspectionJobEvent;
 export interface SystemInfo{app:string;version:string;mode:'AUTO'|'SETUP';bridge:string;settings:{station_name:string;line_name:string;installation_name:string;station_index:number;wt_capacity:number;role:Role;channel_labels:Record<string,string>;image_format:'BMP'|'TIF'};session:{username:string;role:Role;logged_in:boolean}}
 export interface LogRow{time:string;level:string;message:string}
 export interface StorageRuntime{active:boolean;started_at?:string;saved_lenses:number;saved_images:number;event_count:number;position_counts:Record<string,number>;error_counts:Record<string,number>;last_saved_at?:string;reason:string}
