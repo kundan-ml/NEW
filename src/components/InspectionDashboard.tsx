@@ -1279,10 +1279,10 @@ export function InspectionDashboard({
                   value={currentResult?.status || "WAITING"}
                   status={currentResult?.status}
                 />
+                <InfoRow label="Inference time" value={currentInferenceTime} title={INFERENCE_TIMING_DESCRIPTION} />
                 {measurementEntries.map(([key, value]) => (
                   <InfoRow key={key} label={measurementLabel(key)} value={formatMeasurement(key, value)} />
                 ))}
-                <InfoRow label="Inference time" value={currentInferenceTime} title={INFERENCE_TIMING_DESCRIPTION} />
               </div>
               <div className="inspectionDefectTitle">
                 <h3>Detected defects</h3>
@@ -1818,6 +1818,7 @@ export function InspectionDashboard({
                     value={sample?.metadata.code || sample?.base_name}
                   />
                   <InfoRow label="Dataset" value={dataset?.name || "—"} />
+                  <InfoRow label="Inference time" value={currentInferenceTime} title={INFERENCE_TIMING_DESCRIPTION} />
                   <InfoRow
                     label="CT No."
                     value={inspectionIdentifiers.ctNumber}
@@ -1844,7 +1845,6 @@ export function InspectionDashboard({
                   />
                   <InfoRow label="Oven Nr." value={sample?.metadata.machine || "—"} />
                   <InfoRow label="EM Tray Nr." value={sample?.metadata.u_index || "—"} />
-                  <InfoRow label="Inference time" value={currentInferenceTime} title={INFERENCE_TIMING_DESCRIPTION} />
                 </div>
                 <div className="referenceLensPreview">
                   <div className="referencePreviewImage">
@@ -2087,7 +2087,7 @@ export function InspectionDashboard({
                       <div className="inspectionOverviewStats">
                         <span><b>{results.length}</b><small>Inspected</small></span>
                         <span><b>{totalDefects}</b><small>Defects</small></span>
-                        <span title={INFERENCE_TIMING_DESCRIPTION}><b>{formatInferenceMs(averageCycleMs)}</b><small>Avg inference</small></span>
+                        <span title={`${formatInferenceMs(averageCycleMs)} per lens. ${INFERENCE_TIMING_DESCRIPTION}`}><b>{formatInferenceMs(averageCycleMs)}</b><small>Avg inference</small></span>
                       </div>
                     </div>
                     <div className="inspectionStackedBar" aria-label={`OK ${yieldPct.toFixed(1)}%, NOK ${nokRate.toFixed(1)}%, warning ${warnRate.toFixed(1)}%`}>
@@ -2229,13 +2229,15 @@ function InfoRow({
   label,
   value,
   status,
+  title,
 }: {
   label: string;
   value?: string | number | null;
   status?: string;
+  title?: string;
 }) {
   return (
-    <div className="referenceInfoRow">
+    <div className="referenceInfoRow" title={title}>
       <span>{label}</span>
       {status ? (
         <b className={`referenceResult ${status.toLowerCase()}`}>{status}</b>

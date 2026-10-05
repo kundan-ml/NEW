@@ -45,6 +45,7 @@ export function DatasetLoader({open,onClose,onLoaded}:{open:boolean;onClose:()=>
       setErr((e as Error).message);
     }finally{
       setBusy(false);
+      if(inputRef.current)inputRef.current.value='';
     }
   }
 
