@@ -122,7 +122,7 @@ async function main() {
     process.env.NEXT_PUBLIC_API_URL = apiUrl;
     restoreEnv('NEXT_PUBLIC_WS_URL', wsUrl);
     global.window = { location: new URL(location), setTimeout, clearTimeout };
-    return loadTypeScript('src/lib/api.ts', { './preview-cache': { resolvedPreviewUrl: value => value } });
+    return loadTypeScript('src/lib/api.ts', { './preview-cache': { resolvedPreviewUrl: value => value }, './folder-upload': loadTypeScript('src/lib/folder-upload.ts') });
   }
   let api = client('http://127.0.0.1:8000/api/v1', 'http://192.168.1.50:3000');
   assert.equal(api.API, '/api/backend');

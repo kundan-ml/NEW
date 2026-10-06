@@ -1,5 +1,6 @@
 import type {DatasetSummary,InspectionResult,InspectionHeartbeat,InspectionStreamCursor,LiveInspectionSnapshot,Job,LogRow,RegistrationResult,Sample,StatusSymbolLegend,SystemInfo,StorageRuntime} from '@/types';
 import {resolvedPreviewUrl} from './preview-cache';
+import {needsChunkUpload, uploadFolderInChunks, type UploadProgress} from './folder-upload';
 const backendApi=process.env.NEXT_PUBLIC_API_URL||'http://localhost:8000/api/v1';
 // The web server, not each operator's PC, resolves the inspection backend.
 // This also keeps HTTPS deployments free of mixed-content HTTP API calls.
@@ -25,13 +26,17 @@ export function sharedInspectionSocketUrl():string|null{
 
 const socketUrl=sharedInspectionSocketUrl();
 export const WS_API=socketUrl?socketUrl.replace(/\/ws\/inspection$/,''):'';
-async function request<T>(path:string,init?:RequestInit):Promise<T>{
+class ApiRequestError extends Error{
+  constructor(message:string,readonly status:number){super(message);this.name='ApiRequestError'}
+}
+async function request<T>(path:string,init?:RequestInit,timeoutMs?:number):Promise<T>{
+  if(path==='/datasets/upload-folder'&&init?.body instanceof FormData&&needsChunkUpload(init.body))return uploadFolderInChunks<T>(init.body,request);
   const controller=new AbortController();
   const isUpload=typeof FormData!=='undefined'&&init?.body instanceof FormData;
-  const timeout=window.setTimeout(()=>controller.abort(),isUpload?120000:20000);
+  const timeout=window.setTimeout(()=>controller.abort(),timeoutMs??(isUpload?120000:20000));
   try{
     const r=await fetch(`${API}${path}`,{...init,signal:init?.signal||controller.signal,headers:{...(isUpload?{}:{'Content-Type':'application/json'}),...(init?.headers||{})},cache:'no-store'});
-    if(!r.ok){let msg=`HTTP ${r.status}`;try{const j=await r.json();msg=j.detail||j.message||JSON.stringify(j)}catch{}throw new Error(msg)}
+    if(!r.ok){let msg=`HTTP ${r.status}`;try{const j=await r.json();const detail=j.detail||j.message||j;msg=typeof detail==='string'?detail:JSON.stringify(detail)}catch{}if(r.status===413)msg='Upload rejected: a request exceeded the hosting or backend size limit. Redeploy the updated frontend/backend for chunked folder uploads, or check MAX_UPLOAD_MB on the backend.';throw new ApiRequestError(msg,r.status)}
     const ct=r.headers.get('content-type')||'';return (ct.includes('application/json')?await r.json():await r.text()) as T;
   }catch(error){if(error instanceof DOMException&&error.name==='AbortError')throw new Error('Request timed out. Check the FastAPI backend connection.');throw error}
   finally{window.clearTimeout(timeout)}
@@ -45,13 +50,16 @@ export const api={
  trayLayout:()=>request<{images_per_tray:number;supported_images_per_tray:number[]}>('/system/tray-layout'),setWtCapacity:(capacity:number)=>request<{capacity:number;supported:number[]}>('/system/wt-capacity',{method:'PUT',body:JSON.stringify({capacity})}),
  datasets:async()=>{const rows=await request<DatasetSummary[]>('/datasets');return rows.filter(row=>row.source_type!=='setup-upload'&&!(row.source_type==='upload'&&/^(?:Registration|Focus Check) · Camera Head [1-4]$/.test(row.name)))},samples:(id:string,limit=1000)=>request<{total:number;items:Sample[]}>(`/datasets/${id}/samples?limit=${limit}`),results:(id:string)=>request<{items:InspectionResult[]}>(`/results/${id}?limit=1000`),
  loadPath:(path:string,name?:string)=>request<any>('/datasets/from-path',{method:'POST',body:JSON.stringify({path,name})}),
- uploadFolder:async(files:FileList,name:string)=>{
+ uploadFolder:async(files:FileList,name:string,progress?:UploadProgress)=>{
    const images=Array.from(files).filter(file=>/\.(?:bmp|tiff?)$/i.test(file.name));
    if(!images.length)throw new Error('This folder contains no supported inspection images. Choose a folder with BMP, TIF, or TIFF files.');
    const fd=new FormData();
    for(const file of images){fd.append('files',file);fd.append('relative_paths',(file as File&{webkitRelativePath?:string}).webkitRelativePath||file.name)}
    fd.append('name',name);
-   return request<DatasetSummary>('/datasets/upload-folder',{method:'POST',body:fd});
+   if(needsChunkUpload(fd))return uploadFolderInChunks<DatasetSummary>(fd,request,progress);
+   const result=await request<DatasetSummary>('/datasets/upload-folder',{method:'POST',body:fd});
+   progress?.(images.reduce((total,file)=>total+file.size,0),images.reduce((total,file)=>total+file.size,0));
+   return result;
  },
  uploadBvTestFiles:(files:{file:File;relativePath:string}[],name:string)=>{const fd=new FormData();for(const item of files){fd.append('files',item.file,item.relativePath);fd.append('relative_paths',item.relativePath)}fd.append('name',name);fd.append('purpose','setup');return request<{id:string;name:string;sample_count:number;image_count:number}>('/datasets/upload-folder',{method:'POST',body:fd})},
  inspectOne:(did:string,sid:string,channels?:string[],lensType='AUTO',script?:string)=>request<InspectionResult>(`/inspect/${did}/sample/${sid}`,{method:'POST',body:JSON.stringify({channels,lens_type:lensType,script})}),run:(did:string,channels?:string[],lensType='AUTO',script?:string)=>request<Job>(`/inspect/${did}/run`,{method:'POST',body:JSON.stringify({channels,delay_ms:100,lens_type:lensType,script})}),job:(id:string)=>request<Job>(`/jobs/${id}`),cancel:(id:string)=>request<Job>(`/jobs/${id}/cancel`,{method:'POST'}),

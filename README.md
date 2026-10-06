@@ -170,6 +170,50 @@ node scripts/check-image-proxy.cjs
 
 ## Run
 
+### Vercel + Cloudflare: large folder uploads
+
+Vercel Functions reject request bodies above 4.5 MB, and Cloudflare also limits
+individual request bodies. Folder uploads above approximately 3 MiB now use
+raw chunks of **at most 2 MiB** through the existing same-origin `/api/backend`
+proxy. No new CORS configuration, upload host, storage service, or dependency
+is required. Each folder still publishes **one dataset**, only after every file
+has arrived; camera names, relative folders, and the AUTO/MANUAL inspection
+workflow are retained. The upload popup shows byte-based progress.
+
+Deploy **both** sides:
+
+1. On the backend PC, copy the updated `app/api/routes.py` and the new
+   `app/api/chunk_uploads.py`, preserving existing backend configuration and
+   license settings. Restart the backend when no inspection is running.
+2. Redeploy the updated frontend to Vercel. Keep both `BACKEND_API_URL` and
+   `NEXT_PUBLIC_API_URL` pointed at the current public backend base, for example
+   `https://stayed-prospects-tender-character.trycloudflare.com/api/v1`
+   (**not** `/docs` or the Swagger `#...` link).
+3. Check backend Swagger exposes `POST /api/v1/datasets/uploads` and its
+   chunk/finish routes. A quick-tunnel address changes whenever Cloudflare
+   issues a new URL; update the Vercel environment and redeploy when that happens.
+
+Backend `MAX_UPLOAD_MB` (currently default 4096 MB) and `MAX_UPLOAD_FILES` still
+apply to the **whole folder**. Chunks are stored directly on the backend storage
+drive under `uploads/.chunk-sessions/<id>/images/`, not multipart `/tmp`.
+Finishing moves the images into `uploads/<id>/` without making another copy.
+Retried chunks are verified byte-for-byte; retried finalization returns the same
+dataset. Setup/Focus/Registration/BV folder uploads use the same transport and
+retain their setup classification. Completed-session acknowledgement metadata
+is kept for safe retries. Failed uploads are abandoned by the client; closing a
+tab/offline interruption can leave an unfinished private session until admin
+Clear History. Cleanup never deletes a published dataset on a lost response.
+
+Checks (isolated; no real uploads or inference):
+
+```bash
+node scripts/check-folder-upload.cjs
+node scripts/check-folder-upload-proxy.cjs
+node scripts/check-backend-transport.cjs
+# From BACKEND:
+python -m unittest discover -s tests -p 'test_chunk_uploads.py' -v
+```
+
 ```bash
 npm install
 npm run dev

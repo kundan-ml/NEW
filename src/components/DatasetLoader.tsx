@@ -10,6 +10,7 @@ export function DatasetLoader({open,onClose,onLoaded}:{open:boolean;onClose:()=>
   const[name,setName]=useState('Inspection lot');
   const[busy,setBusy]=useState(false);
   const[err,setErr]=useState('');
+  const[uploadPercent,setUploadPercent]=useState<number|null>(null);
   const inputRef=useRef<HTMLInputElement>(null);
 
   useEffect(()=>{
@@ -22,6 +23,7 @@ export function DatasetLoader({open,onClose,onLoaded}:{open:boolean;onClose:()=>
   if(!open||typeof document==='undefined')return null;
 
   async function loadPath(){
+    setUploadPercent(null);
     setBusy(true);setErr('');
     try{
       const d=await api.loadPath(path,name);
@@ -36,9 +38,9 @@ export function DatasetLoader({open,onClose,onLoaded}:{open:boolean;onClose:()=>
 
   async function upload(files:FileList|null){
     if(!files?.length)return;
-    setBusy(true);setErr('');
+    setBusy(true);setErr('');setUploadPercent(0);
     try{
-      const d=await api.uploadFolder(files,name);
+      const d=await api.uploadFolder(files,name,(uploaded,total)=>setUploadPercent(Math.round(uploaded/Math.max(1,total)*100)));
       onLoaded(d.id);
       onClose();
     }catch(e){
@@ -56,7 +58,7 @@ export function DatasetLoader({open,onClose,onLoaded}:{open:boolean;onClose:()=>
       <header className="uploadModalBrand">
         <div className="modalBadge"><FolderInput/></div>
         <span><small>EMAGE GROUP · DATA INTAKE</small><h2 id="upload-folder-title">Upload inspection images</h2><p>Add a complete camera folder for WT processing and live inference.</p></span>
-        <button className="modalClose" onClick={onClose} aria-label="Close upload folder"><X/></button>
+        <button className="modalClose" onClick={onClose} disabled={busy} aria-label="Close upload folder"><X/></button>
       </header>
       <div className="uploadModalBody">
         <div className="uploadStatus"><i/><span>Ready for import</span><em>H · D · N · P frame set</em></div>
@@ -76,7 +78,7 @@ export function DatasetLoader({open,onClose,onLoaded}:{open:boolean;onClose:()=>
         <input ref={inputRef} type="file" multiple {...dirProps} hidden onChange={e=>upload(e.target.files)}/>
         <div className="uploadDropZone">
           <span className="uploadDropGlow"/>
-          <button className="uploadFolder" onClick={()=>inputRef.current?.click()} disabled={busy}>{busy?<><Loader2 className="spin"/><span className="uploadFolderCopy"><small>PROCESSING FOLDER</small><b>Importing image folder…</b><em>Preparing inspection data</em></span><i>Wait</i></>:<><FolderUp/><span className="uploadFolderCopy"><small>LOCAL IMAGE FOLDER</small><b>Choose and upload image folder</b><em>Preserves camera folders and file names</em></span><i>Browse</i></>}</button>
+          <button className="uploadFolder" onClick={()=>inputRef.current?.click()} disabled={busy}>{busy?<><Loader2 className="spin"/><span className="uploadFolderCopy"><small>PROCESSING FOLDER</small><b>{uploadPercent===100?'Validating camera images…':'Importing image folder…'}</b><em>{uploadPercent===null?'Preparing inspection data':`${uploadPercent}% uploaded · one dataset`}</em></span><i>{uploadPercent===null?'Wait':`${uploadPercent}%`}</i></>:<><FolderUp/><span className="uploadFolderCopy"><small>LOCAL IMAGE FOLDER</small><b>Choose and upload image folder</b><em>Preserves camera folders and file names</em></span><i>Browse</i></>}</button>
         </div>
         <div className="uploadAssurance"><span><i>✓</i> Folder structure retained</span><span><i>✓</i> Four camera channels validated</span><span><i>✓</i> Automatic queue available</span></div>
         {err&&<div className="errorBox">{err}</div>}
