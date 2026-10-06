@@ -30,7 +30,7 @@ class ApiRequestError extends Error{
   constructor(message:string,readonly status:number){super(message);this.name='ApiRequestError'}
 }
 async function request<T>(path:string,init?:RequestInit,timeoutMs?:number):Promise<T>{
-  if(path==='/datasets/upload-folder'&&init?.body instanceof FormData&&needsChunkUpload(init.body))return uploadFolderInChunks<T>(init.body,request);
+  if(path==='/datasets/upload-folder'&&init?.body instanceof FormData&&needsChunkUpload(init.body))return uploadFolderInChunks<T>(init.body,(chunkPath,chunkInit,chunkTimeout)=>request(chunkPath,{...chunkInit,signal:chunkInit?.method==='DELETE'?undefined:init.signal || chunkInit?.signal},chunkTimeout));
   const controller=new AbortController();
   const isUpload=typeof FormData!=='undefined'&&init?.body instanceof FormData;
   const timeout=window.setTimeout(()=>controller.abort(),timeoutMs??(isUpload?120000:20000));
@@ -42,6 +42,13 @@ async function request<T>(path:string,init?:RequestInit,timeoutMs?:number):Promi
   finally{window.clearTimeout(timeout)}
 }
 export const api={
+ uploadSetupPreview:(file:File,signal:AbortSignal)=>{
+   const form=new FormData();const extension=file.name.split('.').pop()?.toLowerCase() || 'tif';
+   const name=`SetupPreview#1.${extension}`;
+   form.append('files',file,name);form.append('relative_paths',name);
+   form.append('purpose','setup');form.append('name','Setup image preview');
+   return request<{id:string;samples:Sample[]}>('/datasets/upload-folder',{method:'POST',body:form,signal});
+ },
  liveInspection:(cursor?:InspectionStreamCursor,signal?:AbortSignal)=>request<LiveInspectionSnapshot|InspectionHeartbeat>(`/inspection/live${cursor?`?stream_id=${encodeURIComponent(cursor.stream_id)}&after_sequence=${cursor.sequence}`:''}`,{signal}),
  system:()=>request<SystemInfo>('/system/info'),capabilities:()=>request<any[]>('/system/capabilities'),setMode:(mode:'AUTO'|'SETUP')=>request<any>('/system/mode',{method:'POST',body:JSON.stringify({mode})}),
  login:(username:string,password:string)=>request<any>('/auth/login',{method:'POST',body:JSON.stringify({username,password})}),logout:()=>request<any>('/auth/logout',{method:'POST'}),

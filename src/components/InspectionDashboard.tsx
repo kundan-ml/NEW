@@ -36,7 +36,8 @@ import {
   Target,
   TriangleAlert,
 } from "lucide-react";
-import { api, previewUrl, sampleThumbnailUrl, thumbnailUrl } from "@/lib/api";
+import { API, api, previewUrl, sampleThumbnailUrl, thumbnailUrl } from "@/lib/api";
+import { lensSnapshotArchive } from "@/lib/lens-snapshot";
 import { warmPreviews } from "@/lib/preview-cache";
 import { averageInferenceMs, formatInferenceMs, inferenceElapsedMs, INFERENCE_TIMING_DESCRIPTION } from "@/lib/inference-timing";
 import type {
@@ -122,6 +123,7 @@ export function InspectionDashboard({
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
   const [hold, setHold] = useState(false);
+  const [snapshotBusy, setSnapshotBusy] = useState(false);
   const [loadedImageSize, setLoadedImageSize] = useState<{key:string;width:number;height:number} | null>(null);
   const [moreActionsOpen, setMoreActionsOpen] = useState(false);
   // -1 is the all-defects canvas overview. The panel still highlights its
@@ -744,12 +746,26 @@ export function InspectionDashboard({
     }
   }
   async function snap() {
-    if (!datasetId || !sample) return;
+    if (!datasetId || !sample || snapshotBusy) return;
+    setSnapshotBusy(true);
+    const selectedSample=sample, selectedDataset=datasetId;
     try {
-      const r = await api.snapshot(datasetId, sample.id, channel);
-      setToast(`Lens snapshot saved: ${r.saved}`);
+      setToast("Preparing all illumination images…");
+      const zip=await lensSnapshotArchive(selectedSample,async illumination=>{
+        await api.snapshot(selectedDataset,selectedSample.id,illumination);
+        const response=await fetch(`${API}/datasets/${encodeURIComponent(selectedDataset)}/image/${encodeURIComponent(selectedSample.id)}/${illumination}`,{signal:AbortSignal.timeout(120000)});
+        if(!response.ok)throw new Error(`Could not download ${channelLabels[illumination] || illumination} (HTTP ${response.status}).`);
+        return response.blob();
+      });
+      const url=URL.createObjectURL(zip),link=document.createElement('a');
+      link.href=url;link.download=`${selectedSample.base_name.replace(/[\\/:*?"<>|]/g,'_').slice(0,160)}-illuminations.zip`;
+      document.body.appendChild(link);link.click();link.remove();
+      window.setTimeout(()=>URL.revokeObjectURL(url),60000);
+      setToast("Lens snapshot saved and downloaded with all available illuminations.");
     } catch (e) {
       setToast((e as Error).message);
+    } finally {
+      setSnapshotBusy(false);
     }
   }
   async function archiveCurrentWt() {
@@ -1287,6 +1303,7 @@ export function InspectionDashboard({
               sample={sample}
               channel={channel}
               defects={visibleDefects}
+              sharedDefectGeometry={currentResult?.channels.some(item=>/dsm.*halcon|dsm-bv/i.test(item.engine))}
               onChannel={setChannel}
               labels={channelLabels}
               hold={hold}
@@ -1400,7 +1417,7 @@ export function InspectionDashboard({
                 </p>
               </div> */}
               <div className="inspectionLensActions">
-                <button onClick={snap} disabled={!sample}>
+                <button onClick={snap} disabled={!sample || snapshotBusy}>
                   <Camera />
                   Lens snapshot
                 </button>
@@ -1834,6 +1851,7 @@ export function InspectionDashboard({
             sample={sample}
             channel={channel}
             defects={visibleDefects}
+            sharedDefectGeometry={currentResult?.channels.some(item=>/dsm.*halcon|dsm-bv/i.test(item.engine))}
             onChannel={setChannel}
             labels={channelLabels}
             hold={hold}
@@ -1913,7 +1931,7 @@ export function InspectionDashboard({
                     <Target />
                     Open in Viewer
                   </button>
-                  <button onClick={snap} disabled={!sample}>
+                  <button onClick={snap} disabled={!sample || snapshotBusy}>
                     <Camera />
                     Capture Image
                   </button>

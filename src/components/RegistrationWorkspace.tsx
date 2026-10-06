@@ -68,8 +68,8 @@ export function RegistrationWorkspace({onClose}:{onClose:()=>void}){
         if(controller.signal.aborted){URL.revokeObjectURL(url);return}
         urls.push(url);
         setPreviews(current=>({...current,[channel.key]:url}));
-      }).catch(()=>{
-        if(!controller.signal.aborted)setFailedPreviews(current=>({...current,[channel.key]:true}));
+      }).catch(error=>{
+        if(!controller.signal.aborted){setFailedPreviews(current=>({...current,[channel.key]:true}));setNotice(error instanceof Error?error.message:'Could not load this image.');}
       });
     }
     return()=>{controller.abort();urls.forEach(url=>URL.revokeObjectURL(url))};

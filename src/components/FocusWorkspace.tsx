@@ -106,7 +106,7 @@ export function FocusWorkspace({onClose}:{onClose:()=>void}){
     document.documentElement.style.overflow='hidden';
     void Promise.allSettled([api.system(),api.getCameraSystem()]).then(([systemResult,cameraResult])=>{
       if(systemResult.status==='fulfilled')setSystem(systemResult.value);
-      if(cameraResult.status==='fulfilled')setCameraConfig(cameraResult.value as CameraConfig);
+      if(cameraResult.status==='fulfilled'&&Array.isArray(cameraResult.value?.cameras))setCameraConfig(cameraResult.value as CameraConfig);
     });
     return()=>{document.body.style.overflow=body;document.documentElement.style.overflow=root};
   },[]);
@@ -122,8 +122,8 @@ export function FocusWorkspace({onClose}:{onClose:()=>void}){
         if(controller.signal.aborted){URL.revokeObjectURL(url);return}
         urls.push(url);
         setPreviews(current=>({...current,[channel.key]:url}));
-      }).catch(()=>{
-        if(!controller.signal.aborted)setFailedPreviews(current=>({...current,[channel.key]:true}));
+      }).catch(error=>{
+        if(!controller.signal.aborted){setFailedPreviews(current=>({...current,[channel.key]:true}));setNotice(error instanceof Error?error.message:'Could not load this image.');}
       });
     }
     return()=>{controller.abort();urls.forEach(url=>URL.revokeObjectURL(url))};

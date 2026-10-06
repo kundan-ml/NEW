@@ -24,11 +24,12 @@ const makeSamples = (dataset, count) => Array.from({ length: count }, (_, i) => 
   }])),
 }));
 const sampleRows = { old: makeSamples('old', 16), live: makeSamples('live', 32) };
+const fixtureDefect={name:'Surface Imperfection',confidence:1,channel:'h',severity:'major',bbox_xywh_norm:[.65,.3,.12,.1]};
 const result = (dataset, index, run = 'a') => ({
   dataset_id: dataset, sample_id: `${dataset}-${index}`, position: (index - 1) % 16 + 1,
   wt_index: Math.floor((index - 1) / 16) + 1, category: 'Inspection',
-  status: index % 3 ? 'OK' : 'NOK', defects: [],
-  channels: channels.map(channel => ({ channel, image_path: '/fixture/image.bmp', status: index % 3 ? 'OK' : 'NOK', defects: [], measurements: {}, engine: 'HALCON fixture', elapsed_ms: 12.345 })),
+  status: index % 3 ? 'OK' : 'NOK', defects: index===5?[fixtureDefect]:[],
+  channels: channels.map(channel => ({ channel, image_path: '/fixture/image.bmp', status: index % 3 ? 'OK' : 'NOK', defects: index===5&&channel==='h'?[fixtureDefect]:[], measurements: {}, engine: 'dsm-bv-4cam-halcon-26.05', elapsed_ms: 12.345 })),
   created_at: `2026-10-05T${run === 'a' ? '08' : '09'}:00:${String(index).padStart(2, '0')}Z`,
 });
 const datasets = ['old', 'live'].map((id, index) => ({
@@ -40,6 +41,9 @@ const datasets = ['old', 'live'].map((id, index) => ({
 const makeJob = (id, completed, status = 'running') => ({ id, dataset_id: 'live', status, total: 32, completed, current_sample_id: `live-${completed + 1}`, summary: { OK: completed, NOK: 0, WARN: 0 } });
 let snapshot = { type: 'snapshot', stream_id: 'fixture-stream', sequence: 100, current_job_id: 'job-a', job: makeJob('job-a', 5), results: Array.from({ length: 5 }, (_, i) => result('live', i + 1)) };
 let delayedLive = null;
+let setupPreviewFixtures=false;
+let setupSession=0;
+const setupFixtureWrites=[];
 const reports = [];
 const viewers = [];
 let chrome;
@@ -74,6 +78,14 @@ async function fixtureRequest(viewer, event) {
     const small = url.searchParams.get('thumbnail') === '1';
     if (!small) await pause(800);
     body = `<svg xmlns="http://www.w3.org/2000/svg" width="${small ? 160 : 640}" height="${small ? 120 : 480}" viewBox="0 0 640 480"><rect width="640" height="480" fill="#050505"/><circle cx="320" cy="240" r="190" fill="#777"/><text x="20" y="35" fill="white">${url.searchParams.get('sampleId')}</text></svg>`;
+  } else if (setupPreviewFixtures && route.endsWith('/datasets/uploads') && method==='POST') {
+    assert.equal(JSON.parse(event.request.postData).purpose,'setup','Preview uploads must be isolated from inspection history');
+    body={upload_id:(++setupSession).toString(16).padStart(32,'0'),chunk_bytes:2*1024*1024};
+  } else if (setupPreviewFixtures && /\/datasets\/uploads\/[^/]+\/files\/0$/.test(route)) {
+    const offset=Number(url.searchParams.get('offset')),size=Number(url.searchParams.get('size'));
+    body={next_offset:offset+Math.min(2*1024*1024,size-offset)};
+  } else if (setupPreviewFixtures && /\/datasets\/uploads\/[^/]+\/finish$/.test(route)) {
+    body={id:'setup-preview',sample_count:1,samples:[{id:'one',images:{h:{channel:'h'}}}]};
   } else if (route === '/api/ui-config/access') body = { canCustomize: false };
   else if (route === '/api/ui-config') body = { manualSkeleton: viewer.classic, theme: 'graphite' };
   else if (route.endsWith('/inspection/live')) {
@@ -89,7 +101,10 @@ async function fixtureRequest(viewer, event) {
   else if (route.endsWith('/logs')) body = { items: [] };
   else if (route.endsWith('/auth/current')) body = { username: 'fixture', role: 'Operator', logged_in: true };
   else body = {};
-  if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) viewer.mutations.push({ route, method });
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    if(setupPreviewFixtures && route.includes('/datasets/uploads'))setupFixtureWrites.push({route,method});
+    else viewer.mutations.push({ route, method });
+  }
   await viewer.cdp.send('Fetch.fulfillRequest', { requestId: event.requestId, responseCode: 200,
     responseHeaders: [{ name: 'Content-Type', value: contentType }, { name: 'Cache-Control', value: 'no-store' }],
     body: Buffer.from(typeof body === 'string' ? body : JSON.stringify(body)).toString('base64') });
@@ -98,6 +113,9 @@ async function fixtureRequest(viewer, event) {
 function socketFixture(initial) {
   return `(() => {
     window.__qaDraws=[];
+    window.__qaOverlays=0;
+    const rectangle=CanvasRenderingContext2D.prototype.strokeRect;
+    CanvasRenderingContext2D.prototype.strokeRect=function(...args){window.__qaOverlays++;return rectangle.apply(this,args);};
     const draw=CanvasRenderingContext2D.prototype.drawImage;
     CanvasRenderingContext2D.prototype.drawImage=function(image,...args){if(image instanceof HTMLImageElement)window.__qaDraws.push(image.naturalWidth);return draw.call(this,image,...args);};
     localStorage.setItem('lens-operation-mode','MANUAL');
@@ -192,6 +210,11 @@ async function advance(completed, id = 'job-a', run = 'a') {
     assert(await viewer.evaluate('window.__qaDraws.includes(160)'), 'Canvas must draw a fast thumbnail before the delayed full-resolution image');
     await waitFor(viewer, `Array.from(document.querySelectorAll('.referenceInfoRow')).some(row=>row.innerText.includes('Width Px')&&row.innerText.includes('640 px'))`, 'actual image width fallback');
     await waitFor(viewer, `Array.from(document.querySelectorAll('.referenceInfoRow')).some(row=>row.innerText.includes('Height Px')&&row.innerText.includes('480 px'))`, 'actual image height fallback');
+    for(const label of ['Dark Field','Diffuse','Phase Contrast','Telecentric']){
+      const changed=await viewer.evaluate(`(()=>{const button=Array.from(document.querySelectorAll('.channelTabs button')).find(button=>button.textContent.includes(${JSON.stringify(label)}));if(!button)return false;window.__qaOverlays=0;button.click();return true;})()`);
+      // Channel labels are configurable; test every available matching entry.
+      if(changed)await waitFor(viewer,'window.__qaOverlays>0',`registered defect overlays on ${label}`);
+    }
   }
   for (const viewer of viewers) assert.equal((await inspect(viewer)).mode, 'MANUAL', 'Live following must preserve local manual upload policy');
   reports.push({ case: 'independent profiles late join + saved MANUAL', classic: await inspect(classic), modern: await inspect(modern) });
@@ -271,10 +294,30 @@ async function advance(completed, id = 'job-a', run = 'a') {
   await pause(200);
   assert((await inspect(idle)).selected.startsWith('WT 1 position 1'), 'Idle bootstrap heartbeats must not undo explicit history selection');
   reports.push({ case: 'initial idle bootstrap preserves historical dataset loading', idle: await inspect(idle) });
+  // Real file-input selection, but every upload/preview request is intercepted.
+  // This catches popup/ref/event wiring errors in addition to transport tests.
+  setupPreviewFixtures=true;
+  const fixtureImage=await require('sharp')({create:{width:1300,height:1000,channels:3,background:'#777'}}).tiff({compression:'none'}).toBuffer();
+  assert(fixtureImage.length>3*1024*1024,'TIFF fixture must exercise hosted chunking');
+  const filePaths=[1,2,3,4].map(number=>{const filename=path.join(profile,`lens#${number}.tif`);fs.writeFileSync(filename,fixtureImage);return filename;});
+  const historyRows=await idle.evaluate('document.querySelectorAll(".historyTable tbody tr").length');
+  for(const kind of ['registration','focus']){
+    await idle.evaluate(`window.dispatchEvent(new Event('lens-open-${kind}'))`);
+    await waitFor(idle,`!!document.querySelector('.${kind}Modal')`,`${kind} popup`);
+    const {result:input}=await idle.cdp.send('Runtime.evaluate',{expression:`document.querySelector('.${kind}Modal input[type=file][multiple]')`});
+    assert(input.objectId,`${kind} batch input must be available`);
+    await idle.cdp.send('DOM.setFileInputFiles',{objectId:input.objectId,files:filePaths});
+    const imageSelector=kind==='registration'?'.registrationPreviewFrame img':'.focusCardImage img';
+    await waitFor(idle,`Array.from(document.querySelectorAll('${imageSelector}')).filter(image=>image.complete&&image.naturalWidth>0).length===4`,`${kind} four large TIFF previews`,30000);
+    await idle.evaluate(`document.querySelector('[aria-label="${kind==='focus'?'Close Focus Check':'Close registration'}"]').click()`);
+    assert.equal(await idle.evaluate('document.querySelectorAll(".historyTable tbody tr").length'),historyRows,'Setup preview selection must not create inspection trays');
+    reports.push({case:`${kind} popup file upload: four TIFFs, automatic matching, no new history`});
+  }
   for (const viewer of viewers) { assert.deepEqual(viewer.mutations, [], 'Observer browsers must never mutate backend/config'); assert.deepEqual(viewer.errors, [], 'No browser runtime errors'); }
-  console.log(JSON.stringify({ passed: reports, apiMutations: 0, browserErrors: 0 }, null, 2));
+  console.log(JSON.stringify({ passed: reports, apiMutations: 0, isolatedSetupFixtureWrites:setupFixtureWrites.length, browserErrors: 0 }, null, 2));
 })().catch(error => { console.error(error.stack || error); process.exitCode = 1; }).finally(async () => {
   for (const viewer of viewers) viewer.cdp.close();
   if (browser) { try { await browser.send('Browser.close'); } catch {} browser.close(); }
   if (chrome && !chrome.killed) chrome.kill('SIGTERM');
+  fs.rmSync(profile,{recursive:true,force:true});
 });
