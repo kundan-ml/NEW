@@ -511,12 +511,6 @@ export function InspectionDashboard({
       })
     : "—";
   const dataset = datasets.find((item) => item.id === datasetId);
-  const currentChannelResult = currentResult?.channels.find(
-    (item) => item.channel === channel,
-  ) || currentResult?.channels[0];
-  const measurementEntries = Object.entries(
-    currentChannelResult?.measurements || {},
-  );
   const visibleDefects = useMemo(
     () =>
       errorMode === "none"
@@ -1330,9 +1324,6 @@ export function InspectionDashboard({
                   status={currentResult?.status}
                 />
                 <InfoRow label="Inference time" value={currentInferenceTime} title={INFERENCE_TIMING_DESCRIPTION} />
-                {measurementEntries.map(([key, value]) => (
-                  <InfoRow key={key} label={measurementLabel(key)} value={formatMeasurement(key, value)} />
-                ))}
               </div>
               <div className="inspectionDefectTitle">
                 <h3>Detected defects</h3>
@@ -1863,17 +1854,17 @@ export function InspectionDashboard({
               </div>
               <div className="referenceLensInfo">
                 <div className="referenceLensData">
+                  <InfoRow label="Dataset" value={dataset?.name || "—"} />
                   <InfoRow
                     label="Lens ID"
                     value={sample?.metadata.code || sample?.base_name}
                   />
-                  <InfoRow label="Dataset" value={dataset?.name || "—"} />
-                  <InfoRow label="Inference time" value={currentInferenceTime} title={INFERENCE_TIMING_DESCRIPTION} />
                   <InfoRow
                     label="CT No."
                     value={inspectionIdentifiers.ctNumber}
                   />
                   <InfoRow label="Shuttle Nr." value={inspectionIdentifiers.shuttleNumber} />
+                  <InfoRow label="Curing Tray Nr." value={inspectionIdentifiers.curingTray} />
                   <InfoRow
                     label="Position"
                     value={sample ? `${sample.position} / ${wtCapacity}` : "—"}
@@ -1884,17 +1875,7 @@ export function InspectionDashboard({
                     value={currentResult?.status || "WAITING"}
                     status={currentResult?.status}
                   />
-                  <i />
-                  {measurementEntries.map(([key, value]) => (
-                    <InfoRow key={key} label={measurementLabel(key)} value={formatMeasurement(key, value)} />
-                  ))}
-                  <InfoRow label="Lens Type" value={sample?.category} />
-                  <InfoRow
-                    label="Curing Tray Nr."
-                    value={inspectionIdentifiers.curingTray}
-                  />
-                  <InfoRow label="Oven Nr." value={sample?.metadata.machine || "—"} />
-                  <InfoRow label="EM Tray Nr." value={sample?.metadata.u_index || "—"} />
+                  <InfoRow label="Inference time" value={currentInferenceTime} title={INFERENCE_TIMING_DESCRIPTION} />
                 </div>
                 <div className="referenceLensPreview">
                   <div className="referencePreviewImage">
@@ -2282,17 +2263,6 @@ function InfoRow({
       )}
     </div>
   );
-}
-
-function measurementLabel(key: string) {
-  return key
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (character) => character.toUpperCase());
-}
-
-function formatMeasurement(key: string, value: string | number) {
-  const unit = key.endsWith("_px") ? " px" : key.endsWith("_ms") ? " ms" : "";
-  return `${typeof value === "number" ? Number(value.toFixed(3)) : value}${unit}`;
 }
 
 function defectLocationLabel(defect: {position_text?:string;bbox_xywh_norm?:number[]}) {
