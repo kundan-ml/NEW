@@ -500,6 +500,13 @@ export function InspectionDashboard({
   );
   const currentResult = current ? resultMap.get(current) : undefined;
   const currentInferenceTime = formatInferenceMs(inferenceElapsedMs(currentResult));
+  const currentMeasurements = (currentResult?.channels.find(
+    (item) => item.channel === channel,
+  ) || currentResult?.channels[0])?.measurements;
+  const currentDimension = (key: "width_px" | "height_px") => {
+    const value = currentMeasurements?.[key];
+    return value === undefined ? "—" : `${value} px`;
+  };
   const lastInspectionLabel = currentResult?.created_at
     ? new Date(currentResult.created_at).toLocaleString([], {
         year: "numeric",
@@ -1324,6 +1331,9 @@ export function InspectionDashboard({
                   status={currentResult?.status}
                 />
                 <InfoRow label="Inference time" value={currentInferenceTime} title={INFERENCE_TIMING_DESCRIPTION} />
+                <InfoRow label="Width Px" value={currentDimension("width_px")} />
+                <InfoRow label="Height Px" value={currentDimension("height_px")} />
+                <InfoRow label="Camera Count" value={currentMeasurements?.camera_count ?? "—"} />
               </div>
               <div className="inspectionDefectTitle">
                 <h3>Detected defects</h3>
@@ -1876,6 +1886,9 @@ export function InspectionDashboard({
                     status={currentResult?.status}
                   />
                   <InfoRow label="Inference time" value={currentInferenceTime} title={INFERENCE_TIMING_DESCRIPTION} />
+                  <InfoRow label="Width Px" value={currentDimension("width_px")} />
+                  <InfoRow label="Height Px" value={currentDimension("height_px")} />
+                  <InfoRow label="Camera Count" value={currentMeasurements?.camera_count ?? "—"} />
                 </div>
                 <div className="referenceLensPreview">
                   <div className="referencePreviewImage">
