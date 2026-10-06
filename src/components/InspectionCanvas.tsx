@@ -8,9 +8,9 @@ import {constrainImagePan} from '@/lib/image-pan';
 import {fetchPreviewBlob} from '@/lib/preview-cache';
 
 type Probe={x:number;y:number;gray:number|null};
-type Props={imageUrl:string;defects:Defect[];selectedDefect?:number;showDefects?:boolean;showCrosshair?:boolean;onProbe?:(p:Probe)=>void};
+type Props={imageUrl:string;thumbnailUrl?:string;onDimensions?:(width:number,height:number)=>void;defects:Defect[];selectedDefect?:number;showDefects?:boolean;showCrosshair?:boolean;onProbe?:(p:Probe)=>void};
 type View={scale:number;x:number;y:number};
-type SavedView={scale:number;centerX:number;centerY:number};
+type SavedView={scale:number;centerX:number;centerY:number;imageWidth?:number};
 
 const VIEW_STORAGE_KEY='lens-inspection-canvas-views-v1';
 
@@ -18,7 +18,9 @@ function readSavedView(imageUrl:string):SavedView|null{
  try{const views=JSON.parse(localStorage.getItem(VIEW_STORAGE_KEY)||'{}');const saved=views[imageUrl];return saved&&Number.isFinite(saved.scale)&&Number.isFinite(saved.centerX)&&Number.isFinite(saved.centerY)?saved:null}catch{return null}
 }
 
-export function InspectionCanvas({imageUrl,defects,selectedDefect=-1,showDefects=true,showCrosshair=true,onProbe}:Props){
+export function InspectionCanvas({imageUrl,thumbnailUrl,onDimensions,defects,selectedDefect=-1,showDefects=true,showCrosshair=true,onProbe}:Props){
+ const dimensionsCallback=useRef(onDimensions);dimensionsCallback.current=onDimensions;
+ const fullResolution=useRef(false);
  const host=useRef<HTMLDivElement>(null);const canvas=useRef<HTMLCanvasElement>(null);const source=useRef<HTMLImageElement|null>(null);const pixels=useRef<HTMLCanvasElement|null>(null);const frame=useRef<number|null>(null);const activeImage=useRef('');const loadSequence=useRef(0);const lastSize=useRef({width:0,height:0});
  const activePointers=useRef(new Map<number,{x:number;y:number;startX:number;startY:number}>());
  const pinch=useRef<{distance:number;scale:number;imageX:number;imageY:number}|null>(null);
@@ -36,10 +38,10 @@ export function InspectionCanvas({imageUrl,defects,selectedDefect=-1,showDefects
  useEffect(()=>{viewRef.current=view},[view]);
 
  const fit=useCallback(()=>{const h=host.current,i=source.current;if(!h||!i||!i.naturalWidth)return;const r=h.getBoundingClientRect();const padding=Math.max(28,Math.min(r.width,r.height)*.055);const s=Math.max(.01,Math.min((r.width-padding*2)/i.naturalWidth,(r.height-padding*2)/i.naturalHeight));setView({scale:s,x:(r.width-i.naturalWidth*s)/2,y:(r.height-i.naturalHeight*s)/2})},[setView]);
- const restoreOrFit=useCallback((url:string)=>{const h=host.current,i=source.current;if(!h||!i)return;const r=h.getBoundingClientRect(),saved=readSavedView(url);lastSize.current={width:r.width,height:r.height};activeImage.current=url;if(saved){const scale=Math.max(.025,Math.min(12,saved.scale));setView({scale,x:r.width/2-saved.centerX*scale,y:r.height/2-saved.centerY*scale})}else fit()},[fit,setView]);
+ const restoreOrFit=useCallback((url:string)=>{const h=host.current,i=source.current;if(!h||!i)return;const r=h.getBoundingClientRect(),saved=readSavedView(url);lastSize.current={width:r.width,height:r.height};activeImage.current=url;if(saved?.imageWidth){const ratio=saved.imageWidth/i.naturalWidth;const scale=saved.scale*ratio;setView({scale,x:r.width/2-saved.centerX/ratio*scale,y:r.height/2-saved.centerY/ratio*scale})}else if(saved&&!thumbnailUrl){const scale=Math.max(.025,Math.min(12,saved.scale));setView({scale,x:r.width/2-saved.centerX*scale,y:r.height/2-saved.centerY*scale})}else fit()},[fit,setView,thumbnailUrl]);
 
  useEffect(()=>{
-   const requestId=++loadSequence.current;let revoked='';setProbe(null);setError('');
+   const requestId=++loadSequence.current;const objectUrls:string[]=[];setProbe(null);setError('');
    if(!imageUrl){activeImage.current='';source.current=null;pixels.current=null;setState('idle');return}
    setState('loading');
    if(imageUrl.startsWith('demo:')){
@@ -56,17 +58,32 @@ export function InspectionCanvas({imageUrl,defects,selectedDefect=-1,showDefects
        if(status!=='OK'){ctx.strokeStyle=status==='NOK'?'#ff2f8f':'#f2b94b';ctx.lineWidth=6;ctx.lineCap='round';[[.78,.24,.89,.33],[.75,.72,.86,.68],[.22,.71,.27,.75]].slice(0,status==='NOK'?3:1).forEach(([x1,y1,x2,y2])=>{ctx.beginPath();ctx.moveTo(x1*900,y1*900);ctx.quadraticCurveTo((x1+x2)*450+12,y1*900-18,x2*900,y2*900);ctx.stroke()})}
        ctx.strokeStyle='rgba(255,255,255,.88)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(430,450);ctx.lineTo(470,450);ctx.moveTo(450,430);ctx.lineTo(450,470);ctx.stroke();
      }
-     const i=new Image();i.decoding='async';i.onload=()=>{if(requestId!==loadSequence.current)return;source.current=i;pixels.current=p;setState('ready');requestAnimationFrame(()=>{if(requestId===loadSequence.current)restoreOrFit(imageUrl)})};i.src=p.toDataURL('image/png');
+     const i=new Image();i.decoding='async';i.onload=()=>{if(requestId!==loadSequence.current)return;source.current=i;fullResolution.current=true;pixels.current=p;dimensionsCallback.current?.(i.naturalWidth,i.naturalHeight);setState('ready');requestAnimationFrame(()=>{if(requestId===loadSequence.current)restoreOrFit(imageUrl)})};i.src=p.toDataURL('image/png');
      return;
    }
    const controller=new AbortController();
-   (async()=>{try{
-     const blob=await fetchPreviewBlob(imageUrl,controller.signal);if(controller.signal.aborted||requestId!==loadSequence.current)return;revoked=URL.createObjectURL(blob);const i=new Image();i.decoding='async';
-     i.onload=()=>{if(requestId!==loadSequence.current)return;source.current=i;const p=document.createElement('canvas');p.width=i.naturalWidth;p.height=i.naturalHeight;const ctx=p.getContext('2d',{willReadFrequently:true});ctx?.drawImage(i,0,0);pixels.current=p;setState('ready');requestAnimationFrame(()=>{if(requestId===loadSequence.current)restoreOrFit(imageUrl)})};
-     i.onerror=()=>{if(requestId!==loadSequence.current)return;setError('The browser could not decode this preview image.');setState(source.current?'ready':'error')};i.src=revoked;
-   }catch(e){if(!controller.signal.aborted&&requestId===loadSequence.current){setError(e instanceof Error?e.message:'Unable to load image');setState(source.current?'ready':'error')}}})();
-   return()=>{controller.abort();if(revoked)URL.revokeObjectURL(revoked)};
- },[imageUrl,restoreOrFit]);
+   const notifyDimensions=dimensionsCallback.current;
+   let fullReady=false;
+   const load=async(url:string,full:boolean)=>{
+     const blob=await fetchPreviewBlob(url,controller.signal);
+     if(controller.signal.aborted||requestId!==loadSequence.current)return;
+     const objectUrl=URL.createObjectURL(blob);objectUrls.push(objectUrl);
+     const i=new Image();i.decoding='async';i.src=objectUrl;await i.decode();
+     if(controller.signal.aborted||requestId!==loadSequence.current||(!full&&fullReady))return;
+     if(full)fullReady=true;
+     const previous=source.current,upgrading=activeImage.current===imageUrl&&previous;
+     source.current=i;fullResolution.current=full;pixels.current=null;setError('');setState('ready');
+     if(upgrading){
+       const ratio=previous.naturalWidth/i.naturalWidth;
+       // Keep the exact displayed bounds and the operator's latest pan/zoom.
+       setView(v=>({...v,scale:v.scale*ratio}));
+     }else restoreOrFit(imageUrl);
+     if(full)notifyDimensions?.(i.naturalWidth,i.naturalHeight);
+   };
+   if(thumbnailUrl&&thumbnailUrl!==imageUrl)void load(thumbnailUrl,false).catch(()=>{/* Full preview remains the fallback. */});
+   void load(imageUrl,true).catch(e=>{if(!controller.signal.aborted&&requestId===loadSequence.current){setError(e instanceof Error?e.message:'Unable to load image');setState(source.current?'ready':'error')}});
+   return()=>{controller.abort();objectUrls.forEach(url=>URL.revokeObjectURL(url))};
+ },[imageUrl,thumbnailUrl,restoreOrFit,setView]);
 
  const paint=useCallback(()=>{
    const c=canvas.current,h=host.current;if(!c||!h)return;const r=h.getBoundingClientRect();if(r.width<2||r.height<2)return;const dpr=Math.min(window.devicePixelRatio||1,2);const w=Math.max(1,Math.round(r.width*dpr)),hh=Math.max(1,Math.round(r.height*dpr));if(c.width!==w||c.height!==hh){c.width=w;c.height=hh;c.style.width=`${r.width}px`;c.style.height=`${r.height}px`}
@@ -81,7 +98,7 @@ export function InspectionCanvas({imageUrl,defects,selectedDefect=-1,showDefects
  },[defects,error,imageUrl,selectedDefect,showCrosshair,showDefects,state,view]);
 
  useEffect(()=>{if(frame.current)cancelAnimationFrame(frame.current);frame.current=requestAnimationFrame(paint);return()=>{if(frame.current)cancelAnimationFrame(frame.current)}},[paint,expanded]);
- useEffect(()=>{if(state!=='ready'||activeImage.current!==imageUrl)return;const timer=window.setTimeout(()=>{const h=host.current;if(!h)return;const r=h.getBoundingClientRect();const saved={scale:view.scale,centerX:(r.width/2-view.x)/view.scale,centerY:(r.height/2-view.y)/view.scale};try{const views=JSON.parse(localStorage.getItem(VIEW_STORAGE_KEY)||'{}');views[imageUrl]=saved;localStorage.setItem(VIEW_STORAGE_KEY,JSON.stringify(views))}catch{}},120);return()=>window.clearTimeout(timer)},[imageUrl,state,view]);
+ useEffect(()=>{if(state!=='ready'||activeImage.current!==imageUrl)return;const timer=window.setTimeout(()=>{const h=host.current;if(!h)return;const r=h.getBoundingClientRect();const saved={imageWidth:source.current?.naturalWidth,scale:view.scale,centerX:(r.width/2-view.x)/view.scale,centerY:(r.height/2-view.y)/view.scale};try{const views=JSON.parse(localStorage.getItem(VIEW_STORAGE_KEY)||'{}');views[imageUrl]=saved;localStorage.setItem(VIEW_STORAGE_KEY,JSON.stringify(views))}catch{}},120);return()=>window.clearTimeout(timer)},[imageUrl,state,view]);
  useEffect(()=>{const h=host.current;if(!h)return;let resizeFrame=0;const align=()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>requestAnimationFrame(()=>{const r=h.getBoundingClientRect(),previous=lastSize.current;if(state==='ready'&&source.current&&previous.width>0&&previous.height>0&&(Math.abs(r.width-previous.width)>1||Math.abs(r.height-previous.height)>1)){setView(v=>{const centerX=(previous.width/2-v.x)/v.scale,centerY=(previous.height/2-v.y)/v.scale;return{...v,x:r.width/2-centerX*v.scale,y:r.height/2-centerY*v.scale}})}lastSize.current={width:r.width,height:r.height}}))};const r=h.getBoundingClientRect(),previous=lastSize.current;if(previous.width>0&&previous.height>0&&state==='ready'){setView(v=>{const centerX=(previous.width/2-v.x)/v.scale,centerY=(previous.height/2-v.y)/v.scale;return{...v,x:r.width/2-centerX*v.scale,y:r.height/2-centerY*v.scale}})}lastSize.current={width:r.width,height:r.height};const ro=new ResizeObserver(align);ro.observe(h);window.addEventListener('resize',align);document.addEventListener('visibilitychange',align);return()=>{cancelAnimationFrame(resizeFrame);ro.disconnect();window.removeEventListener('resize',align);document.removeEventListener('visibilitychange',align)}},[state,expanded]);
  useEffect(()=>{if(!expanded)return;const previous=document.body.style.overflow;document.body.style.overflow='hidden';const close=(e:KeyboardEvent)=>{if(e.key==='Escape')setExpanded(false)};window.addEventListener('keydown',close);return()=>{document.body.style.overflow=previous;window.removeEventListener('keydown',close)}},[expanded]);
 
@@ -97,7 +114,7 @@ export function InspectionCanvas({imageUrl,defects,selectedDefect=-1,showDefects
    pinch.current={distance:Math.max(1,Math.hypot(a.x-b.x,a.y-b.y)),scale:v.scale,imageX:(midX-v.x)/v.scale,imageY:(midY-v.y)/v.scale};
    setDrag(null);
  }
- function updateProbe(e:React.PointerEvent){const h=host.current,i=source.current,p=pixels.current;if(!h||!i||!p||state!=='ready'||activeImage.current!==imageUrl)return;const r=h.getBoundingClientRect(),px=e.clientX-r.left,py=e.clientY-r.top,ix=Math.floor((px-view.x)/view.scale),iy=Math.floor((py-view.y)/view.scale);if(ix<0||iy<0||ix>=i.naturalWidth||iy>=i.naturalHeight){setProbe(null);return}let gray:number|null=null;try{const d=p.getContext('2d',{willReadFrequently:true})?.getImageData(ix,iy,1,1).data;if(d)gray=Math.round(.299*d[0]+.587*d[1]+.114*d[2])}catch{}const next={x:ix,y:iy,gray};setProbe(next);onProbe?.(next)}
+ function updateProbe(e:React.PointerEvent){const h=host.current,i=source.current;if(!h||!i||!fullResolution.current||state!=='ready'||activeImage.current!==imageUrl)return;let p=pixels.current;if(!p){p=document.createElement('canvas');p.width=i.naturalWidth;p.height=i.naturalHeight;p.getContext('2d',{willReadFrequently:true})?.drawImage(i,0,0);pixels.current=p;}const r=h.getBoundingClientRect(),px=e.clientX-r.left,py=e.clientY-r.top,ix=Math.floor((px-view.x)/view.scale),iy=Math.floor((py-view.y)/view.scale);if(ix<0||iy<0||ix>=i.naturalWidth||iy>=i.naturalHeight){setProbe(null);return}let gray:number|null=null;try{const d=p.getContext('2d',{willReadFrequently:true})?.getImageData(ix,iy,1,1).data;if(d)gray=Math.round(.299*d[0]+.587*d[1]+.114*d[2])}catch{}const next={x:ix,y:iy,gray};setProbe(next);onProbe?.(next)}
  function pointerMove(e:React.PointerEvent){
    const pointer=activePointers.current.get(e.pointerId);
    if(pointer){pointer.x=e.clientX;pointer.y=e.clientY}

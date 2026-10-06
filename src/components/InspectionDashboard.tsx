@@ -122,6 +122,7 @@ export function InspectionDashboard({
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
   const [hold, setHold] = useState(false);
+  const [loadedImageSize, setLoadedImageSize] = useState<{key:string;width:number;height:number} | null>(null);
   const [moreActionsOpen, setMoreActionsOpen] = useState(false);
   // -1 is the all-defects canvas overview. The panel still highlights its
   // first row until an operator explicitly focuses a defect.
@@ -500,11 +501,17 @@ export function InspectionDashboard({
   );
   const currentResult = current ? resultMap.get(current) : undefined;
   const currentInferenceTime = formatInferenceMs(inferenceElapsedMs(currentResult));
+  const imageSizeKey = `${datasetId}:${sample?.id || ""}:${channel}`;
+  const onImageDimensions = useCallback((width:number,height:number) => {
+    setLoadedImageSize({key:imageSizeKey,width,height});
+  }, [imageSizeKey]);
   const currentMeasurements = (currentResult?.channels.find(
     (item) => item.channel === channel,
   ) || currentResult?.channels[0])?.measurements;
   const currentDimension = (key: "width_px" | "height_px") => {
-    const value = currentMeasurements?.[key];
+    const value = currentMeasurements?.[key]
+      ?? currentResult?.channels.find(item => item.measurements?.[key] !== undefined)?.measurements[key]
+      ?? (loadedImageSize?.key === imageSizeKey ? loadedImageSize[key === "width_px" ? "width" : "height"] : undefined);
     return value === undefined ? "—" : `${value} px`;
   };
   const lastInspectionLabel = currentResult?.created_at
@@ -1286,6 +1293,7 @@ export function InspectionDashboard({
               onHold={() => setHold((v) => !v)}
               selectedDefect={selectedDefect}
               onProbe={setProbe}
+              onDimensions={onImageDimensions}
               processing={isRunning}
               capacity={wtCapacity}
               availablePositions={wtEntries.map((entry) => entry.position)}
@@ -1832,6 +1840,7 @@ export function InspectionDashboard({
             onHold={() => setHold((v) => !v)}
             selectedDefect={selectedDefect}
             onProbe={setProbe}
+            onDimensions={onImageDimensions}
             processing={job?.status === "running"}
             capacity={wtCapacity}
             availablePositions={wtEntries.map((entry) => entry.position)}

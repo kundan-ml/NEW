@@ -71,7 +71,9 @@ async function fixtureRequest(viewer, event) {
   let contentType = 'application/json';
   if (route === '/api/image') {
     contentType = 'image/svg+xml';
-    body = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480"><rect width="640" height="480" fill="#050505"/><circle cx="320" cy="240" r="190" fill="#777"/><text x="20" y="35" fill="white">${url.searchParams.get('sampleId')}</text></svg>`;
+    const small = url.searchParams.get('thumbnail') === '1';
+    if (!small) await pause(800);
+    body = `<svg xmlns="http://www.w3.org/2000/svg" width="${small ? 160 : 640}" height="${small ? 120 : 480}" viewBox="0 0 640 480"><rect width="640" height="480" fill="#050505"/><circle cx="320" cy="240" r="190" fill="#777"/><text x="20" y="35" fill="white">${url.searchParams.get('sampleId')}</text></svg>`;
   } else if (route === '/api/ui-config/access') body = { canCustomize: false };
   else if (route === '/api/ui-config') body = { manualSkeleton: viewer.classic, theme: 'graphite' };
   else if (route.endsWith('/inspection/live')) {
@@ -95,6 +97,9 @@ async function fixtureRequest(viewer, event) {
 
 function socketFixture(initial) {
   return `(() => {
+    window.__qaDraws=[];
+    const draw=CanvasRenderingContext2D.prototype.drawImage;
+    CanvasRenderingContext2D.prototype.drawImage=function(image,...args){if(image instanceof HTMLImageElement)window.__qaDraws.push(image.naturalWidth);return draw.call(this,image,...args);};
     localStorage.setItem('lens-operation-mode','MANUAL');
     window.__qaSnapshot=${JSON.stringify(initial)};
     window.__qaSockets=[];window.__qaSocketBlock=false;window.__qaSocketOpens=0;
@@ -182,6 +187,12 @@ async function advance(completed, id = 'job-a', run = 'a') {
   browser = connect(version.webSocketDebuggerUrl); await browser.ready;
   const classic = await makeViewer(true); await checkPosition(classic, 5); await openWt(classic);
   const modern = await makeViewer(false); await checkPosition(modern, 5);
+  for (const viewer of viewers) {
+    await waitFor(viewer, 'window.__qaDraws.includes(640)', 'full-resolution canvas upgrade');
+    assert(await viewer.evaluate('window.__qaDraws.includes(160)'), 'Canvas must draw a fast thumbnail before the delayed full-resolution image');
+    await waitFor(viewer, `Array.from(document.querySelectorAll('.referenceInfoRow')).some(row=>row.innerText.includes('Width Px')&&row.innerText.includes('640 px'))`, 'actual image width fallback');
+    await waitFor(viewer, `Array.from(document.querySelectorAll('.referenceInfoRow')).some(row=>row.innerText.includes('Height Px')&&row.innerText.includes('480 px'))`, 'actual image height fallback');
+  }
   for (const viewer of viewers) assert.equal((await inspect(viewer)).mode, 'MANUAL', 'Live following must preserve local manual upload policy');
   reports.push({ case: 'independent profiles late join + saved MANUAL', classic: await inspect(classic), modern: await inspect(modern) });
   await advance(6); await Promise.all(viewers.map(viewer => checkPosition(viewer, 6)));
