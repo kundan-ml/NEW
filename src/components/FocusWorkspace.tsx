@@ -2,17 +2,21 @@
 
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {Activity,Camera,Crosshair,Download,FileImage,ImagePlus,Loader2,MousePointer2,RotateCcw,Save,SlidersHorizontal,X,ZoomIn,ZoomOut} from 'lucide-react';
-import {api,dataPackageUrl,previewUrl} from '@/lib/api';
-import {createLocalImagePreview,downloadLocalImage} from '@/lib/local-image-preview';
+import {API,api,dataPackageUrl,previewUrl} from '@/lib/api';
+import {createLocalImagePreview} from '@/lib/local-image-preview';
 import {ILLUMINATION_IMAGE_PATTERN as ACCEPTED,mapIlluminationImages} from '@/lib/illumination-images';
 import {constrainImagePan} from '@/lib/image-pan';
+import {localImageArchive} from '@/lib/lens-snapshot';
+import {downloadBlob,openImageWindow} from '@/lib/image-window';
 import type {Role,SystemInfo} from '@/types';
 
 type Channel='h'|'p'|'d'|'n';
 type TestTab='general'|'lens'|'focus-resolution'|'lighting';
 type Tab='camera'|TestTab;
-type Metric={key:string;label:string;value:number;status:'green'|'yellow'|'red';optimum:[number,number];acceptable:[number,number]};
-type FocusResult={tab:TestTab;channel:Channel;metrics:Metric[];status:'green'|'yellow'|'red';note?:string};
+type Metric={key:string;label:string;value:number|null;status:'green'|'yellow'|'red'|'unavailable';optimum:[number,number];acceptable:[number,number];reason?:string};
+type FocusResult={tab:TestTab;channel:Channel;metrics:Metric[];status:Metric['status'];note?:string};
+type FocusLimit={key:string;label:string;min_role:Role;enabled?:boolean};
+type FocusConfiguration={limits:FocusLimit[];channel_limits?:Partial<Record<Channel,FocusLimit[]>>;tabs?:Partial<Record<TestTab,string[]>>;valid?:boolean;validation_error?:string};
 type CameraSlot={id:string;head:number;channel:string;display_name:string;mac_address:string;assigned:boolean;exposure_us:number;gain:number;black_level:number;led_channel:number;current_a:number;pulse_width_us:number;offset_x:number;offset_y:number;width:number;height:number;line_debouncer_time_us:number};
 type CameraConfig={head_count:number;cameras:CameraSlot[]};
 type ImageView={zoom:number;offsetX:number;offsetY:number;crosshair:boolean;probe:boolean};
@@ -38,7 +42,13 @@ const EXPECTED_METRICS:Record<TestTab,{key:string;label:string;minRole?:Role}[]>
   'focus-resolution':[{key:'middle_circle_resolution',label:'Middle circle resolution'},{key:'vertical_cross_position',label:'Vertical cross position'},{key:'horizontal_cross_position',label:'Horizontal cross position'},{key:'focus_jig_center',label:'Focus jig centre'},{key:'focus_score',label:'Focus score'}],
   lighting:[{key:'brightness',label:'Brightness'},{key:'halo_concentricity',label:'Halo concentricity',minRole:'Administrator'},{key:'outer_circle_concentricity',label:'Outer circle concentricity'},{key:'outer_circle_diameter',label:'Outer circle diameter'}],
 };
-const visibleMetrics=(tab:TestTab,role:Role)=>EXPECTED_METRICS[tab].filter(metric=>ROLE_RANK[role]>=ROLE_RANK[metric.minRole||'NoUser']);
+function visibleMetrics(tab:TestTab,role:Role,config?:FocusConfiguration|null,channel?:Channel){
+  if(!config)return EXPECTED_METRICS[tab].filter(metric=>ROLE_RANK[role]>=ROLE_RANK[metric.minRole||'NoUser']);
+  const limits=new Map(config.limits.map(item=>[item.key,item]));
+  if(channel)for(const item of config.channel_limits?.[channel]||[])limits.set(item.key,item);
+  const keys=config.tabs?.[tab]||EXPECTED_METRICS[tab].map(item=>item.key);
+  return keys.flatMap(key=>{const item=limits.get(key);return item&&item.enabled!==false&&ROLE_RANK[role]>=ROLE_RANK[item.min_role||'NoUser']?[{key:item.key,label:item.label,minRole:item.min_role}]:[]});
+}
 
 export function FocusWorkspace({onClose}:{onClose:()=>void}){
   const[tab,setTab]=useState<Tab>('camera');
@@ -54,6 +64,7 @@ export function FocusWorkspace({onClose}:{onClose:()=>void}){
   const[views,setViews]=useState<Record<string,ImageView>>({});
   const[system,setSystem]=useState<SystemInfo|null>(null);
   const[cameraConfig,setCameraConfig]=useState<CameraConfig|null>(null);
+  const[focusConfig,setFocusConfig]=useState<FocusConfiguration|null>(null);
   const[busy,setBusy]=useState(false);
   const[notice,setNotice]=useState('Click any canvas to load 3–4 images, or add one image per slot.');
   const inputRefs=useRef<Partial<Record<Channel,HTMLInputElement|null>>>({});
@@ -104,11 +115,17 @@ export function FocusWorkspace({onClose}:{onClose:()=>void}){
     const root=document.documentElement.style.overflow;
     document.body.style.overflow='hidden';
     document.documentElement.style.overflow='hidden';
-    void Promise.allSettled([api.system(),api.getCameraSystem()]).then(([systemResult,cameraResult])=>{
+    let active=true;
+    void Promise.allSettled([api.system(),api.getCameraSystem(),api.getFocusConfig()]).then(([systemResult,cameraResult,focusResult])=>{
+      if(!active)return;
       if(systemResult.status==='fulfilled')setSystem(systemResult.value);
       if(cameraResult.status==='fulfilled'&&Array.isArray(cameraResult.value?.cameras))setCameraConfig(cameraResult.value as CameraConfig);
+      if(focusResult.status==='fulfilled'&&Array.isArray(focusResult.value?.limits)){
+        setFocusConfig(focusResult.value as FocusConfiguration);
+        if(focusResult.value.valid===false)setNotice(focusResult.value.validation_error||'Invalid focus evaluation limits.');
+      }
     });
-    return()=>{document.body.style.overflow=body;document.documentElement.style.overflow=root};
+    return()=>{active=false;document.body.style.overflow=body;document.documentElement.style.overflow=root};
   },[]);
 
   useEffect(()=>{
@@ -233,13 +250,9 @@ export function FocusWorkspace({onClose}:{onClose:()=>void}){
     finally{setBusy(false)}
   }
 
-  function saveImages(){
-    CHANNELS.forEach((channel,index)=>{
-      const file=files[channel.key];
-      if(!file)return;
-      downloadLocalImage(file,`Focus_Head${head}_${index+1}_${file.name}`);
-    });
-    setNotice('Image downloads started.');
+  async function saveImages(){
+    try{downloadBlob(await localImageArchive(files),`Focus_Head${head}_Originals.zip`);setNotice('Original images saved in one ZIP.')}
+    catch(error){setNotice((error as Error).message)}
   }
 
   function updateCamera(id:string,key:keyof CameraSlot,value:string){
@@ -280,17 +293,31 @@ export function FocusWorkspace({onClose}:{onClose:()=>void}){
     finally{setBusy(false)}
   }
 
-  function saveValues(){
+  async function saveValues(){
+    if(uploaded?.head===head){
+      setBusy(true);
+      try{
+        const texts=await Promise.all(CHANNELS.map(async channel=>{
+          const response=await fetch(`${API}/setup/focus/save-values?camera_head=${head}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dataset_id:uploaded.datasetId,sample_id:uploaded.sampleId,channel:channel.key,tab:testTab})});
+          if(!response.ok)throw new Error(`Values export failed (HTTP ${response.status}).`);
+          return `${channel.name}\n${await response.text()}`;
+        }));
+        downloadBlob(new Blob([texts.join('\n\n')],{type:'text/plain'}),`${new Date().toISOString().replace(/[:.]/g,'-')}_Head${head}_Inbox.txt`);
+        setNotice('All configured values exported, including checks hidden by the display role.');
+      }catch(error){setNotice((error as Error).message)}
+      finally{setBusy(false)}
+      return;
+    }
     const lines=[`Focus Check | Head ${head} | ${TABS.find(item=>item.key===tab)?.label}`,`Created: ${new Date().toISOString()}`,''];
     for(const channel of CHANNELS){
       const value=results[`${head}:${testTab}:${channel.key}`];
       lines.push(`${channel.name}: ${value?.status.toUpperCase()||'N/A'}`);
-      for(const expected of visibleMetrics(testTab,role)){
+      for(const expected of visibleMetrics(testTab,role,focusConfig,channel.key)){
         const metric=value?.metrics.find(item=>item.key===expected.key);
-        lines.push(metric?`  ${metric.label}: ${metric.value} (${metric.status}) | optimum ${metric.optimum.join('–')} | acceptable ${metric.acceptable.join('–')}`:`  ${expected.label}: n/a`);
+        lines.push(metric?`  ${metric.label}: ${metric.value??'n/a'} (${metric.status}) | optimum ${metric.optimum.join('–')} | acceptable ${metric.acceptable.join('–')}${metric.reason?` | ${metric.reason}`:''}`:`  ${expected.label}: n/a`);
       }
       for(const metric of value?.metrics.filter(item=>!EXPECTED_METRICS[testTab].some(expected=>expected.key===item.key))||[]){
-        lines.push(`  ${metric.label}: ${metric.value} (${metric.status}) | optimum ${metric.optimum.join('–')} | acceptable ${metric.acceptable.join('–')}`);
+        lines.push(`  ${metric.label}: ${metric.value??'n/a'} (${metric.status}) | optimum ${metric.optimum.join('–')} | acceptable ${metric.acceptable.join('–')}`);
       }
       lines.push('');
     }
@@ -302,15 +329,24 @@ export function FocusWorkspace({onClose}:{onClose:()=>void}){
 
   async function savePackage(){
     if(!uploaded||uploaded.head!==head||busy)return;
+    const reportWindow=window.open('about:blank','_blank');
+    if(reportWindow){reportWindow.opener=null;reportWindow.document.title='Focus report';reportWindow.document.body.textContent='Preparing focus report…'}
     setBusy(true);
     try{
-      const response=await fetch(dataPackageUrl(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dataset_id:uploaded.datasetId,sample_id:uploaded.sampleId,camera_head:head})});
+      const init={method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dataset_id:uploaded.datasetId,sample_id:uploaded.sampleId,camera_head:head})};
+      const response=await fetch(dataPackageUrl(),init);
       if(!response.ok)throw new Error(`Data package failed (HTTP ${response.status}).`);
-      const url=URL.createObjectURL(await response.blob());
-      const link=document.createElement('a');link.href=url;link.download=`Focus_Head${head}_DataPackage.zip`;link.click();
-      window.setTimeout(()=>URL.revokeObjectURL(url),1000);
-      setNotice('Data package downloaded.');
-    }catch(error){setNotice((error as Error).message)}
+      downloadBlob(await response.blob(),`Focus_Head${head}_DataPackage.zip`);
+      setNotice('Data package downloaded. The PDF report is also included in the ZIP.');
+      if(reportWindow){
+        try{
+          const report=await fetch(`${dataPackageUrl()}?report=pdf`,init);
+          if(!report.ok)throw new Error(`Report preview failed (HTTP ${report.status}).`);
+          const url=URL.createObjectURL(await report.blob());reportWindow.location.replace(url);
+          window.setTimeout(()=>URL.revokeObjectURL(url),300000);
+        }catch(error){reportWindow.close();setNotice(`ZIP saved. ${(error as Error).message} Open report.pdf inside the ZIP.`)}
+      }
+    }catch(error){reportWindow?.close();setNotice((error as Error).message)}
     finally{setBusy(false)}
   }
 
@@ -326,19 +362,19 @@ export function FocusWorkspace({onClose}:{onClose:()=>void}){
       </header>
       <nav className="focusTabs" aria-label="Focus Check sections">{TABS.map(item=><button key={item.key} className={tab===item.key?'active':''} onClick={()=>setTab(item.key)}>{item.label}</button>)}</nav>
       <div className="focusToolbar">
-        <div className="focusHeads" aria-label="Camera head">{[1,2,3,4].map(value=><button key={value} className={head===value?'active':''} onClick={()=>setHead(value)}>Head {value}</button>)}</div>
+        <div className="focusHeads" aria-label="Camera head">{Array.from({length:cameraConfig?.head_count||4},(_,index)=>index+1).map(value=><button key={value} disabled={busy} className={head===value?'active':''} onClick={()=>setHead(value)}>Head {value}</button>)}</div>
         <span className="focusToolbarStatus"><i className={count===4?'ready':''}/>{count} / 4 images loaded</span>
       </div>
       <nav className="focusChannelRail" aria-label="Camera view">{CHANNELS.map(channel=><button key={channel.key} className={activeChannel===channel.key?'active':''} onClick={()=>setActiveChannel(channel.key)} title={channel.name}><span className={files[channel.key]?'loaded':''}/>{channel.short}</button>)}</nav>
       <section className="focusCameraGrid" aria-label="Four camera views">{CHANNELS.map((channel,index)=>{
         const value=results[`${head}:${testTab}:${channel.key}`];
-        const camera=cameraConfig?.cameras.find(item=>item.head===head&&item.channel===channel.key);
+        const camera=cameraConfig?.cameras.find(item=>item.head===head&&(item.channel==='f'?'n':item.channel)===channel.key);
         const imageUrl=uploaded?.head===head?previewUrl(uploaded.datasetId,uploaded.sampleId,channel.key):previews[channel.key];
         const viewKey=`${head}:${channel.key}`;
         const view=views[viewKey]||DEFAULT_VIEW;
         const imageSize=imageSizes[viewKey];
         return <article key={channel.key} className={`focusCameraCard ${value?`is-${value.status}`:''} ${activeChannel===channel.key?'is-active-channel':''}`}>
-          <header className="focusCardHeader"><span className="focusCardNumber">{String(index+1).padStart(2,'0')}</span><b>{channel.name}</b><span className={`focusCardState ${value?`status-${value.status}`:''}`}>{value?value.status==='green'?'GOOD':value.status==='yellow'?'ACCEPTABLE':'OUT OF RANGE':files[channel.key]?'LOADED':'EMPTY'}</span></header>
+          <header className="focusCardHeader" onContextMenu={event=>{event.preventDefault();if(!openImageWindow(imageUrl,channel.name))setNotice('Load an image and allow popups to open an image window.')}} onDoubleClick={()=>openImageWindow(imageUrl,channel.name)} title="Double-click or right-click to open image window"><span className="focusCardNumber">{String(index+1).padStart(2,'0')}</span><b>{channel.name}</b><span className={`focusCardState ${value?`status-${value.status}`:''}`}>{value?value.status==='green'?'GOOD':value.status==='yellow'?'ACCEPTABLE':value.status==='unavailable'?'N/A':'OUT OF RANGE':files[channel.key]?'LOADED':'EMPTY'}</span></header>
           <div className={`focusCardImage ${files[channel.key]?'can-pan':''}`} ref={element=>{stageRefs.current[viewKey]=element}}
             onClick={event=>{if((event.target as Element).closest('button,.focusViewportTools'))return;if(suppressCanvasClickRef.current){suppressCanvasClickRef.current=false;return}openCanvasPicker(channel.key)}}
             onPointerDown={event=>{if(event.button!==0||(event.target as Element).closest('button,.focusViewportTools'))return;suppressCanvasClickRef.current=false;if(!files[channel.key])return;dragRef.current={key:viewKey,x:event.clientX,y:event.clientY,offsetX:view.offsetX,offsetY:view.offsetY,moved:false};event.currentTarget.setPointerCapture(event.pointerId)}}
@@ -363,9 +399,9 @@ export function FocusWorkspace({onClose}:{onClose:()=>void}){
                 <button className="focusAssign" disabled={busy||system?.mode==='AUTO'||!camera.mac_address||camera.mac_address==='UNASSIGNED'} onClick={()=>void assignCamera(camera.id)}><Camera/>{camera.assigned?'Update assignment':'Assign camera'}</button>
               </>:<div className="focusUnconfigured"><Camera/><b>Camera not assigned</b><button disabled={!cameraConfig||system?.mode==='AUTO'} onClick={()=>addCamera(channel.key)}>Add camera slot</button></div>}
             </div>:tab==='general'?<div className="focusGeneralData">
-              <MetricRows tab={tab} result={value} role={role} onExplain={setNotice}/>
-              <div className="focusProfiles"><ProfilePlot src={files[channel.key]&&!failedPreviews[channel.key]?imageUrl:undefined} axis="horizontal" view={view}/><ProfilePlot src={files[channel.key]&&!failedPreviews[channel.key]?imageUrl:undefined} axis="vertical" view={view}/></div>
-            </div>:<div className="focusTestData"><MetricRows tab={tab} result={value} role={role} onExplain={setNotice}/></div>}
+              <MetricRows tab={tab} result={value} role={role} config={focusConfig} channel={channel.key} onExplain={setNotice}/>
+              <div className="focusProfiles"><ProfilePlot src={files[channel.key]&&!failedPreviews[channel.key]?imageUrl:undefined} axis="horizontal" view={view} stage={stageRefs.current[viewKey]}/><ProfilePlot src={files[channel.key]&&!failedPreviews[channel.key]?imageUrl:undefined} axis="vertical" view={view} stage={stageRefs.current[viewKey]}/></div>
+            </div>:<div className="focusTestData"><MetricRows tab={tab} result={value} role={role} config={focusConfig} channel={channel.key} onExplain={setNotice}/></div>}
           </div>
           <footer className="focusCardFooter"><span title={files[channel.key]?.name}>{files[channel.key]?.name||'BMP / TIFF image'}</span><input ref={element=>{inputRefs.current[channel.key]=element}} type="file" accept=".bmp,.tif,.tiff,image/bmp,image/tiff" hidden aria-label={`Load ${channel.name} image`} onChange={event=>{chooseFile(channel.key,event.target.files?.[0]);event.target.value=''}}/><button disabled={busy} onClick={()=>inputRefs.current[channel.key]?.click()}><ImagePlus/>{files[channel.key]?'Replace':'Load'}</button></footer>
         </article>})}</section>
@@ -373,45 +409,49 @@ export function FocusWorkspace({onClose}:{onClose:()=>void}){
         <p role="status" title={notice}>{busy?<Loader2 className="focusSpin"/>:<span className="focusFooterDot"/>}{notice}</p>
         <div className="focusActions">
           <button className="focusSecondary" disabled={busy||count===0} onClick={()=>{setFilesByHead(current=>({...current,[head]:{}}));setResults(current=>Object.fromEntries(Object.entries(current).filter(([key])=>!key.startsWith(`${head}:`))));setUploadedByHead(current=>{const next={...current};delete next[head];return next});setNotice('Images cleared.')}}><RotateCcw/>Clear</button>
-          <button className="focusSecondary" disabled={count===0} onClick={saveImages} title="Save loaded images"><Download/>Images</button>
-          {tab==='camera'?<><button className="focusSecondary" disabled={busy||system?.mode!=='AUTO'} onClick={()=>void switchToSetup()} title="Switch to setup mode">Setup</button><button className="focusPrimary" disabled={busy||!cameraConfig||system?.mode==='AUTO'} onClick={()=>void saveCamera()} title="Save camera configuration to Outbox"><Save/>Save setup</button></>:<><button className="focusSecondary" disabled={!hasResults} onClick={saveValues} title="Save focus values"><Download/>Values</button><button className="focusSecondary" disabled={!uploaded||uploaded.head!==head||busy} onClick={()=>void savePackage()} title="Download data package"><Save/>Package</button><button className="focusPrimary" disabled={busy||count!==4} onClick={()=>void evaluate()}>{busy?<Loader2 className="focusSpin"/>:<SlidersHorizontal/>}Run check</button></>}
+          <button className="focusSecondary" disabled={count===0} onClick={()=>void saveImages()} title="Save original images as ZIP"><Download/>Images</button>
+          {tab==='camera'?<><button className="focusSecondary" disabled={busy||system?.mode!=='AUTO'} onClick={()=>void switchToSetup()} title="Switch to setup mode">Setup</button><button className="focusPrimary" disabled={busy||!cameraConfig||system?.mode==='AUTO'} onClick={()=>void saveCamera()} title="Save camera configuration to Outbox"><Save/>Save setup</button></>:<><button className="focusSecondary" disabled={!hasResults||busy} onClick={()=>void saveValues()} title="Save all configured focus values"><Download/>Values</button><button className="focusSecondary" disabled={!uploaded||uploaded.head!==head||busy} onClick={()=>void savePackage()} title="Download data package and open its PDF report"><Save/>Package</button><button className="focusPrimary" disabled={busy||count!==4||focusConfig?.valid===false} onClick={()=>void evaluate()}>{busy?<Loader2 className="focusSpin"/>:<SlidersHorizontal/>}Run check</button></>}
         </div>
       </footer>
     </div>
   </div>;
 }
 
-function MetricRows({tab,result,role,onExplain}:{tab:TestTab;result?:FocusResult;role:Role;onExplain:(message:string)=>void}){
-  const expected=visibleMetrics(tab,role);
+function MetricRows({tab,result,role,config,channel,onExplain}:{tab:TestTab;result?:FocusResult;role:Role;config:FocusConfiguration|null;channel:Channel;onExplain:(message:string)=>void}){
+  const expected=visibleMetrics(tab,role,config,channel);
   const extra=result?.metrics.filter(metric=>!EXPECTED_METRICS[tab].some(item=>item.key===metric.key))||[];
   return <div className="focusCompactMetrics">{expected.map(item=>{
     const metric=result?.metrics.find(value=>value.key===item.key);
-    const detail=metric?`${metric.label}: optimum ${metric.optimum.join('–')}; acceptable ${metric.acceptable.join('–')}.`:'';
-    return <div key={item.key} className={`focusCompactMetric ${metric?'has-range':''}`} title={detail||'Not reported by the current focus backend'} role={metric?'button':undefined} tabIndex={metric?0:undefined} onClick={()=>metric&&onExplain(detail)} onKeyDown={event=>{if(metric&&(event.key==='Enter'||event.key===' ')){event.preventDefault();onExplain(detail)}}}><span>{metric?.label||item.label}</span><b className={metric?`status-${metric.status}`:'is-unavailable'}>{metric?metric.value.toFixed(2):'—'}</b></div>;
-  })}{extra.map(metric=>{const detail=`${metric.label}: optimum ${metric.optimum.join('–')}; acceptable ${metric.acceptable.join('–')}.`;return <div key={metric.key} className="focusCompactMetric has-range" title={detail} role="button" tabIndex={0} onClick={()=>onExplain(detail)} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();onExplain(detail)}}}><span>{metric.label}</span><b className={`status-${metric.status}`}>{metric.value.toFixed(2)}</b></div>})}</div>;
+    const detail=metric?.reason|| (metric?`${metric.label}: optimum ${metric.optimum.join('–')}; acceptable ${metric.acceptable.join('–')}.`:'');
+    return <div key={item.key} className={`focusCompactMetric ${metric?'has-range':''}`} title={detail||'Not reported by the current focus backend'} role={metric?'button':undefined} tabIndex={metric?0:undefined} onClick={()=>metric&&onExplain(detail)} onKeyDown={event=>{if(metric&&(event.key==='Enter'||event.key===' ')){event.preventDefault();onExplain(detail)}}}><span>{metric?.label||item.label}</span><b className={metric?`status-${metric.status}`:'is-unavailable'}>{typeof metric?.value==='number'&&Number.isFinite(metric.value)?metric.value.toFixed(2):'—'}</b></div>;
+  })}{extra.map(metric=>{const detail=metric.reason||`${metric.label}: optimum ${metric.optimum.join('–')}; acceptable ${metric.acceptable.join('–')}.`;return <div key={metric.key} className="focusCompactMetric has-range" title={detail} role="button" tabIndex={0} onClick={()=>onExplain(detail)} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();onExplain(detail)}}}><span>{metric.label}</span><b className={`status-${metric.status}`}>{typeof metric.value==='number'&&Number.isFinite(metric.value)?metric.value.toFixed(2):'—'}</b></div>})}</div>;
 }
 
-function ProfilePlot({src,axis,view}:{src?:string;axis:'horizontal'|'vertical';view:ImageView}){
+function ProfilePlot({src,axis,view,stage}:{src?:string;axis:'horizontal'|'vertical';view:ImageView;stage?:HTMLDivElement|null}){
   const[values,setValues]=useState<number[]>([]);
+  const[size,setSize]=useState({width:0,height:0});
+  useEffect(()=>{if(!stage)return;const observer=new ResizeObserver(()=>{const box=stage.getBoundingClientRect();setSize({width:box.width,height:box.height})});observer.observe(stage);return()=>observer.disconnect()},[stage]);
   useEffect(()=>{
     if(!src){setValues([]);return}
     let active=true;
     const image=new Image();
     image.onload=()=>{
       try{
-        const canvas=document.createElement('canvas');canvas.width=64;canvas.height=64;
+        const box=stage?.getBoundingClientRect();
+        if(!box?.width||!box.height)return;
+        const scale=256/Math.max(box.width,box.height);
+        const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(box.width*scale));canvas.height=Math.max(1,Math.round(box.height*scale));
         const context=canvas.getContext('2d',{willReadFrequently:true});if(!context)return;
-        context.fillStyle='#000';context.fillRect(0,0,64,64);
-        const fitted=Math.min(64/image.width,64/image.height);
+        context.fillStyle='#000';context.fillRect(0,0,canvas.width,canvas.height);
+        const fitted=Math.min(box.width/image.width,box.height/image.height)*scale;
         const drawWidth=image.width*fitted*view.zoom;
         const drawHeight=image.height*fitted*view.zoom;
-        context.drawImage(image,(64-drawWidth)/2+view.offsetX*.22,(64-drawHeight)/2+view.offsetY*.22,drawWidth,drawHeight);
-        const pixels=context.getImageData(0,0,64,64).data;
+        context.drawImage(image,(canvas.width-drawWidth)/2+view.offsetX*scale,(canvas.height-drawHeight)/2+view.offsetY*scale,drawWidth,drawHeight);
+        const pixels=context.getImageData(0,0,canvas.width,canvas.height).data;
         const next=Array.from({length:48},(_,index)=>{
-          const coordinate=Math.round(index*63/47);
-          const x=axis==='horizontal'?coordinate:32;
-          const y=axis==='vertical'?coordinate:32;
-          const offset=(y*64+x)*4;
+          const x=axis==='horizontal'?Math.round(index*(canvas.width-1)/47):Math.floor(canvas.width/2);
+          const y=axis==='vertical'?Math.round(index*(canvas.height-1)/47):Math.floor(canvas.height/2);
+          const offset=(y*canvas.width+x)*4;
           return Math.round((pixels[offset]*.2126+pixels[offset+1]*.7152+pixels[offset+2]*.0722));
         });
         if(active)setValues(next);
@@ -420,7 +460,7 @@ function ProfilePlot({src,axis,view}:{src?:string;axis:'horizontal'|'vertical';v
     image.onerror=()=>{if(active)setValues([])};
     image.src=src;
     return()=>{active=false};
-  },[src,axis,view.zoom,view.offsetX,view.offsetY]);
+  },[src,axis,view.zoom,view.offsetX,view.offsetY,stage,size.width,size.height]);
   const points=values.map((value,index)=>`${index*100/47},${30-value*28/255}`).join(' ');
   return <div className="focusProfile"><span>{axis==='horizontal'?'Horizontal':'Vertical'} brightness</span><svg viewBox="0 0 100 30" preserveAspectRatio="none" role="img" aria-label={`${axis} brightness profile`}><path d="M0 15H100"/>{values.length>0&&<polyline points={points}/>}</svg></div>;
 }

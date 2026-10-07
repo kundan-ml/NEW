@@ -535,7 +535,7 @@ html[data-theme="premium-white"] .pdfMenuStrip.sharedClassicHeader:before {
 }
 
 html[data-theme="premium-white"] .pdfMenuStrip.sharedClassicHeader:after {
-  content: "OPTICAL INSPECTION / WORKSTATION"
+  content: ""
 }
 
 html[data-workspace="modern"] .withSharedChrome {
@@ -12983,7 +12983,9 @@ html[data-theme="premium-white"] body {
     flex: 0 0 auto;
   }
 
-  html[data-workspace="manual"] .pdfMenuStrip.sharedClassicHeader > span { flex: 0 0 8px }
+  html[data-workspace="manual"] .pdfMenuStrip.sharedClassicHeader>span {
+    flex: 0 0 8px
+  }
 
   html[data-workspace="manual"] .pdfMenuStrip.sharedClassicHeader button {
     flex: 0 0 auto;
@@ -12994,10 +12996,12 @@ html[data-theme="premium-white"] body {
     touch-action: manipulation;
   }
 
-  html[data-workspace="manual"] .sharedAppFooter { min-height: 30px }
+  html[data-workspace="manual"] .sharedAppFooter {
+    min-height: 30px
+  }
 
-  html[data-workspace="manual"] .sharedPageBody > :not(.inspectionReferencePage) button:not(.matrixDot),
-  html[data-workspace="manual"] .sharedPageBody > :not(.inspectionReferencePage) :is(input:not([type="checkbox"]):not([type="color"]):not([type="hidden"]), select, textarea) {
+  html[data-workspace="manual"] .sharedPageBody> :not(.inspectionReferencePage) button:not(.matrixDot),
+  html[data-workspace="manual"] .sharedPageBody> :not(.inspectionReferencePage) :is(input:not([type="checkbox"]):not([type="color"]):not([type="hidden"]), select, textarea) {
     min-height: 44px;
     touch-action: manipulation;
   }
@@ -13060,18 +13064,18 @@ html[data-theme="premium-white"] .customDrawer .lockNotice {
   border-color: var(--studio-border) !important;
 }
 
-html[data-theme="premium-white"] .customDrawer .workspaceStyleCards > button {
+html[data-theme="premium-white"] .customDrawer .workspaceStyleCards>button {
   background: var(--fill-surface) !important;
   color: var(--text-primary) !important;
   border-color: var(--studio-border) !important;
 }
 
-html[data-theme="premium-white"] .customDrawer .workspaceStyleCards > button.selected {
+html[data-theme="premium-white"] .customDrawer .workspaceStyleCards>button.selected {
   background: color-mix(in srgb, var(--primary) 11%, var(--surface)) !important;
   border-color: var(--primary) !important;
 }
 
-html[data-theme="premium-white"] .customDrawer .workspaceStyleCards > button > span small,
+html[data-theme="premium-white"] .customDrawer .workspaceStyleCards>button>span small,
 html[data-theme="premium-white"] .customDrawer .themeCards small {
   color: var(--text-muted) !important;
 }
@@ -13094,8 +13098,13 @@ html[data-theme="premium-white"] .customDrawer .statusEditor span {
   line-height: 1.25;
 }
 
-.studioSaveStatus.saved { color: var(--status-ok) }
-.studioSaveStatus.error { color: var(--status-nok) }
+.studioSaveStatus.saved {
+  color: var(--status-ok)
+}
+
+.studioSaveStatus.error {
+  color: var(--status-nok)
+}
 
 .drawerFoot .primaryAction {
   background: var(--fill-primary) !important;

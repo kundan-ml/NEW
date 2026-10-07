@@ -1,14 +1,15 @@
 'use client';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { Eye, EyeOff, Lock, Unlock, SlidersHorizontal } from 'lucide-react';
+import { Eye, EyeOff, Lock, Unlock, SlidersHorizontal,MousePointer2 } from 'lucide-react';
 import { samplePreviewUrl, sampleThumbnailUrl } from '@/lib/api';
 import type { Defect, Sample } from '@/types';
 import { InspectionCanvas } from './InspectionCanvas';
 
-type Props = { datasetId: string; sample: Sample | null; channel: string; defects: Defect[]; onChannel: (c: string) => void; labels: Record<string, string>; hold?: boolean; onHold?: () => void; selectedDefect?: number; onProbe?: (p: { x: number; y: number; gray: number | null }) => void; processing?: boolean; workstation?: boolean; availablePositions?: number[]; onPosition?: (position: number) => void;capacity?:number;onDimensions?:(width:number,height:number)=>void;sharedDefectGeometry?:boolean };
-export function LensViewer({ datasetId, sample, channel, defects, onChannel, labels, hold, onHold, selectedDefect = 0, onProbe, processing = false, workstation = false, availablePositions = [], onPosition,capacity=16,onDimensions,sharedDefectGeometry=false }: Props) {
+type Props = { datasetId: string; sample: Sample | null; channel: string; defects: Defect[]; onChannel: (c: string) => void; labels: Record<string, string>; hold?: boolean; onHold?: () => void; selectedDefect?: number; onSelectDefect?:(index:number)=>void;bottomLensOffset?:{x:number;y:number};onProbe?: (p: { x: number; y: number; gray: number | null }) => void; processing?: boolean; workstation?: boolean; availablePositions?: number[]; onPosition?: (position: number) => void;capacity?:number;onDimensions?:(width:number,height:number)=>void;sharedDefectGeometry?:boolean };
+export function LensViewer({ datasetId, sample, channel, defects, onChannel, labels, hold, onHold, selectedDefect = 0, onSelectDefect,bottomLensOffset,onProbe, processing = false, workstation = false, availablePositions = [], onPosition,capacity=16,onDimensions,sharedDefectGeometry=false }: Props) {
   const [showDefects, setShowDefects] = useState(true); const [showCross, setShowCross] = useState(true);
+  const [showProbe,setShowProbe]=useState(false);
   const channels = useMemo(() => sample ? Object.keys(sample.images).sort((a, b) => a === 'h' ? -1 : b === 'h' ? 1 : a === 'd' ? -1 : b === 'd' ? 1 : a.localeCompare(b)) : [], [sample]);
   const img = sample && channels.includes(channel) ? samplePreviewUrl(datasetId, sample, channel) : '';
   // DSM's regions use common registered lens geometry, not a camera-specific mask.
@@ -19,11 +20,12 @@ export function LensViewer({ datasetId, sample, channel, defects, onChannel, lab
     <div className="viewerCompactHeader">
       {/* <div className="viewerTitleInline"><h2>{workstation?'Inspection':'Inspection Viewer'}</h2><span>{sample?`WT-${String(sample.wt_index).padStart(4,'0')} · P${sample.position}`:'No lens selected'}</span></div> */}
       <div className="channelTabs productionChannelTabs premiumChannelTabs">{channels.map(c => <button key={c} className={c === channel ? 'active' : ''} onClick={() => onChannel(c)} title={`Switch to ${labels[c] || c}`}><span>{labels[c] || c.toUpperCase()}</span><small>.{c}</small></button>)}</div>
+      
       {/* {onPosition &&
         <nav className="canvasPositionNav" aria-label="Lens positions">{Array.from({ length: 16 }, (_, index) => { const position = index + 1, available = availablePositions.includes(position); return <button key={position} className={sample?.position === position ? 'active' : ''} disabled={!available} onClick={() => onPosition(position)} title={available ? `Open position ${position}` : `Position ${position} has no image`} aria-label={`Position ${position}${available ? '' : ' unavailable'}`}>{position}</button> })}</nav>
         } */}
       {/* <div className="viewerUtility premiumViewerUtility"><Link href="" title="Image filters"><SlidersHorizontal/><span>Image Filters</span></Link>{onHold&&<button className={hold?'active':''} onClick={onHold} title={hold?'Release held lens':'Hold current lens'}>{hold?<Lock/>:<Unlock/>}<span>{hold?'Held':'Hold'}</span></button>}</div> */}
     </div>
-    <div className="canvasFrame premiumCanvasFrame"><InspectionCanvas thumbnailUrl={sample && img ? sampleThumbnailUrl(datasetId,sample,channel) : undefined} onDimensions={onDimensions} imageUrl={img} defects={canvasDefects} selectedDefect={canvasSelectedDefect} showDefects={showDefects} showCrosshair={showCross} onProbe={onProbe} /><div className="viewerFloating compactViewerTools"><button className={showDefects ? 'active' : ''} onClick={() => setShowDefects(v => !v)} title="Toggle defect overlays">{showDefects ? <Eye /> : <EyeOff />}<span>Defects</span></button><button className={showCross ? 'active' : ''} onClick={() => setShowCross(v => !v)} title="Toggle center crosshair"><span className="crossGlyph">＋</span><span>Crosshair</span></button></div><div className="viewerPositionPill">Position <b>{sample?.position || '—'} / {capacity}</b></div></div>
+    <div className="canvasFrame premiumCanvasFrame"><InspectionCanvas thumbnailUrl={sample && img ? sampleThumbnailUrl(datasetId,sample,channel) : undefined} onDimensions={onDimensions} imageUrl={img} defects={canvasDefects} selectedDefect={canvasSelectedDefect} showDefects={showDefects} showCrosshair={showCross} showProbe={showProbe} bottomLensOffset={bottomLensOffset} onSelectDefect={index=>onSelectDefect?.(index<0?-1:defects.indexOf(canvasDefects[index]))} onProbe={onProbe} /><div className="viewerFloating compactViewerTools"><button className={showDefects ? 'active' : ''} onClick={() => setShowDefects(v => !v)} aria-pressed={showDefects} title="Toggle defect overlays">{showDefects ? <Eye /> : <EyeOff />}<span>Defects</span></button><button className={showCross ? 'active' : ''} onClick={() => setShowCross(v => !v)} aria-pressed={showCross} title="Toggle center crosshair"><span className="crossGlyph">＋</span><span>Crosshair</span></button><button className={showProbe?'active':''} onClick={()=>setShowProbe(value=>!value)} aria-pressed={showProbe} title="Show image coordinates and gray value"><MousePointer2/><span>Pixel probe</span></button></div><div className="viewerPositionPill">Position <b>{sample?.position || '—'} / {capacity}</b></div></div>
   </section>
 }

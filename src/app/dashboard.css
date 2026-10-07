@@ -9915,7 +9915,7 @@ html[data-theme="premium-white"] .pdfSkeletonMode .pdfMenuStrip:before {
 }
 
 html[data-theme="premium-white"] .pdfSkeletonMode .pdfMenuStrip:after {
-  content: "OPTICAL INSPECTION  /  WORKSTATION";
+  content: "";
   margin-left: auto;
   padding-right: 10px;
   color: var(--text-muted);
@@ -13112,7 +13112,9 @@ html[data-workspace="modern"] .oakTrayCell .oakTrayDefect {
 
 /* Classic workstation: keep the dense desktop view, but give fingers real
    targets and let the matrix/gallery scroll inside their own panels. */
-.canvasTouchHint { display: none }
+.canvasTouchHint {
+  display: none
+}
 
 @media (any-pointer: coarse) {
   html[data-workspace="manual"] .inspectionReferencePage {
@@ -13191,7 +13193,9 @@ html[data-workspace="modern"] .oakTrayCell .oakTrayDefect {
     z-index: 3;
   }
 
-  html[data-workspace="manual"] .historyTable th:first-child { z-index: 4 }
+  html[data-workspace="manual"] .historyTable th:first-child {
+    z-index: 4
+  }
 
   html[data-workspace="manual"] .historyTable th:not(:first-child),
   html[data-workspace="manual"] .historyTable td:not(:first-child) {
@@ -13224,16 +13228,30 @@ html[data-workspace="modern"] .oakTrayCell .oakTrayDefect {
   }
 
   html[data-workspace="manual"] .inspectionWtCard .referenceInfoRow,
-  html[data-workspace="manual"] .inspectionCurrentFields .referenceInfoRow { min-height: 30px }
+  html[data-workspace="manual"] .inspectionCurrentFields .referenceInfoRow {
+    min-height: 30px
+  }
 
   html[data-workspace="manual"] .inspectionWtCard .referenceInfoRow :is(span, b),
   html[data-workspace="manual"] .inspectionCurrentFields .referenceInfoRow :is(span, b),
   html[data-workspace="manual"] .inspectionStorageButton :is(b, small),
-  html[data-workspace="manual"] .inspectionModeToggle :is(b, small) { font-size: 11px }
+  html[data-workspace="manual"] .inspectionModeToggle :is(b, small) {
+    font-size: 11px
+  }
 
-  html[data-workspace="manual"] .inspectionPanelTitle { min-height: 50px; height: 50px }
-  html[data-workspace="manual"] .inspectionDefectTitle { min-height: 52px; height: 52px }
-  html[data-workspace="manual"] .inspectionDefectTitle h3 { font-size: 11px }
+  html[data-workspace="manual"] .inspectionPanelTitle {
+    min-height: 50px;
+    height: 50px
+  }
+
+  html[data-workspace="manual"] .inspectionDefectTitle {
+    min-height: 52px;
+    height: 52px
+  }
+
+  html[data-workspace="manual"] .inspectionDefectTitle h3 {
+    font-size: 11px
+  }
 
   html[data-workspace="manual"] .inspectionPanelTitle .lensNav button,
   html[data-workspace="manual"] .inspectionDefectTitle button,
@@ -13244,13 +13262,18 @@ html[data-workspace="modern"] .oakTrayCell .oakTrayDefect {
     font-size: 10px !important;
   }
 
-  html[data-workspace="manual"] .inspectionDefectList > button {
+  html[data-workspace="manual"] .inspectionDefectList>button {
     min-height: 48px;
     padding: 8px 10px;
   }
 
-  html[data-workspace="manual"] .inspectionDefectList b { font-size: 11px }
-  html[data-workspace="manual"] .inspectionDefectList small { font-size: 10px }
+  html[data-workspace="manual"] .inspectionDefectList b {
+    font-size: 11px
+  }
+
+  html[data-workspace="manual"] .inspectionDefectList small {
+    font-size: 10px
+  }
 
   html[data-workspace="manual"] .inspectionLogTabs {
     height: 52px !important;
@@ -13270,8 +13293,14 @@ html[data-workspace="modern"] .oakTrayCell .oakTrayDefect {
     font-size: 11px !important;
   }
 
-  html[data-workspace="manual"] .inspectionWtTabMeta { flex: 0 0 auto; height: 42px }
-  html[data-workspace="manual"] .inspectionWtTabMeta :is(b, small, em) { font-size: 10px }
+  html[data-workspace="manual"] .inspectionWtTabMeta {
+    flex: 0 0 auto;
+    height: 42px
+  }
+
+  html[data-workspace="manual"] .inspectionWtTabMeta :is(b, small, em) {
+    font-size: 10px
+  }
 
   html[data-workspace="manual"] .inspectionWtView,
   html[data-workspace="manual"] .inspectionLogRows,
@@ -13281,7 +13310,9 @@ html[data-workspace="modern"] .oakTrayCell .oakTrayDefect {
     overscroll-behavior: contain;
   }
 
-  html[data-workspace="manual"] .inspectionWtView { overflow: auto !important }
+  html[data-workspace="manual"] .inspectionWtView {
+    overflow: auto !important
+  }
 
   html[data-workspace="manual"] .inspectionWtGallery.images {
     min-width: max(100%, var(--wt-touch-width, 656px));
@@ -13289,19 +13320,19 @@ html[data-workspace="modern"] .oakTrayCell .oakTrayDefect {
     touch-action: pan-x pan-y;
   }
 
-  html[data-workspace="manual"] .inspectionWtGallery.images > button {
+  html[data-workspace="manual"] .inspectionWtGallery.images>button {
     min-width: 78px;
     min-height: 70px;
   }
 
-  html[data-workspace="manual"] .inspectionWtGallery.images .inspectionWtSquare > b,
+  html[data-workspace="manual"] .inspectionWtGallery.images .inspectionWtSquare>b,
   html[data-workspace="manual"] .inspectionWtGallery.images .wtStatusChip,
   html[data-workspace="manual"] .inspectionWtGallery.images .wtDefectChip {
     font-size: 10px !important;
     padding: 3px 5px !important;
   }
 
-  html[data-workspace="manual"] .inspectionWtSquare > .wtStatusDot.configuredWtStatus {
+  html[data-workspace="manual"] .inspectionWtSquare>.wtStatusDot.configuredWtStatus {
     width: 22px !important;
     height: 22px !important;
     font-size: 10px !important;
@@ -13315,9 +13346,20 @@ html[data-workspace="modern"] .oakTrayCell .oakTrayDefect {
     overflow: auto;
   }
 
-  html[data-workspace="manual"] .inspectionLegendHead { height: 48px }
-  html[data-workspace="manual"] .inspectionLegendHead button { width: 44px; height: 44px }
-  html[data-workspace="manual"] .inspectionLegendGrid span { min-height: 42px; height: auto; font-size: 10px }
+  html[data-workspace="manual"] .inspectionLegendHead {
+    height: 48px
+  }
+
+  html[data-workspace="manual"] .inspectionLegendHead button {
+    width: 44px;
+    height: 44px
+  }
+
+  html[data-workspace="manual"] .inspectionLegendGrid span {
+    min-height: 42px;
+    height: auto;
+    font-size: 10px
+  }
 
   html[data-workspace="manual"] .canvasTools button,
   html[data-workspace="manual"] .canvasPopupHost .canvasTools button {
@@ -13325,11 +13367,23 @@ html[data-workspace="modern"] .oakTrayCell .oakTrayDefect {
     height: 44px !important;
   }
 
-  html[data-workspace="manual"] .canvasTools svg { width: 19px !important; height: 19px !important }
-  html[data-workspace="manual"] .canvasMouseHint { display: none }
-  html[data-workspace="manual"] .canvasTouchHint { display: inline }
+  html[data-workspace="manual"] .canvasTools svg {
+    width: 19px !important;
+    height: 19px !important
+  }
 
-  html[data-workspace="manual"] .canvasPopupHeader button { min-height: 44px; padding-inline: 14px }
+  html[data-workspace="manual"] .canvasMouseHint {
+    display: none
+  }
+
+  html[data-workspace="manual"] .canvasTouchHint {
+    display: inline
+  }
+
+  html[data-workspace="manual"] .canvasPopupHeader button {
+    min-height: 44px;
+    padding-inline: 14px
+  }
 
   html[data-workspace="manual"] .inspectionReferencePage button:focus-visible,
   html[data-workspace="manual"] .canvasPopupWindow button:focus-visible {
@@ -13361,7 +13415,9 @@ html[data-workspace="modern"] .oakTrayCell .oakTrayDefect {
     overflow: visible !important;
   }
 
-  html[data-workspace="manual"] .inspectionReferenceViewport { overflow: visible !important }
+  html[data-workspace="manual"] .inspectionReferenceViewport {
+    overflow: visible !important
+  }
 
   html[data-workspace="manual"] .inspectionReferenceGrid {
     height: auto !important;
@@ -13372,24 +13428,35 @@ html[data-workspace="modern"] .oakTrayCell .oakTrayDefect {
   }
 
   html[data-workspace="manual"] .inspectionVerticalSplit,
-  html[data-workspace="manual"] .inspectionHorizontalSplit { display: none !important }
+  html[data-workspace="manual"] .inspectionHorizontalSplit {
+    display: none !important
+  }
 
-  html[data-workspace="manual"] .inspectionReferenceGrid > :is(.inspectionHistoryColumn, .inspectionMachinePanel, .inspectionCurrentPanel, .inspectionLogPanel, .viewerPanel) {
+  html[data-workspace="manual"] .inspectionReferenceGrid> :is(.inspectionHistoryColumn, .inspectionMachinePanel, .inspectionCurrentPanel, .inspectionLogPanel, .viewerPanel) {
     grid-column: auto !important;
     grid-row: auto !important;
     height: 440px;
   }
 
-  html[data-workspace="manual"] .inspectionReferenceGrid > .viewerPanel {
+  html[data-workspace="manual"] .inspectionReferenceGrid>.viewerPanel {
     grid-column: 1 / -1 !important;
     height: 560px !important;
   }
 }
 
 @media (any-pointer: coarse) and (max-width: 760px) {
-  html[data-workspace="manual"] .inspectionReferenceGrid { grid-template-columns: minmax(0, 1fr) !important }
-  html[data-workspace="manual"] .inspectionReferenceGrid > .viewerPanel { grid-column: auto !important; height: 500px !important }
-  html[data-workspace="manual"] .inspectionReferenceGrid > :is(.inspectionHistoryColumn, .inspectionMachinePanel, .inspectionCurrentPanel, .inspectionLogPanel) { height: 390px }
+  html[data-workspace="manual"] .inspectionReferenceGrid {
+    grid-template-columns: minmax(0, 1fr) !important
+  }
+
+  html[data-workspace="manual"] .inspectionReferenceGrid>.viewerPanel {
+    grid-column: auto !important;
+    height: 500px !important
+  }
+
+  html[data-workspace="manual"] .inspectionReferenceGrid> :is(.inspectionHistoryColumn, .inspectionMachinePanel, .inspectionCurrentPanel, .inspectionLogPanel) {
+    height: 390px
+  }
 }
 
 /* Premium White Classic: quiet neutral framing with a vivid, controlled accent.
@@ -13403,14 +13470,25 @@ html[data-theme="premium-white"][data-workspace="manual"] .inspectionReferenceVi
   background: radial-gradient(circle at 82% -12%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 32%), var(--fill-background) !important;
 }
 
-html[data-theme="premium-white"][data-workspace="manual"] .inspectionReferenceGrid > :is(.inspectionHistoryColumn, .inspectionMachinePanel, .inspectionCurrentPanel, .inspectionLogPanel, .viewerPanel) {
+html[data-theme="premium-white"][data-workspace="manual"] .inspectionReferenceGrid> :is(.inspectionHistoryColumn, .inspectionMachinePanel, .inspectionCurrentPanel, .inspectionLogPanel, .viewerPanel) {
   background: var(--studio-history-fill) !important;
 }
 
-html[data-theme="premium-white"][data-workspace="manual"] .inspectionReferenceGrid > .inspectionMachinePanel { background: var(--studio-machine-fill) !important }
-html[data-theme="premium-white"][data-workspace="manual"] .inspectionReferenceGrid > .inspectionCurrentPanel { background: var(--studio-details-fill) !important }
-html[data-theme="premium-white"][data-workspace="manual"] .inspectionReferenceGrid > .inspectionLogPanel { background: var(--studio-logs-fill) !important }
-html[data-theme="premium-white"][data-workspace="manual"] .inspectionReferenceGrid > .viewerPanel { background: var(--studio-viewer-fill) !important }
+html[data-theme="premium-white"][data-workspace="manual"] .inspectionReferenceGrid>.inspectionMachinePanel {
+  background: var(--studio-machine-fill) !important
+}
+
+html[data-theme="premium-white"][data-workspace="manual"] .inspectionReferenceGrid>.inspectionCurrentPanel {
+  background: var(--studio-details-fill) !important
+}
+
+html[data-theme="premium-white"][data-workspace="manual"] .inspectionReferenceGrid>.inspectionLogPanel {
+  background: var(--studio-logs-fill) !important
+}
+
+html[data-theme="premium-white"][data-workspace="manual"] .inspectionReferenceGrid>.viewerPanel {
+  background: var(--studio-viewer-fill) !important
+}
 
 html[data-theme="premium-white"][data-workspace="manual"] :is(.premiumMatrixHead, .inspectionPanelTitle, .inspectionStationName, .viewerCompactHeader, .inspectionLogTabs, .inspectionStatusBar) {
   color: var(--text-primary) !important;

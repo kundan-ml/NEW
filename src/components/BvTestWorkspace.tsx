@@ -2,8 +2,12 @@
 
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {Camera,Check,Download,FolderOpen,ImagePlus,Loader2,Play,Square,TestTube2,Upload,X} from 'lucide-react';
-import {api,previewUrl} from '@/lib/api';
-import {createLocalImagePreview,downloadLocalImage} from '@/lib/local-image-preview';
+import {API,api,previewUrl} from '@/lib/api';
+import {createLocalImagePreview} from '@/lib/local-image-preview';
+import {mapIlluminationImages} from '@/lib/illumination-images';
+import {lensSnapshotArchive,localImageArchive} from '@/lib/lens-snapshot';
+import {downloadBlob} from '@/lib/image-window';
+import {InspectionCanvas} from './InspectionCanvas';
 import type {InspectionResult,Job,Sample} from '@/types';
 
 type Channel='h'|'p'|'d'|'n';
@@ -12,10 +16,10 @@ type TestDataset={id:string;name:string;sample_count:number;image_count:number};
 type Busy='uploading'|'evaluating'|'starting'|null;
 
 const CHANNELS=[
-  {key:'h',short:'DBF',label:'Diffuse Brightfield',camera:1},
+  {key:'h',short:'TBF',label:'Telecentric Brightfield',camera:1},
   {key:'p',short:'PC',label:'Phase Contrast',camera:4},
   {key:'d',short:'DF',label:'Darkfield',camera:2},
-  {key:'n',short:'TBF',label:'Telecentric Brightfield',camera:3},
+  {key:'n',short:'DBF',label:'Diffuse Brightfield',camera:3},
 ] as const;
 const ACCEPTED=/\.(bmp|tif|tiff)$/i;
 const ENDED=new Set<Job['status']>(['completed','failed','cancelled']);
@@ -91,6 +95,8 @@ export function BvTestWorkspace({onClose,onActivityChange}:{onClose:()=>void;onA
 
   useEffect(()=>{
     const onKey=(event:KeyboardEvent)=>{
+      // The expanded image viewer owns its Escape and keyboard controls.
+      if(document.querySelector('.canvasPopupBackdrop'))return;
       if(event.key==='Escape'){event.stopPropagation();if(!isActive)onClose();else setNotice('Wait for the current action or stop the BV test before closing.');return}
       if(event.key!=='Tab'||!dialogRef.current)return;
       const items=Array.from(dialogRef.current.querySelectorAll<HTMLElement>('button:not([disabled]),select:not([disabled]),input:not([disabled]):not([hidden])')).filter(element=>element.getClientRects().length>0);
@@ -178,39 +184,26 @@ export function BvTestWorkspace({onClose,onActivityChange}:{onClose:()=>void;onA
     if(!fileList?.length)return;
     const chosen=Array.from(fileList).filter(file=>ACCEPTED.test(file.name));
     if(!chosen.length){setError('Use BMP or TIFF camera images.');return}
-    const next:Partial<Record<Channel,File>>={};
-    const cameraChannel:Record<string,Channel>={'1':'h','2':'d','3':'n','4':'p'};
-    for(const file of chosen){
-      const name=file.name.toLowerCase();
-      const numbered=name.match(/#([1-4])\.(?:tif|tiff)$/);
-      const letter=name.match(/\.([hdnp])\.bmp$/);
-      const inferred=numbered?cameraChannel[numbered[1]]:letter?letter[1] as Channel:/dark|dunkel/.test(name)?'d':/phase|phasen/.test(name)?'p':/telecentric|telezentr/.test(name)?'n':/diffuse|hellfeld/.test(name)?'h':null;
-      if(inferred&&!next[inferred])next[inferred]=file;
-    }
-    for(const file of chosen){
-      if(Object.values(next).includes(file))continue;
-      const vacant=(['h','d','n','p'] as const).find(channel=>!next[channel]);
-      if(vacant)next[vacant]=file;
-    }
+    const mapping=mapIlluminationImages(chosen);
+    if(!mapping.ok){setError(mapping.message);return}
+    const next=mapping.images;
     setFiles(next);setDataset(null);setSamples([]);setResults([]);setSelectedId(null);setJob(null);setError('');
     setNotice(`${Object.keys(next).length} camera images loaded. Review channel labels before evaluation.`);
     if(batchInput.current)batchInput.current.value='';
   }
 
-  function saveImages(){
-    if(selectedSample&&dataset){
-      for(const channel of CHANNELS){
-        if(!selectedSample.images[channel.key])continue;
-        const link=document.createElement('a');
-        link.href=previewUrl(dataset.id,selectedSample.id,channel.key);
-        link.download=`${selectedSample.base_name}_${channel.short}.png`;
-        link.click();
-      }
-      setNotice('Saving the selected lens images as PNG previews.');
-      return;
-    }
-    for(const channel of CHANNELS){const file=files[channel.key];if(file)downloadLocalImage(file)}
-    setNotice('Saving the loaded camera images.');
+  async function saveImages(){
+    setBusy('uploading');
+    try{
+      const sample=selectedSample,source=dataset;
+      const archive=sample&&source?await lensSnapshotArchive(sample,async channel=>{
+        const response=await fetch(`${API}/datasets/${source.id}/image/${sample.id}/${channel}`);
+        if(!response.ok)throw new Error(`Source download failed (HTTP ${response.status}).`);
+        return response.blob();
+      }):await localImageArchive(files);
+      downloadBlob(archive,'BV_Original_Images.zip');setNotice('Original BMP/TIFF images downloaded as ZIP.');
+    }catch(cause){setError(errorMessage(cause))}
+    finally{setBusy(null)}
   }
 
   async function acceptDataset(uploaded:TestDataset){
@@ -320,7 +313,7 @@ export function BvTestWorkspace({onClose,onActivityChange}:{onClose:()=>void;onA
           <button onClick={()=>batchInput.current?.click()} disabled={!!busy||isRunning}><ImagePlus/>Load images</button>
           <input ref={batchInput} type="file" accept=".bmp,.tif,.tiff" multiple hidden onChange={event=>chooseBatchImages(event.target.files)}/>
           <button onClick={()=>folderInput.current?.click()} disabled={!!busy||isRunning}><FolderOpen/>Load image folder</button>
-          <button onClick={saveImages} disabled={!!busy||isRunning||(!dataset&&!fileCount)}><Download/>Save images</button>
+          <button onClick={()=>void saveImages()} disabled={!!busy||isRunning||(!dataset&&!fileCount)}><Download/>Save images</button>
           <input ref={folderInput} type="file" accept=".bmp,.tif,.tiff" multiple {...directoryProps} hidden onChange={event=>void loadFolder(event.target.files)}/>
         </div>
         <div className="bvTestHardware" title="Camera capture needs the production camera connection"><button disabled><Camera/>Snap</button><button disabled><Camera/>Grab</button><small>Camera not connected</small></div>
@@ -343,7 +336,7 @@ export function BvTestWorkspace({onClose,onActivityChange}:{onClose:()=>void;onA
             return <article key={channel.key} className={`bvTestImageCard ${activeChannel===channel.key?'active':''}`}>
               <header><span><i>{channel.short}</i><b>{channel.label}</b></span><em className={status?`is-${status.toLowerCase()}`:''}>{status||'CAM '+channel.camera}</em></header>
               <div className="bvTestImageStage">
-                {src&&!imageErrors[imageKey]?<img key={imageKey} src={src} draggable={false} alt={`${channel.label} of ${selectedSample?.base_name||localFile?.name||'selected lens'}`} onError={()=>setImageErrors(current=>({...current,[imageKey]:true}))}/>:<div className="bvTestImageEmpty"><ImagePlus/><span>{imageErrors[imageKey]?'Preview unavailable':dataset?'Camera image missing':'No image loaded'}</span>{!dataset&&<button onClick={()=>imageInputs.current[channel.key]?.click()} disabled={!!busy||isRunning}><Upload/>Load {channel.short}</button>}</div>}
+                {src&&!imageErrors[imageKey]?<InspectionCanvas imageUrl={src} defects={selectedResult?.defects||[]} showCrosshair={false} showProbe={false}/>:<div className="bvTestImageEmpty"><ImagePlus/><span>{imageErrors[imageKey]?'Preview unavailable':dataset?'Camera image missing':'No image loaded'}</span>{!dataset&&<button onClick={()=>imageInputs.current[channel.key]?.click()} disabled={!!busy||isRunning}><Upload/>Load {channel.short}</button>}</div>}
                 <input ref={element=>{imageInputs.current[channel.key]=element}} type="file" accept=".bmp,.tif,.tiff" hidden onChange={event=>{chooseImage(channel.key,event.target.files?.[0]);event.target.value=''}}/>
               </div>
               <footer><span title={fileName}>{fileName}</span>{!dataset&&<button onClick={()=>imageInputs.current[channel.key]?.click()} disabled={!!busy||isRunning} title={`Replace ${channel.label} image`}><ImagePlus/>Replace</button>}</footer>
@@ -355,7 +348,7 @@ export function BvTestWorkspace({onClose,onActivityChange}:{onClose:()=>void;onA
           <section className="bvTestScriptSection"><div className="bvTestSectionHead"><span><small>PROCESSOR</small><b>Active inspection</b></span><span className="bvTestLiveDot"/></div>
             <label className="bvTestScriptSelect"><span>Evaluate</span><select value={selectedScriptName} onChange={event=>void chooseScript(event.target.value)} disabled={bridgeUnavailable||!scripts.some(script=>script.loaded)||isActive}><option value="">Active DSM bridge</option>{scripts.filter(script=>script.loaded&&!bridgeUnavailable).map(script=><option key={script.name} value={script.name}>{script.lens_type} · {script.name}</option>)}</select></label>
             <div className="bvTestScripts" title="Available scripts reported by the station">{scripts.length?scripts.map(script=><span key={`${script.lens_type}:${script.name}`} className={script.loaded&&!bridgeUnavailable?'loaded':''} title={script.name}><b>{script.lens_type}</b><small>{script.name}</small></span>):<span className="bvTestNoScript">{scriptError?'Script list unavailable':'No scripts reported'}</span>}</div>
-            <p>{bridgeUnavailable?'HALCON bridge unavailable; connect the licensed inspection service to evaluate.':'Selecting a lens type starts a loaded image set. Evaluation currently uses the active DSM bridge for every type.'}</p>
+            <p>{bridgeUnavailable?'HALCON bridge unavailable; connect the licensed inspection service to evaluate.':'Only exported scripts reported by this station are available. Defect regions are shared by the joint four-camera DSM result.'}</p>
           </section>
 
           <section className="bvTestBatchSection"><div className="bvTestSectionHead"><span><small>IMAGE SET</small><b>{dataset?dataset.name:'Current lens'}</b></span>{dataset&&<em>{dataset.sample_count} lenses · {dataset.image_count} images</em>}</div>

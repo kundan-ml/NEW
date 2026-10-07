@@ -9255,7 +9255,7 @@ html[data-theme="premium-white"] .pdfSkeletonMode .pdfMenuStrip:before {
 }
 
 html[data-theme="premium-white"] .pdfSkeletonMode .pdfMenuStrip:after {
-  content: "OPTICAL INSPECTION  /  WORKSTATION";
+  content: "";
   margin-left: auto;
   padding-right: 10px;
   color: var(--text-muted);

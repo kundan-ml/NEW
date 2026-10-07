@@ -5,6 +5,7 @@ import {usePathname} from 'next/navigation';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {
   ChartNoAxesCombined,
+  BookOpen,
   ChevronsLeft,
   ChevronsRight,
   FolderArchive,
@@ -29,6 +30,8 @@ import {BvTestWorkspace} from './BvTestWorkspace';
 import {InfoWorkspace} from './InfoWorkspace';
 import {api} from '@/lib/api';
 import type {SystemInfo} from '@/types';
+import {openManual} from '@/lib/open-manual';
+import './inspection-manual.css';
 
 const items=[
   ['/','Inspection',Microscope],
@@ -59,6 +62,7 @@ function ShellInner({children}:{children:React.ReactNode}){
   const bvTestActive=useRef(false);
   const[infoOpen,setInfoOpen]=useState(false);
   const[system,setSystem]=useState<SystemInfo|null>(null);
+  const[helpError,setHelpError]=useState('');
   const[now,setNow]=useState(()=>new Date());
   const sharedChrome=path!=="/";
   const pageName=items.find(([href])=>href===path)?.[1]||'Lens Inspection';
@@ -83,6 +87,7 @@ function ShellInner({children}:{children:React.ReactNode}){
         setPalette(true);
       }
       if(e.key==='Escape'){
+        if(document.querySelector('.canvasPopupBackdrop'))return;
         setPalette(false);
         setCustomize(false);
         if(!bvTestActive.current){
@@ -155,7 +160,8 @@ function ShellInner({children}:{children:React.ReactNode}){
       </nav>
 
       <div className="railFoot productionRailFoot">
-        <div className="railOnline" title="Production line connected"><i/><span>Line online</span></div>
+        <button className="sideNav utilityNav" onClick={()=>void openManual().catch(error=>setHelpError(error.message))} title="Open English manual"><BookOpen/><span>Help</span></button>
+        <div className="railOnline" title="Production hardware connection status is not reported"><i/><span>File-input station</span></div>
         <button className="sideNav utilityNav" onClick={()=>setCustomize(true)} title="Interface Studio">
           <Settings/><span>Customize</span>
         </button>
@@ -197,6 +203,7 @@ function ShellInner({children}:{children:React.ReactNode}){
     </main>
 
     <CustomizationDrawer open={customize} onClose={()=>setCustomize(false)}/>
+    {helpError&&<button className="inspectionHelpNotice" role="alert" onClick={()=>setHelpError('')}>{helpError}</button>}
     {imageFilterOpen&&<ImageFilterWorkspace modal onClose={()=>setImageFilterOpen(false)}/>}
     {registrationOpen&&<RegistrationWorkspace onClose={()=>setRegistrationOpen(false)}/>}
     {focusOpen&&<FocusWorkspace onClose={()=>setFocusOpen(false)}/>}

@@ -13,3 +13,10 @@
 @media(max-width:450px),(max-height:560px){.bvTestWindow{width:100vw;height:100dvh;border:0;border-radius:0}.bvTestBody{padding:4px}.bvTestImageSection{display:grid;grid-template-rows:29px minmax(0,1fr);min-height:0}.bvTestChannelRail{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:3px;padding-bottom:3px}.bvTestChannelRail button{border:1px solid var(--bv-edge);border-radius:3px;background:var(--fill-elevated,var(--surface-elevated));color:var(--text-secondary);font-size:10px;font-weight:800}.bvTestChannelRail button.active{border-color:var(--primary);color:var(--text-primary)}.bvTestImageGrid{display:block;overflow:hidden}.bvTestImageCard{width:100%;height:100%}.bvTestImageCard:not(.active){display:none}.bvTestFooterActions .bvTestReset{display:none}.bvTestProgressTrack{display:none}.bvTestProgress{grid-template-columns:minmax(0,1fr)}.bvTestProgressText{display:none}.bvTestProgress small{grid-column:auto}.bvTestHardware button{font-size:0;gap:0}.bvTestHardware button svg{width:14px;height:14px}.bvTestSourceActions button{font-size:0;gap:0}.bvTestSourceActions button svg{width:17px;height:17px}}
 @media(prefers-reduced-motion:reduce){.bvTestWindow *{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 .bvTestPositions button i{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bvTestImageStage{position:relative}
+.bvTestImageStage>.canvasHost{position:relative;inset:auto;width:100%;height:100%;min-height:0;min-width:0;border-radius:0}
+.bvTestImageStage .canvasHint,.bvTestImageStage .canvasScale{display:none}
+.bvTestImageStage .canvasZoomControl{bottom:6px;left:6px;right:6px;max-width:none}
+.bvTestImageStage .canvasTools{left:auto;right:6px;top:6px;gap:3px;flex-direction:row;padding:3px;border-radius:5px}
+.bvTestImageStage .canvasTools button{width:25px;height:25px;border-radius:3px}
+.bvTestImageStage .canvasTools svg{width:13px;height:13px}

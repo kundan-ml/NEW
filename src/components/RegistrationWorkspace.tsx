@@ -5,6 +5,8 @@ import {Camera,Check,Download,FileImage,ImagePlus,Loader2,RotateCcw,Save,ShieldA
 import {api,previewUrl} from '@/lib/api';
 import {createLocalImagePreview,downloadLocalImage} from '@/lib/local-image-preview';
 import {ILLUMINATION_IMAGE_PATTERN as ACCEPTED,mapIlluminationImages} from '@/lib/illumination-images';
+import {localImageArchive} from '@/lib/lens-snapshot';
+import {downloadBlob,openImageWindow} from '@/lib/image-window';
 import type {RegistrationResult,SystemInfo} from '@/types';
 
 type Channel='h'|'p'|'d'|'n';
@@ -19,6 +21,7 @@ const CHANNELS=[
 
 export function RegistrationWorkspace({onClose}:{onClose:()=>void}){
   const[head,setHead]=useState(1);
+  const[headCount,setHeadCount]=useState(4);
   const[mobileView,setMobileView]=useState<'images'|'details'>('images');
   const[filesByHead,setFilesByHead]=useState<Record<number,ChannelFiles>>({});
   const[previews,setPreviews]=useState<Partial<Record<Channel,string>>>({});
@@ -34,7 +37,7 @@ export function RegistrationWorkspace({onClose}:{onClose:()=>void}){
   const files=filesByHead[head]||EMPTY_FILES;
   const ready=CHANNELS.every(channel=>!!files[channel.key]);
   const matchingResult=result?.camera_head===head?result:null;
-  const hasUnsavedChanges=!!matchingResult&&(!uploaded||uploaded.head!==head);
+  const hasUnsavedChanges=!!matchingResult&&Object.keys(files).length>0&&(!uploaded||uploaded.head!==head);
 
   useEffect(()=>{
     const previousBody=document.body.style.overflow;
@@ -46,15 +49,16 @@ export function RegistrationWorkspace({onClose}:{onClose:()=>void}){
 
   useEffect(()=>{
     let active=true;
-    void Promise.allSettled([api.system(),api.registrationCurrent()]).then(([systemState,currentState])=>{
+    void Promise.allSettled([api.system(),api.registrationCurrent(head),api.getCameraSystem()]).then(([systemState,currentState,cameraState])=>{
       if(!active)return;
       if(systemState.status==='fulfilled')setSystem(systemState.value);
+      if(cameraState.status==='fulfilled'&&Number.isInteger(cameraState.value?.head_count))setHeadCount(cameraState.value.head_count);
       if(currentState.status==='fulfilled'&&currentState.value.camera_head&&currentState.value.transforms){
         setResult(currentState.value as RegistrationResult);
       }
     });
     return()=>{active=false};
-  },[]);
+  },[head]);
 
   useEffect(()=>{
     const controller=new AbortController();
@@ -150,7 +154,20 @@ export function RegistrationWorkspace({onClose}:{onClose:()=>void}){
   async function saveOutbox(){
     if(!matchingResult||busy)return;
     setBusy('saving');
-    try{await api.registrationOutbox();setNotice('Saved to Outbox.')}
+    try{await api.registrationOutbox(head);setNotice(`Head ${head} estimate saved to Outbox. Not applied to production inference.`)}
+    catch(error){setNotice((error as Error).message)}
+    finally{setBusy(null)}
+  }
+
+  async function saveImages(){
+    try{downloadBlob(await localImageArchive(files),`Registration_Head${head}_Originals.zip`);setNotice('Original four-channel images saved as ZIP.')}
+    catch(error){setNotice((error as Error).message)}
+  }
+
+  async function saveInbox(){
+    if(!matchingResult||busy||!window.confirm(`Replace Head ${head} development Inbox registration? The previous file will be archived. This is an unverified estimate, not production calibration, and will not be applied to DSM inference.`))return;
+    setBusy('saving');
+    try{await api.registrationInbox(head);setNotice('Development Inbox saved; previous files archived. Production calibration remains unchanged.')}
     catch(error){setNotice((error as Error).message)}
     finally{setBusy(null)}
   }
@@ -165,7 +182,7 @@ export function RegistrationWorkspace({onClose}:{onClose:()=>void}){
       </header>
 
       <nav className="registrationHeadTabs" aria-label="Camera head">
-        {[1,2,3,4].map(value=>{const count=CHANNELS.filter(channel=>filesByHead[value]?.[channel.key]).length;return <button key={value} type="button" className={head===value?'active':''} aria-current={head===value?'true':undefined} aria-label={`Head ${value}, ${count} of 4 images ready`} onClick={()=>setHead(value)}><span className="registrationHeadNumber">{String(value).padStart(2,'0')}</span><span className="registrationHeadLabel"><b>Head {value}</b><small>{count===4?'Ready':`${count} / 4 images`}</small></span><span className="registrationHeadProgress" aria-hidden="true">{CHANNELS.map(channel=><i key={channel.key} className={filesByHead[value]?.[channel.key]?'filled':''}/>)}</span></button>})}
+        {Array.from({length:headCount},(_,index)=>index+1).map(value=>{const count=CHANNELS.filter(channel=>filesByHead[value]?.[channel.key]).length;return <button key={value} type="button" disabled={!!busy} className={head===value?'active':''} aria-current={head===value?'true':undefined} aria-label={`Head ${value}, ${count} of 4 images ready`} onClick={()=>setHead(value)}><span className="registrationHeadNumber">{String(value).padStart(2,'0')}</span><span className="registrationHeadLabel"><b>Head {value}</b><small>{count===4?'Ready':`${count} / 4 images`}</small></span><span className="registrationHeadProgress" aria-hidden="true">{CHANNELS.map(channel=><i key={channel.key} className={filesByHead[value]?.[channel.key]?'filled':''}/>)}</span></button>})}
         <div className="registrationMode"><b>{system?.mode==='SETUP'?'Setup':system?.mode==='AUTO'?'Automatic':'Offline'}</b></div>
       </nav>
 
@@ -185,12 +202,12 @@ export function RegistrationWorkspace({onClose}:{onClose:()=>void}){
 
           <section className="registrationTransformSection">
             <div className="registrationSectionHead"><span><b>Transforms</b></span>{matchingResult&&<Check/>}</div>
-            {matchingResult?<div className="registrationTransformList">{CHANNELS.map(channel=>{const transform=matchingResult.transforms.find(item=>item.channel===channel.key);return <div key={channel.key}><b>{channel.short}</b><span>{transform?`X ${transform.tx_px} · Y ${transform.ty_px} px`:'No result'}</span><small>{transform?`${transform.rotation_deg}° · ${transform.scale.toFixed(4)}×`:'—'}</small></div>})}</div>:<p className="registrationEmptyResult">Run to view alignment.</p>}
+            {matchingResult?<div className="registrationTransformList">{CHANNELS.map(channel=>{const transform=matchingResult.transforms.find(item=>item.channel===channel.key);return <div key={channel.key} title={matchingResult.note||'Unverified offline estimate'}><b>{channel.short}</b><span>{transform?`X ${transform.tx_px} · Y ${transform.ty_px} px`:'No result'}</span><small>{transform?`${transform.rotation_deg}° · ${transform.scale.toFixed(4)}× · ${transform.um_per_pixel.toFixed(2)} µm/px*`:'—'}</small></div>})}</div>:<p className="registrationEmptyResult">Run to view alignment.</p>}
           </section>
         </aside>
 
         <section className="registrationVisuals" aria-label="Uploaded image previews"><input ref={batchInputRef} type="file" accept=".bmp,.tif,.tiff,image/bmp,image/tiff" multiple onChange={event=>{chooseCanvasFiles(event.target.files);event.target.value=''}} aria-label="Load one, three, or four registration images" hidden/>{CHANNELS.map((channel,index)=><article className={`registrationPreview ${files[channel.key]?'has-image':''}`} key={channel.key}>
-          <header><span><i>{String(index+1).padStart(2,'0')}</i><b>{channel.label}</b></span></header>
+          <header onContextMenu={event=>{event.preventDefault();if(!openImageWindow(sourceUrls[channel.key],channel.label))setNotice('Load an image and allow popups to open an image window.')}} onDoubleClick={()=>openImageWindow(sourceUrls[channel.key],channel.label)} title="Double-click or right-click for image window"><span><i>{String(index+1).padStart(2,'0')}</i><b>{channel.label}</b></span></header>
           <div className="registrationPreviewFrame">
             {files[channel.key]&&sourceUrls[channel.key]&&!failedPreviews[channel.key]?<img src={sourceUrls[channel.key]} draggable={false} alt={`${channel.label} registration preview`} onError={()=>setFailedPreviews(current=>({...current,[channel.key]:true}))}/>:<div className="registrationPreviewEmpty"><FileImage/>{files[channel.key]&&<b>{failedPreviews[channel.key]?'Preview unavailable':'Preparing preview…'}</b>}</div>}
             <button className="registrationCanvasPicker" type="button" disabled={!!busy} onClick={()=>openCanvasPicker(channel.key)} aria-label={`Load images from ${channel.label} canvas. Select one image for this slot or three to four images for automatic illumination matching.`} title="Click to load 3–4 images automatically, or one image into this slot"><span><ImagePlus/>{files[channel.key]?'Load images':'Load 3–4 images'}</span></button>
@@ -203,8 +220,10 @@ export function RegistrationWorkspace({onClose}:{onClose:()=>void}){
         <div className="registrationNotice" role="status"><span className={busy?'processing':matchingResult?'ready':''}>{busy?<Loader2 className="spin"/>:matchingResult?<Check/>:<ShieldAlert/>}</span><p title={notice}>{notice}</p></div>
         <div className="registrationActions">
           {system?.mode==='AUTO'&&<button className="registrationSecondary" disabled={!!busy} onClick={()=>void switchToSetup()}>Switch to Setup</button>}
+          <button className="registrationSecondary" disabled={!!busy||!Object.keys(files).length} onClick={()=>void saveImages()} title="Save all original images as ZIP"><Download/>Images</button>
           <button className="registrationSecondary" disabled={!!busy||!CHANNELS.some(channel=>files[channel.key])} onClick={()=>{setFilesByHead(current=>({...current,[head]:{}}));setUploaded(null);setResult(current=>current?.camera_head===head?null:current);setNotice('Images cleared.')}}><RotateCcw/>Clear</button>
           <button className="registrationSecondary" disabled={!!busy||!matchingResult||hasUnsavedChanges} onClick={()=>void saveOutbox()}><Save/>Save to Outbox</button>
+          {['Service','Administrator'].includes(system?.session.role||'')&&<button className="registrationSecondary" disabled={!!busy||!matchingResult||hasUnsavedChanges||system?.mode==='AUTO'} onClick={()=>void saveInbox()} title="Confirmed development Inbox transfer; not production calibration">Direct Inbox</button>}
           <button className="registrationPrimary" disabled={!!busy||!ready||system?.mode==='AUTO'} onClick={()=>void runRegistration()}>{busy==='uploading'||busy==='registering'?<Loader2 className="spin"/>:<Camera/>}Register</button>
         </div>
       </footer>

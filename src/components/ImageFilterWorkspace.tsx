@@ -81,6 +81,7 @@ export function ImageFilterWorkspace({modal=false,onClose}:{modal?:boolean;onClo
     setLoading(false);
   }
   useEffect(()=>{void load()},[]);
+  useEffect(()=>{let active=true;const timer=window.setInterval(()=>void api.storageState().then(value=>{if(active)setRuntime(value)}).catch(()=>{}),2000);return()=>{active=false;window.clearInterval(timer)}},[]);
   useEffect(()=>{if(!modal)return;const close=(event:KeyboardEvent)=>{if(event.key==="Escape")onClose?.()};window.addEventListener("keydown",close);return()=>window.removeEventListener("keydown",close)},[modal,onClose]);
   useEffect(()=>{setSettings(old=>({...old,positions:old.positions.filter(position=>position<=capacity)}))},[capacity]);
 
@@ -88,7 +89,7 @@ export function ImageFilterWorkspace({modal=false,onClose}:{modal?:boolean;onClo
   function patchRecurring<K extends keyof FilterSettings["recurring"]>(key:K,value:FilterSettings["recurring"][K]){setSettings(old=>({...old,recurring:{...old.recurring,[key]:value}}))}
   function toggleList(key:"positions"|"result_types"|"error_classes",value:number|string){setSettings(old=>{const list=old[key] as Array<number|string>,next=list.includes(value)?list.filter(item=>item!==value):[...list,value];return {...old,[key]:next}})}
   async function save(){setSaving(true);setNotice("");try{const[saved,savedLegend]=await Promise.all([api.saveFilters(settings) as Promise<FilterSettings>,legend&&legendDirty?api.saveStatusSymbolLegend(legend):Promise.resolve(null)]);setSettings(saved);setBaseline(saved);if(savedLegend){setLegend(savedLegend);setLegendBaseline(savedLegend)}setNotice("Image filter configuration saved");localStorage.setItem("lens-image-filter-version",String(Date.now()));window.dispatchEvent(new Event("lens-image-filter-changed"));window.dispatchEvent(new Event("lens-status-legend-changed"))}catch(error){setNotice(error instanceof Error?error.message:"Unable to save configuration")}finally{setSaving(false)}}
-  async function toggleStorage(){setSaving(true);setNotice("");try{if(dirty)await api.saveFilters(settings);if(legend&&legendDirty){const savedLegend=await api.saveStatusSymbolLegend(legend);setLegend(savedLegend);setLegendBaseline(savedLegend)}const next=runtime?.active?await api.storageStop():await api.storageStart();setRuntime(next);setBaseline(settings);localStorage.setItem("lens-image-filter-version",String(Date.now()));window.dispatchEvent(new Event("lens-image-filter-changed"));window.dispatchEvent(new Event("lens-status-legend-changed"));setNotice(next.active?"Optimization image storage started":"Image storage stopped")}catch(error){setNotice(error instanceof Error?error.message:"Unable to update image storage")}finally{setSaving(false)}}
+  async function toggleStorage(){setSaving(true);setNotice("");try{const stopping=runtime?.active||!!runtime?.schedule_key;if(!stopping&&dirty)await api.saveFilters(settings);if(legend&&legendDirty){const savedLegend=await api.saveStatusSymbolLegend(legend);setLegend(savedLegend);setLegendBaseline(savedLegend)}const next=stopping?await api.storageStop():await api.storageStart();setRuntime(next);const saved=await api.getFilters() as FilterSettings;setSettings(saved);setBaseline(saved);localStorage.setItem("lens-image-filter-version",String(Date.now()));window.dispatchEvent(new Event("lens-image-filter-changed"));window.dispatchEvent(new Event("lens-status-legend-changed"));setNotice(next.active?"Optimization image storage started":next.schedule_key?"Scheduled storage armed": "Image storage stopped")}catch(error){setNotice(error instanceof Error?error.message:"Unable to update image storage")}finally{setSaving(false)}}
   const selectedSummary=useMemo(()=>`${settings.result_types.length} results · ${settings.error_classes.length||"all"} defects · ${settings.positions.length}/${capacity} positions`,[settings,capacity]);
   const completion=runtime?.active&&settings.image_count?Math.min(100,(runtime.saved_lenses/settings.image_count)*100):0;
 
@@ -131,7 +132,7 @@ export function ImageFilterWorkspace({modal=false,onClose}:{modal?:boolean;onClo
   onClick={() => void toggleStorage()}
   disabled={saving}
 >
-  Apply
+  {runtime?.active||runtime?.schedule_key?"Stop storage":settings.recurring.enabled?"Arm schedule":"Start storage"}
 </button>
       {modal&&<button className="filterSecondary" onClick={onClose}><X/>Close</button>}
     </footer>

@@ -15,10 +15,10 @@ export interface InspectionJobEvent extends InspectionStreamCursor {type:'starte
 export type LiveInspectionMessage=LiveInspectionSnapshot|InspectionHeartbeat|InspectionResync|InspectionJobEvent;
 export interface SystemInfo{app:string;version:string;mode:'AUTO'|'SETUP';bridge:string;settings:{station_name:string;line_name:string;installation_name:string;station_index:number;wt_capacity:number;role:Role;channel_labels:Record<string,string>;image_format:'BMP'|'TIF'};session:{username:string;role:Role;logged_in:boolean}}
 export interface LogRow{time:string;level:string;message:string}
-export interface StorageRuntime{active:boolean;started_at?:string;saved_lenses:number;saved_images:number;event_count:number;position_counts:Record<string,number>;error_counts:Record<string,number>;last_saved_at?:string;reason:string}
+export interface StorageRuntime{active:boolean;started_at?:string;saved_lenses:number;saved_images:number;event_count:number;position_counts:Record<string,number>;error_counts:Record<string,number>;last_saved_at?:string;reason:string;schedule_key?:string;window_key?:string;schedule_event_index?:number;interval_index?:number;window_saved_lenses?:number;count_complete?:boolean}
 export interface ErrorClass{key:string;label:string;color:string;symbol:string;severity:string}
 export interface StatusSymbol{key:string;label:string;color:string;symbol:string;match_terms?:string[];color_from_status?:Status;outcome?:'OK'|'NOK'}
 export interface StatusSymbolLegend{statuses:StatusSymbol[];defects:StatusSymbol[];fallback_defect:StatusSymbol}
-export interface FocusMetric{key:string;label:string;value:number;status:'green'|'yellow'|'red';optimum:[number,number];acceptable:[number,number]}
+export interface FocusMetric{key:string;label:string;value:number|null;status:'green'|'yellow'|'red'|'unavailable';optimum:[number,number];acceptable:[number,number];reason?:string|null}
 export interface RegistrationTransform{channel:string;tx_px:number;ty_px:number;rotation_deg:number;scale:number;um_per_pixel:number}
-export interface RegistrationResult{camera_head:number;dataset_id:string;sample_id:string;transforms:RegistrationTransform[];created_at:string;user:string}
+export interface RegistrationResult{camera_head:number;dataset_id:string;sample_id:string;transforms:RegistrationTransform[];created_at:string;user:string;calibration_status?:string;note?:string}

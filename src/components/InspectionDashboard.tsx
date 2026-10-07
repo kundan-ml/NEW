@@ -42,6 +42,7 @@ import { warmPreviews } from "@/lib/preview-cache";
 import { averageInferenceMs, formatInferenceMs, inferenceElapsedMs, INFERENCE_TIMING_DESCRIPTION } from "@/lib/inference-timing";
 import type {
   DatasetSummary,
+  Defect,
   InspectionResult,
   Job,
   LogRow,
@@ -58,11 +59,15 @@ import { LensViewer } from "./LensViewer";
 import { StatusMatrix, type GlobalHistoryEntry } from "./StatusMatrix";
 import { TopBar } from "./TopBar";
 import { TrendChart } from "./TrendChart";
+import { TrendLineWorkspace, type TrendView } from "./TrendLineWorkspace";
 import { useUI } from "./UIProvider";
 import { useSharedInspection } from "./useSharedInspection";
+import {displayFilterFrom,matchesDisplayFilter,type DisplayFilter} from '@/lib/inspection-display';
+import {calculateInspectionYield} from '@/lib/inspection-yield';
+import './inspection-manual.css';
 
 type WorkspaceTab = "quality" | "activity" | "control";
-type InspectionBottomTab = "messages" | "wt" | "trend";
+type InspectionBottomTab = "messages" | "wt" | "trend" | "trend-line";
 type WtViewMode = "images" | "names";
 type BottomWidthKey = "trendWidth" | "logsWidth" | "actionsWidth";
 
@@ -123,6 +128,12 @@ export function InspectionDashboard({
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
   const [hold, setHold] = useState(false);
+  const [followLiveTray, setFollowLiveTray] = useState(true);
+  const [heldResult,setHeldResult]=useState<{datasetId:string;sampleId:string;result?:InspectionResult}|null>(null);
+  const resumeLiveRef=useRef(false);
+  const [displayFilter,setDisplayFilter]=useState<DisplayFilter|null>(null);
+  const appliedDisplayPolicyRef=useRef('');
+  const [modeBusy,setModeBusy]=useState(false);
   const [snapshotBusy, setSnapshotBusy] = useState(false);
   const [loadedImageSize, setLoadedImageSize] = useState<{key:string;width:number;height:number} | null>(null);
   const [moreActionsOpen, setMoreActionsOpen] = useState(false);
@@ -146,6 +157,9 @@ export function InspectionDashboard({
   const [customDefectIcons, setCustomDefectIcons] = useState<Set<string>>(new Set());
   const [inspectionBottomTab, setInspectionBottomTab] =
     useState<InspectionBottomTab>("messages");
+  const [modernTrendTab,setModernTrendTab]=useState<'statistics'|'line'>('statistics');
+  const [trendInitialView,setTrendInitialView]=useState<TrendView|undefined>();
+  const [trendPopupOpen,setTrendPopupOpen]=useState(false);
   const [wtViewMode, setWtViewMode] = useState<WtViewMode>("images");
   const [selectedGlobalWt, setSelectedGlobalWt] = useState<number | null>(null);
   const [liveDatasetId, setLiveDatasetId] = useState<string | null>(null);
@@ -174,12 +188,11 @@ export function InspectionDashboard({
   const wtCapacity = info?.settings.wt_capacity || 16;
 
   useEffect(() => {
-    const saved = localStorage.getItem("lens-operation-mode");
-    if (saved === "AUTO" || saved === "MANUAL") setOperationMode(saved);
     const query = new URLSearchParams(window.location.search);
     if (query.get("login") === "1") setLoginOpen(true);
     if (query.get("dataset") === "1") setLoader(true);
-    if (query.has("login") || query.has("dataset"))
+    if (query.get("trendline") === "1") setTrendPopupOpen(true);
+    if (query.has("login") || query.has("dataset") || query.has("trendline"))
       window.history.replaceState({}, "", window.location.pathname);
   }, []);
   useEffect(() => {
@@ -203,25 +216,33 @@ export function InspectionDashboard({
     const [systemResult, storageResult, legendResult,filterResult] = await Promise.allSettled([
       api.system(), api.storageState(), api.statusSymbolLegend(),api.getFilters(),
     ]);
-    if (systemResult.status === "fulfilled") setInfo(systemResult.value);
+    if (systemResult.status === "fulfilled") {
+      setInfo(systemResult.value);
+      const mode=systemResult.value.mode==='AUTO'?'AUTO':'MANUAL';
+      setOperationMode(mode);
+      localStorage.setItem('lens-operation-mode',mode);
+    }
     if (storageResult.status === "fulfilled") setStorage(storageResult.value);
     if (legendResult.status === "fulfilled") setStatusLegend(legendResult.value);
-    if (filterResult.status === "fulfilled") setCustomDefectIcons(new Set((filterResult.value as {error_classes?:string[]}).error_classes||[]));
+    if (filterResult.status === "fulfilled") {const filters=displayFilterFrom(filterResult.value);setDisplayFilter(filters);setCustomDefectIcons(new Set(filters?.error_classes||[]));}
   }, []);
-  useEffect(()=>{const refresh=()=>{void refreshSystem()};window.addEventListener('lens-system-changed',refresh);return()=>window.removeEventListener('lens-system-changed',refresh)},[refreshSystem]);
+  useEffect(()=>{const refresh=()=>{void refreshSystem()};window.addEventListener('lens-system-changed',refresh);window.addEventListener('lens-system-settings-changed',refresh);return()=>{window.removeEventListener('lens-system-changed',refresh);window.removeEventListener('lens-system-settings-changed',refresh)}},[refreshSystem]);
   useEffect(()=>{const refresh=()=>{void api.statusSymbolLegend().then(setStatusLegend).catch(()=>{})};const storage=(event:StorageEvent)=>{if(event.key==='lens-status-legend-version')refresh()};window.addEventListener('lens-status-legend-changed',refresh);window.addEventListener('storage',storage);window.addEventListener('focus',refresh);return()=>{window.removeEventListener('lens-status-legend-changed',refresh);window.removeEventListener('storage',storage);window.removeEventListener('focus',refresh)}},[]);
-  useEffect(()=>{const refresh=()=>{void api.getFilters().then(value=>setCustomDefectIcons(new Set((value as {error_classes?:string[]}).error_classes||[]))).catch(()=>{})};const storage=(event:StorageEvent)=>{if(event.key==='lens-image-filter-version')refresh()};window.addEventListener('lens-image-filter-changed',refresh);window.addEventListener('storage',storage);return()=>{window.removeEventListener('lens-image-filter-changed',refresh);window.removeEventListener('storage',storage)}},[]);
+  useEffect(()=>{const refresh=()=>{void api.getFilters().then(value=>{const filters=displayFilterFrom(value);setDisplayFilter(filters);setCustomDefectIcons(new Set(filters?.error_classes||[]))}).catch(()=>{})};const storage=(event:StorageEvent)=>{if(event.key==='lens-image-filter-version')refresh()};window.addEventListener('lens-image-filter-changed',refresh);window.addEventListener('storage',storage);return()=>{window.removeEventListener('lens-image-filter-changed',refresh);window.removeEventListener('storage',storage)}},[]);
   const changeOperationMode = useCallback(async (next?: "AUTO" | "MANUAL") => {
+    if(modeBusy)return;
     const target = next || (operationMode === "AUTO" ? "MANUAL" : "AUTO");
-    setOperationMode(target);
-    localStorage.setItem("lens-operation-mode", target);
+    if(target==='MANUAL'&&(!info?.session.logged_in||info.session.role==='NoUser')){setToast('Sign in with Operator or higher permission to enter setup mode.');return}
+    setModeBusy(true);
     try {
       await api.setMode(target === "AUTO" ? "AUTO" : "SETUP");
+      setOperationMode(target);
+      localStorage.setItem("lens-operation-mode", target);
       await refreshSystem();
     } catch (error) {
       setToast(error instanceof Error ? error.message : "Unable to change operating mode");
-    }
-  }, [datasetId, operationMode, refreshSystem]);
+    }finally{setModeBusy(false)}
+  }, [info,modeBusy,operationMode,refreshSystem]);
   async function rebuildGlobalHistory(allDatasets: DatasetSummary[], selectNewest = true, reuseMetadata = false) {
     const historyVersion = ++historyVersionRef.current;
     const ordered = [...allDatasets].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
@@ -360,6 +381,7 @@ export function InspectionDashboard({
     if (!sharedInspection) return;
     const sharedJob = sharedInspection.job;
     setJob(sharedJob);
+    if (sharedJob?.status === "queued" || sharedJob?.status === "running") setFollowLiveTray(true);
     if (!sharedJob) {
       if (discoveredSharedKeyRef.current || appliedSharedRef.current.key) {
         discoveredSharedKeyRef.current = "";
@@ -370,6 +392,7 @@ export function InspectionDashboard({
         setLiveDatasetId(null);
         setDatasetId(""); setSamples([]); setResults([]); setCurrent(null);
         setGlobalHistory([]); setSelectedGlobalWt(null);
+        setHold(false);setHeldResult(null);
         appliedSharedRef.current = { key: "", latestFrame: "", terminal: "" };
         void refreshDatasets();
       }
@@ -434,17 +457,25 @@ export function InspectionDashboard({
     const firstAttach = appliedSharedRef.current.key !== sharedKey;
     const newFrame = latestFrame !== appliedSharedRef.current.latestFrame;
     const running = sharedJob.status === "queued" || sharedJob.status === "running";
+    const displayPolicy=JSON.stringify([operationMode,displayFilter,statusLegend?.defects]);
+    const policyChanged=appliedDisplayPolicyRef.current!==displayPolicy;
+    const resume=resumeLiveRef.current&&!hold;
+    const filterActive=operationMode==='AUTO'&&displayFilter?.apply_to_display;
+    const displayResult=filterActive?sharedInspection.results.slice().reverse().find(result=>{
+      const candidate=cached.samples.find(item=>item.id===result.sample_id);
+      return candidate&&matchesDisplayFilter(candidate,result,displayFilter,statusLegend);
+    }):newest;
     // Local MANUAL controls how uploads start, not whether another operator's
     // live inspection is visible. Idle historical browsing remains untouched.
-    if (firstAttach || newFrame) {
+    if ((firstAttach || newFrame || resume || policyChanged)&&!hold&&(!filterActive||displayResult)) {
       selectionVersionRef.current += 1;
       setDatasetId(sharedJob.dataset_id);
       setSamples(cached.samples);
       setResults(sharedInspection.results);
-      setCurrent(newest?.sample_id || cached.samples[0]?.id || null);
+      setCurrent(displayResult?.sample_id || cached.samples[0]?.id || null);
       setSelectedGlobalWt(null);
       setSelectedDefect(-1);
-      const latestSample = cached.samples.find(item => item.id === newest?.sample_id) || cached.samples[0];
+      const latestSample = cached.samples.find(item => item.id === displayResult?.sample_id) || cached.samples[0];
       if (latestSample) setChannel(previous => latestSample.images[previous] ? previous
         : latestSample.images.h ? "h" : Object.keys(latestSample.images)[0] || "h");
     } else if (datasetId === sharedJob.dataset_id) {
@@ -460,7 +491,9 @@ export function InspectionDashboard({
         : `Inspection ${sharedJob.status} · ${sharedJob.completed} of ${sharedJob.total} lenses`);
     }
     appliedSharedRef.current = { key: sharedKey, latestFrame, terminal };
-  }, [sharedInspection, hydratedSharedKey, sharedKey]);
+    appliedDisplayPolicyRef.current=displayPolicy;
+    resumeLiveRef.current=false;
+  }, [sharedInspection, hydratedSharedKey, sharedKey,hold,displayFilter,statusLegend,operationMode]);
 
   const resultMap = useMemo(
     () => new Map(results.map((r) => [r.sample_id, r])),
@@ -501,7 +534,8 @@ export function InspectionDashboard({
     () => samples.find((s) => s.id === current) || null,
     [samples, current],
   );
-  const currentResult = current ? resultMap.get(current) : undefined;
+  const currentResult = hold&&heldResult?.datasetId===datasetId&&heldResult.sampleId===current
+    ? heldResult.result : current ? resultMap.get(current) : undefined;
   const currentInferenceTime = formatInferenceMs(inferenceElapsedMs(currentResult));
   const imageSizeKey = `${datasetId}:${sample?.id || ""}:${channel}`;
   const onImageDimensions = useCallback((width:number,height:number) => {
@@ -510,6 +544,10 @@ export function InspectionDashboard({
   const currentMeasurements = (currentResult?.channels.find(
     (item) => item.channel === channel,
   ) || currentResult?.channels[0])?.measurements;
+  const bottomLensOffset=useMemo(()=>{
+    const x=currentMeasurements?.BottomLensOffsetX,y=currentMeasurements?.BottomLensOffsetY;
+    return typeof x==='number'&&typeof y==='number'&&Number.isFinite(x)&&Number.isFinite(y)?{x,y}:undefined;
+  },[currentMeasurements]);
   const currentDimension = (key: "width_px" | "height_px") => {
     const value = currentMeasurements?.[key]
       ?? currentResult?.channels.find(item => item.measurements?.[key] !== undefined)?.measurements[key]
@@ -548,7 +586,10 @@ export function InspectionDashboard({
       ),
     [results],
   );
-  const yieldPct = results.length ? (counts.OK / results.length) * 100 : 0;
+  const yieldResults=useMemo(()=>[...globalHistory.flatMap(entry=>entry.result?[entry.result]:[]),...results],[globalHistory,results]);
+  const trendTrayLabels=useMemo(()=>new Map(globalHistory.map(entry=>[JSON.stringify([entry.datasetId,entry.sample.wt_index]),entry.wt])),[globalHistory]);
+  const yieldPct = calculateInspectionYield(yieldResults);
+  const okRate = results.length ? (counts.OK / results.length) * 100 : 0;
   const nokRate = results.length ? (counts.NOK / results.length) * 100 : 0;
   const warnRate = results.length ? (counts.WARN / results.length) * 100 : 0;
   const totalDefects = useMemo(() => results.reduce((total, item) => total + (item.defects?.length || 0), 0), [results]);
@@ -566,7 +607,13 @@ export function InspectionDashboard({
       curingTray: trayMatch ? `CT.${trayMatch[1]}` : sample?.metadata.tail_code || "—",
     };
   }, [activeGlobalWt, channel, sample]);
-  const wtEntries = useMemo(() => globalHistory.filter(entry => entry.wt === activeGlobalWt), [globalHistory, activeGlobalWt]);
+  const sharedNewest=sharedInspection?.results.at(-1);
+  const liveTrayEntry=globalHistory.find(entry=>entry.datasetId===job?.dataset_id&&entry.sample.id===sharedNewest?.sample_id)
+    ||globalHistory.find(entry=>entry.datasetId===job?.dataset_id);
+  // Gallery progression is independent of the held/filtered canvas. Retain
+  // the last live tray on completion until an explicit historical selection.
+  const trayGlobalWt=followLiveTray?liveTrayEntry?.wt||activeGlobalWt:activeGlobalWt;
+  const wtEntries = useMemo(() => globalHistory.filter(entry => entry.wt === trayGlobalWt), [globalHistory, trayGlobalWt]);
   const trayThumbnailScope = JSON.stringify(wtEntries.flatMap(entry => Object.keys(entry.sample.images)
     .filter(candidate => !entry.sample.images[candidate].relative_path.startsWith("demo:"))
     .map(candidate => ({ channel: candidate, url: thumbnailUrl(entry.datasetId, entry.sample.id, candidate) }))));
@@ -682,6 +729,12 @@ export function InspectionDashboard({
     return () => { controller.abort(); window.clearTimeout(timer); };
   }, [datasetId, sample, channel, isRunning]);
   const halconOnline = Boolean(info?.bridge && !/offline|unavailable|none|disconnected/i.test(info.bridge));
+  useEffect(()=>{
+    if(!storage?.active&&!storage?.schedule_key&&!isRunning)return;
+    let active=true;
+    const timer=window.setInterval(()=>void api.storageState().then(value=>{if(active)setStorage(value)}).catch(()=>{}),2000);
+    return()=>{active=false;window.clearInterval(timer)};
+  },[storage?.active,storage?.schedule_key,isRunning]);
   const jobProgress = job?.total
     ? Math.min(100, (job.completed / job.total) * 100)
     : 0;
@@ -715,6 +768,7 @@ export function InspectionDashboard({
     }
   }
   async function handleLotLoaded(id: string) {
+    setHold(false);setHeldResult(null);setFollowLiveTray(false);
     setLiveDatasetId(id);
     setSelectedGlobalWt(null);
     const loadedSamples = await refreshDatasets(id);
@@ -733,11 +787,18 @@ export function InspectionDashboard({
   }
   async function inspectSelected() {
     if (!datasetId || !sample) return;
+    const selectionVersion = selectionVersionRef.current;
     setBusy(true);
     try {
       const r = await api.inspectOne(datasetId, sample.id);
-      setResults((p) => [...p.filter((x) => x.sample_id !== r.sample_id), r]);
-      setSelectedDefect(-1);
+      if (selectionVersion === selectionVersionRef.current) {
+        setResults((p) => [...p.filter((x) => x.sample_id !== r.sample_id), r]);
+        setSelectedDefect(-1);
+      }
+      setHeldResult(previous => previous?.datasetId === r.dataset_id && previous.sampleId === r.sample_id
+        ? { ...previous, result: r } : previous);
+      setGlobalHistory(previous => previous.map(entry => entry.datasetId === r.dataset_id && entry.sample.id === r.sample_id
+        ? { ...entry, result: r } : entry));
       await api.storageState().then(setStorage);
     } catch (e) {
       setToast((e as Error).message);
@@ -788,6 +849,7 @@ export function InspectionDashboard({
       historyVersionRef.current += 1;
       datasetSnapshotsRef.current.clear();
       setDatasetId(""); setDatasets([]); setSamples([]); setResults([]); setGlobalHistory([]); setCurrent(null); setSelectedGlobalWt(null); setLiveDatasetId(null); setJob(null);
+      setHold(false);setHeldResult(null);
       await refreshDatasets();
       resyncInspection();
       setToast(`History cleared · ${response.removed.catalogs || 0} datasets and ${response.removed.results || 0} result files removed`);
@@ -800,7 +862,7 @@ export function InspectionDashboard({
   async function toggleStorage() {
     try {
       setStorage(
-        storage?.active ? await api.storageStop() : await api.storageStart(),
+        storage?.active||storage?.schedule_key ? await api.storageStop() : await api.storageStart(),
       );
     } catch (e) {
       setToast((e as Error).message);
@@ -835,6 +897,8 @@ export function InspectionDashboard({
     finally {setBusy(false)}
   }
   function select(id: string) {
+    if (!['running','queued'].includes(sharedInspectionRef.current?.job?.status || '')) setFollowLiveTray(false);
+    setHold(true);setHeldResult({datasetId,sampleId:id,result:resultMap.get(id)});
     selectionVersionRef.current += 1;
     setCurrent(id);
     setSelectedDefect(-1);
@@ -847,6 +911,8 @@ export function InspectionDashboard({
       );
   }
   function selectHistoryEntry(entry: GlobalHistoryEntry) {
+    if (!['running','queued'].includes(sharedInspectionRef.current?.job?.status || '')) setFollowLiveTray(false);
+    setHold(true);setHeldResult({datasetId:entry.datasetId,sampleId:entry.sample.id,result:entry.datasetId===datasetId?resultMap.get(entry.sample.id)||entry.result:entry.result});
     selectionVersionRef.current += 1;
     setSelectedGlobalWt(entry.wt);
     if (entry.datasetId !== datasetId) {
@@ -861,6 +927,10 @@ export function InspectionDashboard({
     setSelectedDefect(-1);
     const available = entry.sample.images;
     if (!available[channel]) setChannel(available.h ? "h" : available.d ? "d" : Object.keys(available)[0] || "h");
+  }
+  function toggleLensHold(){
+    if(hold){resumeLiveRef.current=true;setFollowLiveTray(true);setHeldResult(null);setHold(false)}
+    else if(sample){setHeldResult({datasetId,sampleId:sample.id,result:currentResult});setHold(true)}
   }
   function relative(step: number) {
     if (!sample || !samples.length) return;
@@ -1083,6 +1153,7 @@ export function InspectionDashboard({
             onBvTest={()=>window.dispatchEvent(new Event("lens-open-bv-test"))}
             onDataset={()=>setLoader(true)}
             onInfo={()=>window.dispatchEvent(new Event("lens-open-info"))}
+            onTrendLine={()=>setTrendPopupOpen(true)}
             onExit={()=>setToast("Exit is disabled in the browser interface")}
             onUi={()=>window.dispatchEvent(new Event("lens-open-customizer"))}
           />
@@ -1091,6 +1162,7 @@ export function InspectionDashboard({
             workstation
             info={info}
             operationMode={operationMode}
+            modeBusy={modeBusy}
             onOperationMode={() => changeOperationMode()}
             onRefresh={refreshSystem}
             onUpload={() => setLoader(true)}
@@ -1225,7 +1297,7 @@ export function InspectionDashboard({
             <section className="inspectionMachinePanel">
               <div className="inspectionStationName">
                 <span>
-                  {/* <b>Installation GDL6BV2</b> · Station 2 */} <b className="" >Station 1</b>
+                  <b>{info?.settings.station_name||'Station —'}</b>
                 </span>
               </div>
               <div className="inspectionControlBlock">
@@ -1233,11 +1305,12 @@ export function InspectionDashboard({
                 <button
                   className={`inspectionModeToggle ${operationMode.toLowerCase()}`}
                   onClick={() => changeOperationMode()}
+                  disabled={modeBusy||(operationMode==='AUTO'&&(!info?.session.logged_in||info.session.role==='NoUser'))}
                   aria-label={`Switch to ${operationMode === "AUTO" ? "Manual" : "Automatic"} operation`}
                 >
                   {operationMode === "AUTO" ? <Play /> : <Pause />}
                   <span>
-                    <b>{operationMode === "AUTO" ? "Setup Mode ( Automatic )" : " Setup Mode ( Manual )"}</b>
+                    <b>{operationMode === "AUTO" ? "Automatic operation" : "Setup operation"}</b>
                     <small>
                       {operationMode === "AUTO"
                         ? isRunning ? "Inspection cycle active" : "Ready for production"
@@ -1260,7 +1333,7 @@ export function InspectionDashboard({
                   <small>
                     {storage?.active
                       ? "Recording inspection images"
-                      : "Storage ready"}
+                      : storage?.schedule_key?"Schedule armed":"Storage ready"}
                   </small>
                 </span>
               </button>
@@ -1307,8 +1380,10 @@ export function InspectionDashboard({
               onChannel={setChannel}
               labels={channelLabels}
               hold={hold}
-              onHold={() => setHold((v) => !v)}
+              onHold={toggleLensHold}
               selectedDefect={selectedDefect}
+              onSelectDefect={setSelectedDefect}
+              bottomLensOffset={bottomLensOffset}
               onProbe={setProbe}
               onDimensions={onImageDimensions}
               processing={isRunning}
@@ -1387,7 +1462,7 @@ export function InspectionDashboard({
                 {visibleDefects.length ? (
                   visibleDefects.map((d, i) => { const configured = defectSymbol(d.name); return (
                     <button
-                      className={i === (selectedDefect >= 0 ? selectedDefect : 0) ? "selected" : ""}
+                      className={i === selectedDefect ? "selected" : ""}
                       key={`${d.name}-${i}`}
                       onClick={() => toggleDefectFocus(i)}
                     >
@@ -1408,6 +1483,7 @@ export function InspectionDashboard({
                   </div>
                 )}
               </div>
+              <SelectedDefectDetails defect={visibleDefects[selectedDefect]} elapsed={currentInferenceTime}/>
               {/* <div className="inspectionDetailBox">
                 <small>Defect details</small>
                 <p>
@@ -1455,12 +1531,13 @@ export function InspectionDashboard({
                 >
                   Trend statistics
                 </button>
+                <button className={inspectionBottomTab === "trend-line" ? "active" : ""} onClick={() => setInspectionBottomTab("trend-line")}>Trend Line</button>
                 <span />
                 {inspectionBottomTab === "wt" && (
                   <div className="inspectionWtTabMeta">
                     <b>
                       {sample?.metadata.io_code ||
-                        `WT-${String(activeGlobalWt).padStart(4, "0")}`}
+                        `WT-${String(trayGlobalWt).padStart(4, "0")}`}
                     </b>
                     <small>
                       {channelLabels[channel] || channel.toUpperCase()} · {wtCapacity}
@@ -1514,6 +1591,7 @@ export function InspectionDashboard({
                   {filteredLogs.map((l, i) => (
                     <div className={l.level} key={`${l.time}-${i}`}>
                       <time>{l.time.includes("T") ? new Date(l.time).toLocaleTimeString() : l.time}</time>
+                      <b className={`inspectionLogLevel ${l.level.toLowerCase()}`}>{l.level}</b>
                       <span>{l.message}</span>
                     </div>
                   ))}
@@ -1593,7 +1671,7 @@ export function InspectionDashboard({
               {inspectionBottomTab === "trend" && (
                 <div className="inspectionTrendView">
                   <div className="inspectionTrendChart">
-                    <TrendChart results={results} />
+                    <TrendChart results={yieldResults} capacity={wtCapacity} />
                   </div>
                   <div className="inspectionTrendStats yieldOnly">
                     <div className="inspectionYieldRing" style={{"--yield":`${displayYield*3.6}deg`} as React.CSSProperties}>
@@ -1602,6 +1680,7 @@ export function InspectionDashboard({
                   </div>
                 </div>
               )}
+              {inspectionBottomTab === "trend-line" && <TrendLineWorkspace liveDefects results={yieldResults} capacity={wtCapacity} legend={statusLegend} trayLabels={trendTrayLabels} liveResultAt={sharedInspection?.results.at(-1)?.created_at} running={job?.status==='running'||job?.status==='queued'}/>}
             </section>
           </div>
         </div>
@@ -1694,6 +1773,7 @@ export function InspectionDashboard({
           onClose={() => setLoader(false)}
           onLoaded={(id) => { void handleLotLoaded(id) }}
         />
+        {trendPopupOpen&&<TrendLineWorkspace modal liveDefects initialView="live" onClose={()=>setTrendPopupOpen(false)} results={yieldResults} capacity={wtCapacity} legend={statusLegend} trayLabels={trendTrayLabels} liveResultAt={sharedInspection?.results.at(-1)?.created_at} running={job?.status==='running'||job?.status==='queued'}/>}
       </div>
     );
 
@@ -1705,6 +1785,7 @@ export function InspectionDashboard({
         workstation
         info={info}
         operationMode={operationMode}
+        modeBusy={modeBusy}
         onOperationMode={() => changeOperationMode()}
         onRefresh={refreshSystem}
         onUpload={() => setLoader(true)}
@@ -1738,10 +1819,10 @@ export function InspectionDashboard({
           <button
             className={`oakStorageState ${storage?.active ? "active" : ""}`}
             onClick={toggleStorage}
-            title={storage?.active ? "Stop image storage" : "Start image storage"}
+            title={storage?.active||storage?.schedule_key ? "Stop image storage" : "Start image storage"}
           >
             <Camera />
-            <span>{storage?.active ? "Recording" : "Storage"}</span>
+            <span>{storage?.active ? "Recording" : storage?.schedule_key?"Scheduled":"Storage"}</span>
           </button>
         </div>
         <div className="oakDeckGroup oakModuleToggles" aria-label="Dashboard modules">
@@ -1855,8 +1936,10 @@ export function InspectionDashboard({
             onChannel={setChannel}
             labels={channelLabels}
             hold={hold}
-            onHold={() => setHold((v) => !v)}
+            onHold={toggleLensHold}
             selectedDefect={selectedDefect}
+            onSelectDefect={setSelectedDefect}
+            bottomLensOffset={bottomLensOffset}
             onProbe={setProbe}
             onDimensions={onImageDimensions}
             processing={job?.status === "running"}
@@ -1961,7 +2044,7 @@ export function InspectionDashboard({
                   visibleDefects.map((d, i) => { const configured = defectSymbol(d.name); return (
                     <button
                       className={
-                        i === (selectedDefect >= 0 ? selectedDefect : 0)
+                        i === selectedDefect
                           ? "defectItem selected"
                           : "defectItem"
                       }
@@ -1986,6 +2069,7 @@ export function InspectionDashboard({
                   </div>
                 )}
               </div>
+              <SelectedDefectDetails defect={visibleDefects[selectedDefect]} elapsed={currentInferenceTime}/>
             </section>
           )}
         </div>
@@ -2051,16 +2135,17 @@ export function InspectionDashboard({
           </button>
         )}
         {showWorkspace && (
-          <section className={`oakBottomWorkspace referenceBottomWorkspace ${bottomLayoutEditing ? "bottomAdjustable" : ""}`}>
+          <section className={`oakBottomWorkspace referenceBottomWorkspace ${bottomLayoutEditing ? "bottomAdjustable" : ""} ${modernTrendTab==='line'?'hasTrendLine':''}`}>
             {prefs.showTrend && (
-              <div className="referenceBottomPanel referenceTrendPanel" aria-label="Yield and trend" style={{flexGrow:prefs.trendWidth}}>
-                <div className="referencePanelTabs" aria-label="Trend views">
-                  <button className="active">Yield Trend</button>
-                  <button>Defect Types</button>
-                  <button>Station Comparison</button>
+              <div className={`referenceBottomPanel referenceTrendPanel ${modernTrendTab==='line'?'hasTrendLine':''}`} aria-label="Yield and trend" style={{flexGrow:prefs.trendWidth}}>
+                <div className="referencePanelTabs trendOuterTabs" aria-label="Trend views">
+                  <button className={modernTrendTab==='statistics'?'active':''} onClick={()=>setModernTrendTab('statistics')}>Yield Trend</button>
+                  <button className={modernTrendTab==='line'?'active':''} onClick={()=>{setModernTrendTab('line');setTrendInitialView(undefined)}}>Trend Line</button>
+                  <button className="trendShortcut" onClick={()=>{setModernTrendTab('line');setTrendInitialView('defects')}}>Defect Types</button>
+                  <button className="trendShortcut" onClick={()=>{setModernTrendTab('line');setTrendInitialView('3d')}}>3D Trays</button>
                 </div>
-                <div className="referenceTrendBody">
-                  <TrendChart results={results} />
+                {modernTrendTab==='line'?<TrendLineWorkspace results={yieldResults} capacity={wtCapacity} legend={statusLegend} trayLabels={trendTrayLabels} initialView={trendInitialView} liveResultAt={sharedInspection?.results.at(-1)?.created_at} running={job?.status==='running'||job?.status==='queued'}/>:<div className="referenceTrendBody">
+                  <TrendChart results={yieldResults} capacity={wtCapacity} />
                   <div className="referenceTrendKpis">
                     <div className="miniYieldRing">
                       <i
@@ -2086,7 +2171,7 @@ export function InspectionDashboard({
                       <small>Total Lenses (Today)</small>
                     </div>
                   </div>
-                </div>
+                </div>}
               </div>
             )}
             {bottomLayoutEditing && prefs.showTrend && (prefs.showLogs || prefs.showActions) && (
@@ -2120,7 +2205,7 @@ export function InspectionDashboard({
                           ? new Date(l.time).toLocaleTimeString()
                           : l.time}
                       </time>
-                      <i className={l.level.toLowerCase()} />
+                      <b className={`inspectionLogLevel ${l.level.toLowerCase()}`}>{l.level}</b>
                       <span>{l.message}</span>
                     </div>
                   ))}
@@ -2147,13 +2232,13 @@ export function InspectionDashboard({
                         <span title={`${formatInferenceMs(averageCycleMs)} per lens. ${INFERENCE_TIMING_DESCRIPTION}`}><b>{formatInferenceMs(averageCycleMs)}</b><small>Avg inference</small></span>
                       </div>
                     </div>
-                    <div className="inspectionStackedBar" aria-label={`OK ${yieldPct.toFixed(1)}%, NOK ${nokRate.toFixed(1)}%, warning ${warnRate.toFixed(1)}%`}>
-                      <i className="ok" style={{width:`${yieldPct}%`}}/>
+                    <div className="inspectionStackedBar" aria-label={`OK ${okRate.toFixed(1)}%, NOK ${nokRate.toFixed(1)}%, warning ${warnRate.toFixed(1)}%`}>
+                      <i className="ok" style={{width:`${okRate}%`}}/>
                       <i className="nok" style={{width:`${nokRate}%`}}/>
                       <i className="warn" style={{width:`${warnRate}%`}}/>
                     </div>
                     <div className="inspectionBarRows">
-                      <div className="ok"><span><i/>OK <b>{counts.OK}</b></span><em><i style={{width:`${yieldPct}%`}}/></em><strong>{yieldPct.toFixed(1)}%</strong></div>
+                      <div className="ok"><span><i/>OK <b>{counts.OK}</b></span><em><i style={{width:`${okRate}%`}}/></em><strong>{okRate.toFixed(1)}%</strong></div>
                       <div className="nok"><span><i/>NOK <b>{counts.NOK}</b></span><em><i style={{width:`${nokRate}%`}}/></em><strong>{nokRate.toFixed(1)}%</strong></div>
                       <div className="warn"><span><i/>Warning <b>{counts.WARN}</b></span><em><i style={{width:`${warnRate}%`}}/></em><strong>{warnRate.toFixed(1)}%</strong></div>
                     </div>
@@ -2164,8 +2249,8 @@ export function InspectionDashboard({
                       <span><small>Mode</small><b>{operationMode}</b></span>
                     </div>
                     <div className="inspectionConnections" aria-label="Inspection system connections">
-                      <span className={info ? "online" : "offline"}><i/><b>Camera</b><small>{info ? "Ready" : "Offline"}</small></span>
-                      <span className={info ? "online" : "offline"}><i/><b>PLC</b><small>{info ? "Linked" : "Offline"}</small></span>
+                      <span className="offline" title="Camera connectivity is not reported by the current backend"><i/><b>Camera</b><small>Not reported</small></span>
+                      <span className="offline" title="PLC connectivity is not reported by the current backend"><i/><b>PLC</b><small>Not reported</small></span>
                       <span className={info ? "online" : "offline"}><i/><b>Database</b><small>{info ? "Active" : "Offline"}</small></span>
                       <span className={halconOnline ? "online" : "offline"}><i/><b>HALCON</b><small>{halconOnline ? "Ready" : "Offline"}</small></span>
                     </div>
@@ -2189,7 +2274,7 @@ export function InspectionDashboard({
                   >
                     <Square />
                   </button>
-                  <button className={`commandIcon ${hold ? "active" : ""}`} onClick={() => setHold((v) => !v)} title={hold ? "Resume live view" : "Pause live view"} aria-label={hold ? "Resume live view" : "Pause live view"}>
+                  <button className={`commandIcon ${hold ? "active" : ""}`} onClick={toggleLensHold} title={hold ? "Resume live view" : "Pause live view"} aria-label={hold ? "Resume live view" : "Pause live view"}>
                     <Pause />
                   </button>
                   <button className={`more commandIcon ${moreActionsOpen ? "active" : ""}`} onClick={() => setMoreActionsOpen(v=>!v)} aria-expanded={moreActionsOpen} title="More inspection actions" aria-label="More inspection actions">
@@ -2303,6 +2388,18 @@ function InfoRow({
       )}
     </div>
   );
+}
+
+function SelectedDefectDetails({defect,elapsed}:{defect?:Defect;elapsed:string}){
+  if(!defect)return null;
+  const size=typeof defect.size_px==='number'&&Number.isFinite(defect.size_px)?`${defect.size_px.toLocaleString(undefined,{maximumFractionDigits:2})} px`:null;
+  return <div className="inspectionSelectedDefect" aria-label="Selected defect details">
+    <strong>{defect.name}</strong>
+    {defect.tolerance&&<span>Tolerance <b>{defect.tolerance}</b></span>}
+    {size&&<span>Size <b>{size}</b></span>}
+    {defect.position_text&&<span>Position <b>{defect.position_text}</b></span>}
+    {elapsed!=='—'&&<span title={INFERENCE_TIMING_DESCRIPTION}>Lens inference <b>{elapsed}</b></span>}
+  </div>;
 }
 
 function defectLocationLabel(defect: {position_text?:string;bbox_xywh_norm?:number[]}) {

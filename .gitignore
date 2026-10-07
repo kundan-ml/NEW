@@ -4,6 +4,7 @@ node_modules/
 # Next.js build output
 .next/
 .next-build/
+.next-*-qa/
 out/
 
 # Production builds and coverage

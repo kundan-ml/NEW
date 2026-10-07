@@ -6,9 +6,10 @@ import {Crosshair,Focus,Maximize2,Minimize2,Minus,MousePointer2,Plus,RotateCcw,S
 import type {Defect} from '@/types';
 import {constrainImagePan} from '@/lib/image-pan';
 import {fetchPreviewBlob} from '@/lib/preview-cache';
+import {defectBounds,defectPolygon,hitTestDefects} from '@/lib/inspection-display';
 
 type Probe={x:number;y:number;gray:number|null};
-type Props={imageUrl:string;thumbnailUrl?:string;onDimensions?:(width:number,height:number)=>void;defects:Defect[];selectedDefect?:number;showDefects?:boolean;showCrosshair?:boolean;onProbe?:(p:Probe)=>void};
+type Props={imageUrl:string;thumbnailUrl?:string;onDimensions?:(width:number,height:number)=>void;defects:Defect[];selectedDefect?:number;showDefects?:boolean;showCrosshair?:boolean;showProbe?:boolean;onProbe?:(p:Probe)=>void;onSelectDefect?:(index:number)=>void;bottomLensOffset?:{x:number;y:number}};
 type View={scale:number;x:number;y:number};
 type SavedView={scale:number;centerX:number;centerY:number;imageWidth?:number};
 
@@ -18,12 +19,13 @@ function readSavedView(imageUrl:string):SavedView|null{
  try{const views=JSON.parse(localStorage.getItem(VIEW_STORAGE_KEY)||'{}');const saved=views[imageUrl];return saved&&Number.isFinite(saved.scale)&&Number.isFinite(saved.centerX)&&Number.isFinite(saved.centerY)?saved:null}catch{return null}
 }
 
-export function InspectionCanvas({imageUrl,thumbnailUrl,onDimensions,defects,selectedDefect=-1,showDefects=true,showCrosshair=true,onProbe}:Props){
+export function InspectionCanvas({imageUrl,thumbnailUrl,onDimensions,defects,selectedDefect=-1,showDefects=true,showCrosshair=true,showProbe=true,onProbe,onSelectDefect,bottomLensOffset}:Props){
  const dimensionsCallback=useRef(onDimensions);dimensionsCallback.current=onDimensions;
  const fullResolution=useRef(false);
  const host=useRef<HTMLDivElement>(null);const canvas=useRef<HTMLCanvasElement>(null);const source=useRef<HTMLImageElement|null>(null);const pixels=useRef<HTMLCanvasElement|null>(null);const frame=useRef<number|null>(null);const activeImage=useRef('');const loadSequence=useRef(0);const lastSize=useRef({width:0,height:0});
  const activePointers=useRef(new Map<number,{x:number;y:number;startX:number;startY:number}>());
  const pinch=useRef<{distance:number;scale:number;imageX:number;imageY:number}|null>(null);
+ const gestureHadPinch=useRef(false);
  const viewRef=useRef<View>({scale:1,x:0,y:0});
  const[view,setRawView]=useState<View>({scale:1,x:0,y:0});const[drag,setDrag]=useState<{sx:number;sy:number;vx:number;vy:number}|null>(null);const[state,setState]=useState<'idle'|'loading'|'ready'|'error'>('idle');const[error,setError]=useState('');const[probe,setProbe]=useState<Probe|null>(null);const[expanded,setExpanded]=useState(false);const[popupAspect,setPopupAspect]=useState(16/9);
  const constrainView=useCallback((next:View):View=>{
@@ -93,9 +95,21 @@ export function InspectionCanvas({imageUrl,thumbnailUrl,onDimensions,defects,sel
    }
    ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.drawImage(i,view.x,view.y,i.naturalWidth*view.scale,i.naturalHeight*view.scale);
    const showingRequestedFrame=state==='ready'&&activeImage.current===imageUrl;
-   if(showDefects&&showingRequestedFrame){const focused=selectedDefect>=0;defects.forEach((d,index)=>{if(!d.bbox_xywh_norm)return;const[x,y,bw,bh]=d.bbox_xywh_norm;const rx=view.x+x*i.naturalWidth*view.scale,ry=view.y+y*i.naturalHeight*view.scale,rw=bw*i.naturalWidth*view.scale,rh=bh*i.naturalHeight*view.scale;const selected=focused&&index===selectedDefect;const defectColor=d.overlay_color|| (d.severity==='critical'?'#ff4968':d.severity==='major'?'#ff6b57':'#ffbd4a');const color=focused&&!selected?'rgba(164,174,182,.72)':defectColor;ctx.save();ctx.strokeStyle=color;ctx.lineWidth=selected?3:(focused?1:1.8);ctx.setLineDash(focused&&!selected?[4,5]:[]);ctx.shadowColor=color;ctx.shadowBlur=selected?12:0;ctx.strokeRect(rx,ry,rw,rh);if(!focused||selected){ctx.shadowBlur=4;const label=`${d.name} · ${Math.round(d.confidence*100)}%`;ctx.font='600 11px Inter,system-ui';ctx.fillStyle=defectColor;ctx.fillText(label,rx+4,Math.max(15,ry-9))}ctx.restore()})}
+   if(showDefects&&showingRequestedFrame){const focused=selectedDefect>=0;defects.forEach((d,index)=>{
+     const bounds=defectBounds(d);if(!bounds)return;const[x,y,bw,bh]=bounds;
+     const rx=view.x+x*i.naturalWidth*view.scale,ry=view.y+y*i.naturalHeight*view.scale,rw=bw*i.naturalWidth*view.scale,rh=bh*i.naturalHeight*view.scale;
+     const selected=focused&&index===selectedDefect,defectColor=d.overlay_color||(d.severity==='critical'?'#ff4968':d.severity==='major'?'#ff6b57':'#ffbd4a'),color=focused&&!selected?'rgba(164,174,182,.72)':defectColor;
+     ctx.save();ctx.strokeStyle=color;ctx.lineWidth=selected?3:(focused?1:1.8);ctx.setLineDash(focused&&!selected?[4,5]:[]);ctx.shadowColor=color;ctx.shadowBlur=selected?12:0;
+     const polygon=defectPolygon(d);
+     if(polygon){ctx.beginPath();polygon.forEach(([px,py],point)=>{const xx=view.x+px*i.naturalWidth*view.scale,yy=view.y+py*i.naturalHeight*view.scale;if(point===0)ctx.moveTo(xx,yy);else ctx.lineTo(xx,yy)});ctx.closePath();ctx.stroke()}else ctx.strokeRect(rx,ry,rw,rh);
+     if(!focused||selected){ctx.shadowBlur=4;const label=`${d.name} · ${Math.round(d.confidence*100)}%`;ctx.font='600 11px Inter,system-ui';ctx.fillStyle=defectColor;ctx.fillText(label,rx+4,Math.max(15,ry-9))}ctx.restore();
+   })}
    if(showCrosshair){const cx=view.x+i.naturalWidth*view.scale/2,cy=view.y+i.naturalHeight*view.scale/2;ctx.save();ctx.strokeStyle='rgba(81,188,255,.78)';ctx.lineWidth=1;ctx.setLineDash([7,7]);ctx.beginPath();ctx.moveTo(cx-90,cy);ctx.lineTo(cx+90,cy);ctx.moveTo(cx,cy-90);ctx.lineTo(cx,cy+90);ctx.stroke();ctx.setLineDash([]);ctx.beginPath();ctx.arc(cx,cy,8,0,Math.PI*2);ctx.stroke();ctx.restore()}
- },[defects,error,imageUrl,selectedDefect,showCrosshair,showDefects,state,view]);
+   if(showCrosshair&&showingRequestedFrame&&fullResolution.current&&bottomLensOffset&&Number.isFinite(bottomLensOffset.x)&&Number.isFinite(bottomLensOffset.y)){
+     const cx=view.x+(i.naturalWidth/2+bottomLensOffset.x)*view.scale,cy=view.y+(i.naturalHeight/2+bottomLensOffset.y)*view.scale;
+     ctx.save();ctx.strokeStyle='#65a8ff';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(cx-18,cy-18);ctx.lineTo(cx+18,cy+18);ctx.moveTo(cx-18,cy+18);ctx.lineTo(cx+18,cy-18);ctx.stroke();ctx.restore();
+   }
+ },[bottomLensOffset,defects,error,imageUrl,selectedDefect,showCrosshair,showDefects,state,view]);
 
  useEffect(()=>{if(frame.current)cancelAnimationFrame(frame.current);frame.current=requestAnimationFrame(paint);return()=>{if(frame.current)cancelAnimationFrame(frame.current)}},[paint,expanded]);
  useEffect(()=>{if(state!=='ready'||activeImage.current!==imageUrl)return;const timer=window.setTimeout(()=>{const h=host.current;if(!h)return;const r=h.getBoundingClientRect();const saved={imageWidth:source.current?.naturalWidth,scale:view.scale,centerX:(r.width/2-view.x)/view.scale,centerY:(r.height/2-view.y)/view.scale};try{const views=JSON.parse(localStorage.getItem(VIEW_STORAGE_KEY)||'{}');views[imageUrl]=saved;localStorage.setItem(VIEW_STORAGE_KEY,JSON.stringify(views))}catch{}},120);return()=>window.clearTimeout(timer)},[imageUrl,state,view]);
@@ -108,13 +122,14 @@ export function InspectionCanvas({imageUrl,thumbnailUrl,onDimensions,defects,sel
    if(e.pointerType==='mouse'&&e.button!==0)return;
    e.currentTarget.setPointerCapture(e.pointerId);
    activePointers.current.set(e.pointerId,{x:e.clientX,y:e.clientY,startX:e.clientX,startY:e.clientY});
-   if(activePointers.current.size===1){pinch.current=null;setDrag({sx:e.clientX,sy:e.clientY,vx:viewRef.current.x,vy:viewRef.current.y});return}
+   if(activePointers.current.size===1){gestureHadPinch.current=false;pinch.current=null;setDrag({sx:e.clientX,sy:e.clientY,vx:viewRef.current.x,vy:viewRef.current.y});return}
+   gestureHadPinch.current=true;
    const [a,b]=Array.from(activePointers.current.values());
    const rect=e.currentTarget.getBoundingClientRect(),midX=(a.x+b.x)/2-rect.left,midY=(a.y+b.y)/2-rect.top,v=viewRef.current;
    pinch.current={distance:Math.max(1,Math.hypot(a.x-b.x,a.y-b.y)),scale:v.scale,imageX:(midX-v.x)/v.scale,imageY:(midY-v.y)/v.scale};
    setDrag(null);
  }
- function updateProbe(e:React.PointerEvent){const h=host.current,i=source.current;if(!h||!i||!fullResolution.current||state!=='ready'||activeImage.current!==imageUrl)return;let p=pixels.current;if(!p){p=document.createElement('canvas');p.width=i.naturalWidth;p.height=i.naturalHeight;p.getContext('2d',{willReadFrequently:true})?.drawImage(i,0,0);pixels.current=p;}const r=h.getBoundingClientRect(),px=e.clientX-r.left,py=e.clientY-r.top,ix=Math.floor((px-view.x)/view.scale),iy=Math.floor((py-view.y)/view.scale);if(ix<0||iy<0||ix>=i.naturalWidth||iy>=i.naturalHeight){setProbe(null);return}let gray:number|null=null;try{const d=p.getContext('2d',{willReadFrequently:true})?.getImageData(ix,iy,1,1).data;if(d)gray=Math.round(.299*d[0]+.587*d[1]+.114*d[2])}catch{}const next={x:ix,y:iy,gray};setProbe(next);onProbe?.(next)}
+ function updateProbe(e:React.PointerEvent){const h=host.current,i=source.current;if(!showProbe||!h||!i||!fullResolution.current||state!=='ready'||activeImage.current!==imageUrl)return;let p=pixels.current;if(!p){p=document.createElement('canvas');p.width=i.naturalWidth;p.height=i.naturalHeight;p.getContext('2d',{willReadFrequently:true})?.drawImage(i,0,0);pixels.current=p;}const r=h.getBoundingClientRect(),px=e.clientX-r.left,py=e.clientY-r.top,ix=Math.floor((px-view.x)/view.scale),iy=Math.floor((py-view.y)/view.scale);if(ix<0||iy<0||ix>=i.naturalWidth||iy>=i.naturalHeight){setProbe(null);return}let gray:number|null=null;try{const d=p.getContext('2d',{willReadFrequently:true})?.getImageData(ix,iy,1,1).data;if(d)gray=Math.round(.299*d[0]+.587*d[1]+.114*d[2])}catch{}const next={x:ix,y:iy,gray};setProbe(next);onProbe?.(next)}
  function pointerMove(e:React.PointerEvent){
    const pointer=activePointers.current.get(e.pointerId);
    if(pointer){pointer.x=e.clientX;pointer.y=e.clientY}
@@ -135,8 +150,17 @@ export function InspectionCanvas({imageUrl,thumbnailUrl,onDimensions,defects,sel
  }
  function pointerEnd(e:React.PointerEvent){
    const pointer=activePointers.current.get(e.pointerId);
-   if(pointer&&e.pointerType==='touch'&&activePointers.current.size===1&&Math.hypot(e.clientX-pointer.startX,e.clientY-pointer.startY)<8)updateProbe(e);
+   if(e.type==='pointercancel')gestureHadPinch.current=true;
+   if(pointer&&e.type!=='pointercancel'&&activePointers.current.size===1&&!gestureHadPinch.current&&Math.hypot(e.clientX-pointer.startX,e.clientY-pointer.startY)<8){
+     if(e.pointerType==='touch')updateProbe(e);
+     const image=source.current,rect=host.current?.getBoundingClientRect();
+     if(image&&rect&&showDefects&&state==='ready'&&activeImage.current===imageUrl){
+       const index=hitTestDefects(defects,(e.clientX-rect.left-viewRef.current.x)/(image.naturalWidth*viewRef.current.scale),(e.clientY-rect.top-viewRef.current.y)/(image.naturalHeight*viewRef.current.scale));
+       onSelectDefect?.(index===selectedDefect?-1:index);
+     }
+   }
    activePointers.current.delete(e.pointerId);
+   if(activePointers.current.size===0)gestureHadPinch.current=false;
    if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);
    pinch.current=null;
    const remaining=activePointers.current.values().next().value;
@@ -144,12 +168,13 @@ export function InspectionCanvas({imageUrl,thumbnailUrl,onDimensions,defects,sel
    setDrag(remaining?{sx:remaining.x,sy:remaining.y,vx:v.x,vy:v.y}:null);
  }
  function oneToOne(){const h=host.current,i=source.current;if(!h||!i)return;const r=h.getBoundingClientRect();setView({scale:1,x:(r.width-i.naturalWidth)/2,y:(r.height-i.naturalHeight)/2})}
- function focusDefect(){const i=source.current,h=host.current,d=defects[selectedDefect];if(!i||!h||!d?.bbox_xywh_norm||activeImage.current!==imageUrl)return;const[x,y,w,hh]=d.bbox_xywh_norm,r=h.getBoundingClientRect();const targetW=Math.max(w*i.naturalWidth,60),targetH=Math.max(hh*i.naturalHeight,60),s=Math.min(r.width*.58/targetW,r.height*.58/targetH,8);const cx=(x+w/2)*i.naturalWidth,cy=(y+hh/2)*i.naturalHeight;setView({scale:s,x:r.width/2-cx*s,y:r.height/2-cy*s})}
+ function focusDefect(){const i=source.current,h=host.current,d=defects[selectedDefect],bounds=d?defectBounds(d):null;if(!i||!h||!bounds||activeImage.current!==imageUrl)return;const[x,y,w,hh]=bounds,r=h.getBoundingClientRect();const targetW=Math.max(w*i.naturalWidth,60),targetH=Math.max(hh*i.naturalHeight,60),s=Math.min(r.width*.58/targetW,r.height*.58/targetH,8);const cx=(x+w/2)*i.naturalWidth,cy=(y+hh/2)*i.naturalHeight;setView({scale:s,x:r.width/2-cx*s,y:r.height/2-cy*s})}
  function toggleExpanded(){if(!expanded){const r=host.current?.getBoundingClientRect();if(r&&r.width>0&&r.height>0)setPopupAspect(Math.max(.55,Math.min(2.4,r.width/r.height)))}setExpanded(value=>!value)}
  const canvasView=<div className={`canvasHost canvas-${state} ${expanded?'canvasPopupHost':''}`} ref={host} onWheel={wheel} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerEnd} onPointerCancel={pointerEnd} onPointerLeave={e=>{if(e.pointerType==='mouse'&&!activePointers.current.has(e.pointerId))setProbe(null)}} onDoubleClick={fit}>
    <canvas ref={canvas}/><div className="scanBeam" aria-hidden/>
-   <div className="canvasTools" onPointerDown={e=>e.stopPropagation()}><button onClick={()=>zoomAt(1.22)} title="Zoom in" aria-label="Zoom in"><Plus/></button><button onClick={()=>zoomAt(.82)} title="Zoom out" aria-label="Zoom out"><Minus/></button><button onClick={fit} title="Fit image" aria-label="Fit image"><RotateCcw/></button><button onClick={oneToOne} title="1:1 pixels" aria-label="Show image at 1:1 pixels"><ScanSearch/></button><button onClick={focusDefect} disabled={!defects[selectedDefect]?.bbox_xywh_norm} title="Focus selected defect" aria-label="Focus selected defect"><Focus/></button><button onClick={toggleExpanded} title={expanded?'Close expanded viewer':'Open expanded viewer'} aria-label={expanded?'Close expanded viewer':'Open expanded viewer'}>{expanded?<Minimize2/>:<Maximize2/>}</button></div>
-   {probe&&<div className="pixelProbe"><MousePointer2/><b>X {probe.x}</b><b>Y {probe.y}</b><b>Gray {probe.gray??'—'}</b></div>}
+   <div className="canvasTools" onPointerDown={e=>e.stopPropagation()}><button onClick={()=>zoomAt(1.22)} title="Zoom in" aria-label="Zoom in"><Plus/></button><button onClick={()=>zoomAt(.82)} title="Zoom out" aria-label="Zoom out"><Minus/></button><button onClick={fit} title="Fit image" aria-label="Fit image"><RotateCcw/></button><button onClick={oneToOne} title="1:1 pixels" aria-label="Show image at 1:1 pixels"><ScanSearch/></button><button onClick={focusDefect} disabled={!defects[selectedDefect]||!defectBounds(defects[selectedDefect])} title="Focus selected defect" aria-label="Focus selected defect"><Focus/></button><button onClick={toggleExpanded} title={expanded?'Close expanded viewer':'Open expanded viewer'} aria-label={expanded?'Close expanded viewer':'Open expanded viewer'}>{expanded?<Minimize2/>:<Maximize2/>}</button></div>
+   {showProbe&&probe&&<div className="pixelProbe"><MousePointer2/><b>X {probe.x}</b><b>Y {probe.y}</b><b>Gray {probe.gray??'—'}</b></div>}
+   {state==='ready'&&<label className="canvasZoomControl" onPointerDown={e=>e.stopPropagation()}><span>Zoom</span><input type="range" min="2.5" max="1200" step="2.5" value={Math.max(2.5,Math.min(1200,view.scale*100))} onChange={e=>zoomAt(Number(e.target.value)/(viewRef.current.scale*100))} aria-label="Image zoom percentage"/><output>{Math.round(view.scale*100)}%</output></label>}
    <div className="canvasHint"><Crosshair/><span className="canvasMouseHint">drag to pan · wheel to zoom · double click fit</span><span className="canvasTouchHint">drag to pan · pinch to zoom · use Fit to reset</span></div>
    {state==='ready'&&<div className="canvasScale"><span style={{'--scale-bar-width':`${Math.max(20,Math.min(280,Math.round(220*view.scale)))}px`} as React.CSSProperties}/><b>1 cm · {Math.round(view.scale*100)}%</b></div>}
  </div>;

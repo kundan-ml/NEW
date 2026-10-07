@@ -18,15 +18,21 @@ export async function lensSnapshotArchive(
   sample:Sample,
   load:(channel:string)=>Promise<Blob>,
 ):Promise<Blob> {
+  return imageSetArchive(Object.entries(sample.images).filter(([channel])=>['h','d','n','p'].includes(channel)).map(([channel,image])=>({channel,filename:image.filename,load:()=>load(channel)})));
+}
+
+export function localImageArchive(files:Partial<Record<string,File>>):Promise<Blob>{
+  return imageSetArchive(Object.entries(files).filter((entry):entry is [string,File]=>!!entry[1]).map(([channel,file])=>({channel,filename:file.name,load:async()=>file})));
+}
+
+async function imageSetArchive(entries:{channel:string;filename:string;load:()=>Promise<Blob>}[]):Promise<Blob>{
   const parts:BlobPart[]=[];
   const directory:BlobPart[]=[];
   let offset=0, directoryBytes=0;
-  const channels=['h','d','n','p'].filter(channel=>sample.images[channel]);
-  if(!channels.length)throw new Error('This lens has no source images to download.');
-  for(const channel of channels){
-    const image=sample.images[channel];
-    const name=encoder.encode(`${channel}/${image.filename.split(/[\\/]/).pop() || `image.${channel}`}`);
-    const file=await load(channel);
+  if(!entries.length)throw new Error('This lens has no source images to download.');
+  for(const {channel,filename,load} of entries){
+    const name=encoder.encode(`${channel}/${filename.split(/[\\/]/).pop() || `image.${channel}`}`);
+    const file=await load();
     if(file.size>0xffffffff||offset+file.size+name.length+30>0xffffffff)throw new Error('Snapshot exceeds the ZIP size limit.');
     const crc=crc32(new Uint8Array(await file.arrayBuffer()));
     const header=new Uint8Array(30),h=new DataView(header.buffer);
@@ -39,6 +45,6 @@ export async function lensSnapshotArchive(
     offset+=header.length+name.length+file.size;directoryBytes+=central.length+name.length;
   }
   const end=new Uint8Array(22),e=new DataView(end.buffer);
-  e.setUint32(0,0x06054b50,true);e.setUint16(8,channels.length,true);e.setUint16(10,channels.length,true);e.setUint32(12,directoryBytes,true);e.setUint32(16,offset,true);
+  e.setUint32(0,0x06054b50,true);e.setUint16(8,entries.length,true);e.setUint16(10,entries.length,true);e.setUint32(12,directoryBytes,true);e.setUint32(16,offset,true);
   return new Blob([...parts,...directory,end],{type:'application/zip'});
 }

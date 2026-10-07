@@ -1,23 +1,27 @@
 'use client';
+import {useMemo,useState} from 'react';
 import type {InspectionResult} from '@/types';
+import {yieldSeries} from '@/lib/inspection-yield';
 
-export function TrendChart({results}:{results:InspectionResult[]}){
-  const bucket=Math.max(1,Math.ceil(Math.max(results.length,1)/14));
-  const groups:number[]=[];
-  for(let i=0;i<results.length;i+=bucket){const c=results.slice(i,i+bucket);groups.push(c.filter(x=>x.status==='OK').length/Math.max(c.length,1)*100)}
-  const values=groups.length?groups:[72,78,82,80,86,84,90,88,91,89,92,90,93,92];
-  const plotW=560,baseY=132,topY=18,barW=Math.max(10,Math.min(24,plotW/values.length*.58));
-  const x=(i:number)=>22+i*(plotW/Math.max(values.length-1,1));
-  const y=(v:number)=>baseY-(Math.max(0,Math.min(100,v))/100)*(baseY-topY);
-  const pts=values.map((v,i)=>`${x(i)},${y(v)}`).join(' ');
+export function TrendChart({results,capacity=16}:{results:InspectionResult[];capacity?:number}){
+  const [hours,setHours]=useState(8);
+  const all=useMemo(()=>yieldSeries(results,capacity),[results,capacity]);
+  const last=all.at(-1)?.time||0;
+  const values=all.filter(point=>point.time>=last-hours*3600000);
+  const left=42,right=580,top=16,bottom=126;
+  const start=values[0]?.time||0;
+  const x=(index:number)=>values.length===1?(left+right)/2:left+((values[index].time-start)/Math.max(1,last-start))*(right-left);
+  const y=(value:number)=>bottom-Math.max(0,Math.min(100,value))*(bottom-top)/100;
+  const path=(key:'yield'|'nok')=>values.map((point,index)=>`${x(index)},${y(point[key])}`).join(' ');
+  const timeLabel=(time:number)=>new Date(time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
   return <div className="trendChart productionTrend">
-    <div className="chartLegend"><span><i className="yieldLegend"/>Yield</span><span><i className="nokLegend"/>NOK Rate</span></div>
-    <svg viewBox="0 0 600 150" preserveAspectRatio="none" aria-label="Inspection yield trend">
-      <g>{[20,40,60,80,100].map(v=>{const yy=y(v);return <g key={v}><line x1="20" y1={yy} x2="585" y2={yy} className="chartGrid"/><text x="1" y={yy+3} className="chartLabel">{v}%</text></g>})}</g>
-      <g>{values.map((v,i)=>{const xx=x(i)-barW/2;const bh=baseY-y(Math.max(8,Math.min(100,v*.72)));return <rect key={i} x={xx} y={baseY-bh} width={barW} height={bh} rx="2" className="yieldBar"/>})}</g>
-      <polyline points={pts} fill="none" className="yieldLine" vectorEffect="non-scaling-stroke"/>
-      <g>{values.map((v,i)=><circle key={i} cx={x(i)} cy={y(v)} r="3" className="yieldPoint"/>)}</g>
+    <div className="chartLegend"><span><i className="yieldLegend"/>Yield · last 10 WT</span><span><i className="nokLegend"/>NOK</span>
+      <label style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:6}}>Range <select aria-label="Yield time range" value={hours} onChange={event=>setHours(Number(event.target.value))}>{[1,4,8,24,72].map(value=><option key={value} value={value}>{value}h</option>)}</select></label>
+    </div>
+    <svg viewBox="0 0 600 150" preserveAspectRatio="none" role="img" aria-label="Measured inspection yield trend">
+      {[0,25,50,75,100].map(value=><g key={value}><line x1={left} y1={y(value)} x2={right} y2={y(value)} className="chartGrid"/><text x="4" y={y(value)+3} className="chartLabel">{value}%</text></g>)}
+      {values.length?<><polyline points={path('yield')} fill="none" className="yieldLine" vectorEffect="non-scaling-stroke"/><polyline points={path('nok')} fill="none" stroke="var(--error, #ef6464)" strokeWidth="1.5" vectorEffect="non-scaling-stroke"/>{values.map((point,index)=><circle key={`${point.time}:${index}`} cx={x(index)} cy={y(point.yield)} r="3" className="yieldPoint"><title>{timeLabel(point.time)} · {point.yield.toFixed(1)}% yield</title></circle>)}</>:<text x="310" y="75" textAnchor="middle" className="chartLabel">Waiting for a completed WT</text>}
     </svg>
-    <div className="chartAxis"><span>06:00</span><span>09:00</span><span>12:00</span><span>15:00</span><span>18:00</span><span>Now</span></div>
-  </div>
+    <div className="chartAxis"><span>{values[0]?timeLabel(values[0].time):'—'}</span><span>{values.at(-1)?timeLabel(values.at(-1)!.time):'—'}</span></div>
+  </div>;
 }
