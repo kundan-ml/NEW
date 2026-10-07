@@ -1,15 +1,15 @@
 'use client';
 
-import {useCallback,useEffect,useRef,useState} from 'react';
+import {useCallback,useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
 import {Crosshair,Focus,Maximize2,Minimize2,Minus,MousePointer2,Plus,RotateCcw,ScanSearch} from 'lucide-react';
 import type {Defect} from '@/types';
 import {constrainImagePan} from '@/lib/image-pan';
-import {fetchPreviewBlob} from '@/lib/preview-cache';
+import {fetchPreviewBlob,decodedPreview} from '@/lib/preview-cache';
 import {defectBounds,defectPolygon,hitTestDefects} from '@/lib/inspection-display';
 
 type Probe={x:number;y:number;gray:number|null};
-type Props={imageUrl:string;thumbnailUrl?:string;onDimensions?:(width:number,height:number)=>void;defects:Defect[];selectedDefect?:number;showDefects?:boolean;showCrosshair?:boolean;showProbe?:boolean;onProbe?:(p:Probe)=>void;onSelectDefect?:(index:number)=>void;bottomLensOffset?:{x:number;y:number}};
+type Props={imageUrl:string;thumbnailUrl?:string;live?:boolean;onDimensions?:(width:number,height:number)=>void;defects:Defect[];selectedDefect?:number;showDefects?:boolean;showCrosshair?:boolean;showProbe?:boolean;onProbe?:(p:Probe)=>void;onSelectDefect?:(index:number)=>void;bottomLensOffset?:{x:number;y:number}};
 type View={scale:number;x:number;y:number};
 type SavedView={scale:number;centerX:number;centerY:number;imageWidth?:number};
 
@@ -19,7 +19,7 @@ function readSavedView(imageUrl:string):SavedView|null{
  try{const views=JSON.parse(localStorage.getItem(VIEW_STORAGE_KEY)||'{}');const saved=views[imageUrl];return saved&&Number.isFinite(saved.scale)&&Number.isFinite(saved.centerX)&&Number.isFinite(saved.centerY)?saved:null}catch{return null}
 }
 
-export function InspectionCanvas({imageUrl,thumbnailUrl,onDimensions,defects,selectedDefect=-1,showDefects=true,showCrosshair=true,showProbe=true,onProbe,onSelectDefect,bottomLensOffset}:Props){
+export function InspectionCanvas({imageUrl,thumbnailUrl,live=false,onDimensions,defects,selectedDefect=-1,showDefects=true,showCrosshair=true,showProbe=true,onProbe,onSelectDefect,bottomLensOffset}:Props){
  const dimensionsCallback=useRef(onDimensions);dimensionsCallback.current=onDimensions;
  const fullResolution=useRef(false);
  const host=useRef<HTMLDivElement>(null);const canvas=useRef<HTMLCanvasElement>(null);const source=useRef<HTMLImageElement|null>(null);const pixels=useRef<HTMLCanvasElement|null>(null);const frame=useRef<number|null>(null);const activeImage=useRef('');const loadSequence=useRef(0);const lastSize=useRef({width:0,height:0});
@@ -42,7 +42,7 @@ export function InspectionCanvas({imageUrl,thumbnailUrl,onDimensions,defects,sel
  const fit=useCallback(()=>{const h=host.current,i=source.current;if(!h||!i||!i.naturalWidth)return;const r=h.getBoundingClientRect();const padding=Math.max(28,Math.min(r.width,r.height)*.055);const s=Math.max(.01,Math.min((r.width-padding*2)/i.naturalWidth,(r.height-padding*2)/i.naturalHeight));setView({scale:s,x:(r.width-i.naturalWidth*s)/2,y:(r.height-i.naturalHeight*s)/2})},[setView]);
  const restoreOrFit=useCallback((url:string)=>{const h=host.current,i=source.current;if(!h||!i)return;const r=h.getBoundingClientRect(),saved=readSavedView(url);lastSize.current={width:r.width,height:r.height};activeImage.current=url;if(saved?.imageWidth){const ratio=saved.imageWidth/i.naturalWidth;const scale=saved.scale*ratio;setView({scale,x:r.width/2-saved.centerX/ratio*scale,y:r.height/2-saved.centerY/ratio*scale})}else if(saved&&!thumbnailUrl){const scale=Math.max(.025,Math.min(12,saved.scale));setView({scale,x:r.width/2-saved.centerX*scale,y:r.height/2-saved.centerY*scale})}else fit()},[fit,setView,thumbnailUrl]);
 
- useEffect(()=>{
+ useLayoutEffect(()=>{
    const requestId=++loadSequence.current;const objectUrls:string[]=[];setProbe(null);setError('');
    if(!imageUrl){activeImage.current='';source.current=null;pixels.current=null;setState('idle');return}
    setState('loading');
@@ -67,7 +67,7 @@ export function InspectionCanvas({imageUrl,thumbnailUrl,onDimensions,defects,sel
    const notifyDimensions=dimensionsCallback.current;
    let fullReady=false;
    const load=async(url:string,full:boolean)=>{
-     const blob=await fetchPreviewBlob(url,controller.signal);
+     const blob=await fetchPreviewBlob(url,controller.signal,'high');
      if(controller.signal.aborted||requestId!==loadSequence.current)return;
      const objectUrl=URL.createObjectURL(blob);objectUrls.push(objectUrl);
      const i=new Image();i.decoding='async';i.src=objectUrl;await i.decode();
@@ -82,10 +82,16 @@ export function InspectionCanvas({imageUrl,thumbnailUrl,onDimensions,defects,sel
      }else restoreOrFit(imageUrl);
      if(full)notifyDimensions?.(i.naturalWidth,i.naturalHeight);
    };
-   if(thumbnailUrl&&thumbnailUrl!==imageUrl)void load(thumbnailUrl,false).catch(()=>{/* Full preview remains the fallback. */});
-   void load(imageUrl,true).catch(e=>{if(!controller.signal.aborted&&requestId===loadSequence.current){setError(e instanceof Error?e.message:'Unable to load image');setState(source.current?'ready':'error')}});
-   return()=>{controller.abort();objectUrls.forEach(url=>URL.revokeObjectURL(url))};
- },[imageUrl,thumbnailUrl,restoreOrFit,setView]);
+   const full=()=>void load(imageUrl,true).catch(e=>{if(!controller.signal.aborted&&requestId===loadSequence.current){setError(e instanceof Error?e.message:'Unable to load image');setState(source.current?'ready':'error')}});
+   const hasThumbnail=thumbnailUrl&&thumbnailUrl!==imageUrl;
+   const prepared=hasThumbnail?decodedPreview(thumbnailUrl):undefined;
+   if(prepared){source.current=prepared;fullResolution.current=false;pixels.current=null;setState('ready');restoreOrFit(imageUrl);}
+   else if(hasThumbnail)void load(thumbnailUrl,false).catch(()=>{/* Full preview remains the fallback. */});
+   // Give the latest lightweight frame the connection/decoder first. Obsolete
+   // live frames never start a full-resolution request during this grace period.
+   const fullTimer=window.setTimeout(full,hasThumbnail?(live?600:80):0);
+   return()=>{window.clearTimeout(fullTimer);controller.abort();objectUrls.forEach(url=>URL.revokeObjectURL(url))};
+ },[imageUrl,thumbnailUrl,live,restoreOrFit,setView]);
 
  const paint=useCallback(()=>{
    const c=canvas.current,h=host.current;if(!c||!h)return;const r=h.getBoundingClientRect();if(r.width<2||r.height<2)return;const dpr=Math.min(window.devicePixelRatio||1,2);const w=Math.max(1,Math.round(r.width*dpr)),hh=Math.max(1,Math.round(r.height*dpr));if(c.width!==w||c.height!==hh){c.width=w;c.height=hh;c.style.width=`${r.width}px`;c.style.height=`${r.height}px`}
@@ -111,7 +117,7 @@ export function InspectionCanvas({imageUrl,thumbnailUrl,onDimensions,defects,sel
    }
  },[bottomLensOffset,defects,error,imageUrl,selectedDefect,showCrosshair,showDefects,state,view]);
 
- useEffect(()=>{if(frame.current)cancelAnimationFrame(frame.current);frame.current=requestAnimationFrame(paint);return()=>{if(frame.current)cancelAnimationFrame(frame.current)}},[paint,expanded]);
+ useLayoutEffect(()=>{paint()},[paint,expanded]);
  useEffect(()=>{if(state!=='ready'||activeImage.current!==imageUrl)return;const timer=window.setTimeout(()=>{const h=host.current;if(!h)return;const r=h.getBoundingClientRect();const saved={imageWidth:source.current?.naturalWidth,scale:view.scale,centerX:(r.width/2-view.x)/view.scale,centerY:(r.height/2-view.y)/view.scale};try{const views=JSON.parse(localStorage.getItem(VIEW_STORAGE_KEY)||'{}');views[imageUrl]=saved;localStorage.setItem(VIEW_STORAGE_KEY,JSON.stringify(views))}catch{}},120);return()=>window.clearTimeout(timer)},[imageUrl,state,view]);
  useEffect(()=>{const h=host.current;if(!h)return;let resizeFrame=0;const align=()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>requestAnimationFrame(()=>{const r=h.getBoundingClientRect(),previous=lastSize.current;if(state==='ready'&&source.current&&previous.width>0&&previous.height>0&&(Math.abs(r.width-previous.width)>1||Math.abs(r.height-previous.height)>1)){setView(v=>{const centerX=(previous.width/2-v.x)/v.scale,centerY=(previous.height/2-v.y)/v.scale;return{...v,x:r.width/2-centerX*v.scale,y:r.height/2-centerY*v.scale}})}lastSize.current={width:r.width,height:r.height}}))};const r=h.getBoundingClientRect(),previous=lastSize.current;if(previous.width>0&&previous.height>0&&state==='ready'){setView(v=>{const centerX=(previous.width/2-v.x)/v.scale,centerY=(previous.height/2-v.y)/v.scale;return{...v,x:r.width/2-centerX*v.scale,y:r.height/2-centerY*v.scale}})}lastSize.current={width:r.width,height:r.height};const ro=new ResizeObserver(align);ro.observe(h);window.addEventListener('resize',align);document.addEventListener('visibilitychange',align);return()=>{cancelAnimationFrame(resizeFrame);ro.disconnect();window.removeEventListener('resize',align);document.removeEventListener('visibilitychange',align)}},[state,expanded]);
  useEffect(()=>{if(!expanded)return;const previous=document.body.style.overflow;document.body.style.overflow='hidden';const close=(e:KeyboardEvent)=>{if(e.key==='Escape')setExpanded(false)};window.addEventListener('keydown',close);return()=>{document.body.style.overflow=previous;window.removeEventListener('keydown',close)}},[expanded]);

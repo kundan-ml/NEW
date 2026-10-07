@@ -280,13 +280,18 @@ export function buildLiveDefectTrends(
   source: ReadonlyArray<InspectionResult>,
   durationMs: number,
   now: number,
+  lifetime = false,
 ): LiveDefectTrends {
   const clock = Number.isFinite(now) ? now : 0;
-  const duration = clampLiveDefectDuration(durationMs);
+  const duration = lifetime && Number.isFinite(durationMs)
+    ? Math.max(LIVE_DEFECT_MIN_DURATION_MS, durationMs)
+    : clampLiveDefectDuration(durationMs);
   const start = clock - duration;
   // Readable intervals are fixed for the chosen duration. Historical points
   // never change bins as the live clock moves, or as new frames arrive.
-  const bucketMs = liveDefectIntervalMs(duration);
+  const bucketMs = lifetime && duration > LIVE_DEFECT_MAX_DURATION_MS
+    ? Math.ceil(duration / LIVE_DEFECT_TARGET_INTERVALS / 3_600_000) * 3_600_000
+    : liveDefectIntervalMs(duration);
   const firstBucketTime = Math.floor(start / bucketMs) * bucketMs;
   const lastBucketTime = Math.floor(clock / bucketMs) * bucketMs;
   const bucketCount = Math.round((lastBucketTime - firstBucketTime) / bucketMs) + 1;

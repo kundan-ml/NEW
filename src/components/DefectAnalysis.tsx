@@ -8,7 +8,7 @@ import {defectClassCodes} from '@/lib/defect-class-labels';
 import {seriesStyle} from './LiveDefectTrend';
 import './defect-analysis.css';
 
-type Props = {model: InspectionTrends; legend?: StatusSymbolLegend | null};
+type Props = {model: InspectionTrends; legend?: StatusSymbolLegend | null; onClassClick?: (name: string) => void};
 type CountingMethod = 'occurrences' | 'lenses';
 type Size = {width: number; height: number};
 
@@ -24,7 +24,7 @@ const percent = (value: number) => `${value.toFixed(1)}%`;
 const number = (value: number) => value.toLocaleString();
 
 /** Every actual class is retained; window and latest-result filtering belong to the existing model. */
-export function DefectAnalysis({model, legend}: Props) {
+export function DefectAnalysis({model, legend, onClassClick}: Props) {
   const analysis = useMemo(() => buildQualityAnalysis(model), [model]);
   const [method, setMethod] = useState<CountingMethod>('occurrences');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -94,8 +94,13 @@ export function DefectAnalysis({model, legend}: Props) {
   }, [compact, tightClasses]);
 
   const selectFromKeyboard = (event: KeyboardEvent<SVGGElement>, key: string) => {
-    if (event.key === 'Enter' || event.key === ' ') {event.preventDefault(); setSelectedKey(key);}
+    if (event.key === 'Enter' || event.key === ' ') {event.preventDefault(); chooseClass(key);}
   };
+  function chooseClass(key: string) {
+    setSelectedKey(key);
+    const item = classes.find(entry => entry.key === key);
+    if (item) onClassClick?.(item.name);
+  }
 
   return <div ref={root} className={`defectAnalysis${compact ? ' isCompact' : ''}${dense ? ' hasDenseClasses' : ''}${tightClasses ? ' hasTightClasses' : ''}`}
     data-total={model.total} data-occurrences={analysis.totalOccurrences} data-affected={analysis.affectedLenses}
@@ -128,7 +133,7 @@ export function DefectAnalysis({model, legend}: Props) {
               const selectedClass = selected?.key === item.key;
               return <g key={item.key} data-defect-class={item.key} data-count={value} className={`defectChartClass${selectedClass ? ' isSelected' : ''}`}
                 tabIndex={0} role="button" aria-pressed={selectedClass} aria-label={`${item.name}: ${value} ${method === 'occurrences' ? 'occurrences' : 'affected lenses'}`}
-                onClick={() => setSelectedKey(item.key)} onKeyDown={event => selectFromKeyboard(event, item.key)}>
+                onClick={() => chooseClass(item.key)} onKeyDown={event => selectFromKeyboard(event, item.key)}>
                 <title>{`${item.name} · ${item.occurrences} occurrences · ${item.lenses} affected lenses · ${percent(item.affectedPercent)} of inspected lenses`}</title>
                 <rect x="0" y={yy - rowHeight / 2} width={width} height={rowHeight} rx="5" className="defectClassHitArea"/>
                 <text x={left - 9} y={yy + Math.min(4, rowHeight * .2)} textAnchor="end" className="defectChartCode" style={{fill: color(item.key, item.name), fontSize: Math.max(5, Math.min(11, rowHeight * .56))}}>{codes.get(item.name)}</text>
@@ -152,7 +157,7 @@ export function DefectAnalysis({model, legend}: Props) {
             const description = `${item.name} · ${item.occurrences} occurrences · ${item.lenses} affected lenses · ${percent(item.affectedPercent)} of inspected lenses · ${item.ok} OK, ${item.nok} NOK, ${item.warn} warning`;
             return <button type="button" key={item.key} className="defectClassButton" style={{'--defect-class-color': classColor} as CSSProperties}
               data-class-key={item.key} data-occurrences={item.occurrences} data-lenses={item.lenses} data-share={item.occurrenceSharePercent} data-affected-percent={item.affectedPercent}
-              title={description} aria-label={description} aria-pressed={selected?.key === item.key} onClick={() => setSelectedKey(item.key)}>
+              title={description} aria-label={description} aria-pressed={selected?.key === item.key} onClick={() => chooseClass(item.key)}>
               <i/><span className="defectClassLabel"><span className="defectClassFullName">{item.name}</span><span className="defectClassCode">{codes.get(item.name)}</span></span>
               <span className="defectClassCount"><b>{number(value)}</b><small>{percent(method === 'occurrences' ? item.occurrenceSharePercent : item.affectedPercent)}</small></span>
             </button>;

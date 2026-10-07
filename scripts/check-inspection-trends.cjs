@@ -26,6 +26,7 @@ const {
   LIVE_DEFECT_DEFAULT_DURATION_MS,
 } = load('inspection-trends');
 const now = Date.UTC(2026, 9, 6, 12);
+const {selectDefectImages} = load('defect-image-gallery');
 function result(id, secondsAgo, status = 'OK', extra = {}) {
   return {
     dataset_id: 'first', sample_id: id, wt_index: 1, position: 1,
@@ -35,6 +36,19 @@ function result(id, secondsAgo, status = 'OK', extra = {}) {
   };
 }
 const surface = { name: 'Surface Imperfection' };
+const lifetimeSource = [result('ancient', 10 * 86400, 'NOK', {defects:[surface]}), result('today', 20, 'NOK', {defects:[surface,surface]})];
+assert.equal(buildInspectionTrends(lifetimeSource, 'all', now).total, 2);
+assert.equal(buildInspectionTrends(lifetimeSource, '24h', now).total, 1);
+const lifetime = buildLiveDefectTrends(lifetimeSource, 10 * 86400000 + 1000, now, true);
+assert(lifetime.start < now - 86400000, 'Lifetime retains older-than-24-hour events');
+assert(lifetime.buckets.length <= 32, 'Lifetime chart stays bounded');
+assert.equal(lifetime.series[0].total, 3);
+const galleryMatches = selectDefectImages([...lifetimeSource, result('today', 10, 'NOK', {defects:[surface,surface]})], '  SURFACE   IMPERFECTION ');
+assert.equal(galleryMatches.length, 2, 'Gallery deduplicates repeated inspections but retains every lens');
+assert.equal(galleryMatches.reduce((sum,match)=>sum+match.defects.length,0), 3, 'Repeated defects do not duplicate image cards');
+assert.equal(selectDefectImages(lifetimeSource, 'Bubble').length, 0);
+assert.equal(selectDefectImages([lifetimeSource[0], {...lifetimeSource[0], dataset_id:'second'}], surface.name).length, 2, 'Same sample ID in different datasets remains separate');
+assert.equal(selectDefectImages([...lifetimeSource, result('ancient', 1, 'OK')], surface.name).length, 1, 'Reinspection replaces stale class membership');
 const source = [
   result('a', 90, 'NOK', { defects: [surface] }),
   result('a', 10), // Latest inspection replaces the earlier defect and NOK.

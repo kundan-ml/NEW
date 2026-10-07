@@ -5,11 +5,14 @@ import {Activity,BookOpen,ChevronDown,CircleUserRound,Database,FolderUp,LogIn,Pa
 import {api} from '@/lib/api';
 import type {SystemInfo} from '@/types';
 import {openManual} from '@/lib/open-manual';
+import {useUI} from './UIProvider';
+import {ViewerThemeButton} from './ViewerThemeButton';
 
 type DashboardStats={yieldPct:number;total:number;nokRate:number;evaluated:number};
 type Props={info:SystemInfo|null;onRefresh:()=>void;stats?:DashboardStats;workstation?:boolean;demo?:boolean;onUpload?:()=>void;onLayout?:()=>void;operationMode?:'AUTO'|'MANUAL';onOperationMode?:()=>void;modeBusy?:boolean;canChangeMode?:boolean};
 
 export function TopBar({info,onRefresh,stats,workstation=false,demo=false,onUpload,onLayout,operationMode,onOperationMode,modeBusy=false,canChangeMode}:Props){
+  const{canCustomize,loggedIn}=useUI();
   const[now,setNow]=useState(new Date());
   const[busy,setBusy]=useState(false);
   const[open,setOpen]=useState(false);
@@ -21,7 +24,7 @@ export function TopBar({info,onRefresh,stats,workstation=false,demo=false,onUplo
   useEffect(()=>{if(info)setUser(info.session.username)},[info]);
   const internalMode=demo?previewMode:(info?.mode||'SETUP');
   const mode=operationMode||(internalMode==='AUTO'?'AUTO':'MANUAL');
-  const modeAllowed=canChangeMode??(demo||mode==='MANUAL'||!!info?.session.logged_in&&info.session.role!=='NoUser');
+  const modeAllowed=loggedIn&&(canChangeMode??(demo||mode==='MANUAL'||!!info?.session.logged_in&&info.session.role!=='NoUser'));
   const yieldPct=Math.max(0,Math.min(100,stats?.yieldPct||0));
   const halconOnline=useMemo(()=>!!info?.bridge&&!/offline|unavailable|none|disconnected/i.test(info.bridge),[info?.bridge]);
 
@@ -30,7 +33,7 @@ export function TopBar({info,onRefresh,stats,workstation=false,demo=false,onUplo
 
   if(workstation){
     return <header className="oakMachineHeader referenceMachineHeader">
-      <div className="referenceTitle emageHeaderTitle"><img src="/brand/emage-mark.png" alt="Emage Group"/><span><b>DSM BV 4Cam Inspection System</b><small>Emage Group · Optical Quality Inspection</small></span><div className="referenceTitleActions"><button onClick={onUpload} title="Upload image folder"><FolderUp/></button><button onClick={onLayout} title="Adjust dashboard layout"><Settings2/></button><button onClick={()=>void openManual().catch(error=>setNotice(error.message))} title="Open English manual" aria-label="Open English manual"><BookOpen/></button></div></div>
+      <div className="referenceTitle emageHeaderTitle"><img src="/brand/emage-mark.png" alt="Emage Group"/><span><b>DSM BV 4Cam Inspection System</b><small>Emage Group · Optical Quality Inspection</small></span><div className="referenceTitleActions"><button disabled={!loggedIn} onClick={onUpload} title="Upload image folder"><FolderUp/></button>{canCustomize?<button onClick={onLayout} title="Adjust dashboard layout"><Settings2/></button>:<ViewerThemeButton/>}<button disabled={!loggedIn} onClick={()=>void openManual().catch(error=>setNotice(error.message))} title="Open English manual" aria-label="Open English manual"><BookOpen/></button></div></div>
       <div className="referenceContextCard"><small>Line</small><b>{info?.settings.line_name||'—'}</b></div>
       <div className="referenceContextCard"><small>Station {info?.settings.station_index??'—'}</small><b>{info?.settings.station_name||'—'}</b></div>
       <button className={`oakMode referenceMode ${mode.toLowerCase()}`} onClick={toggle} disabled={busy||modeBusy||!modeAllowed}><Activity/><span><b>{mode}</b><small>{mode==='AUTO'?'Automatic Operation':'Manual Operation'}</small></span></button>
@@ -102,7 +105,7 @@ export function TopBar({info,onRefresh,stats,workstation=false,demo=false,onUplo
           <label>User<input value={user} onChange={e=>setUser(e.target.value)}/></label>
           <label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)}/></label>
           <button onClick={login}><LogIn/> Apply user</button>
-          <div className="userUtilityRow"><button onClick={()=>{setOpen(false);window.dispatchEvent(new Event('lens-open-customizer'))}}><Palette/>Interface Studio</button><button onClick={()=>{setOpen(false);onRefresh()}}><RefreshCw/>Refresh</button></div>
+          <div className="userUtilityRow">{canCustomize?<button onClick={()=>{setOpen(false);window.dispatchEvent(new Event('lens-open-customizer'))}}><Palette/>Interface Studio</button>:<ViewerThemeButton/>}<button onClick={()=>{setOpen(false);onRefresh()}}><RefreshCw/>Refresh</button></div>
         </div>}
       </div>
       {notice&&<button className="oakHeaderNotice" onClick={()=>setNotice('')}>{notice}</button>}
@@ -112,7 +115,7 @@ export function TopBar({info,onRefresh,stats,workstation=false,demo=false,onUplo
   return <header className="topBar productionTopBar premiumTopBar">
     <div className="titleGroup productionTitle premiumTitleGroup"><div className="titleIcon emageHeaderMark"><img src="/brand/emage-mark.png" alt="Emage Group"/></div><div className="premiumTitleText"><div className="premiumTitleLine"><h1>DSM BV 4Cam Inspection System</h1><span>Dashboard</span></div><p>Emage Group · Optical Quality Inspection</p></div></div>
     <div className="premiumHeaderCenter"><div className="premiumMachineContext"><span><small>LINE</small><b>{info?.settings.line_name||'—'}</b></span><i/><span><small>STATION</small><b>{info?.settings.station_name||'—'}</b></span></div><button className={`modePill productionMode premiumMode ${mode.toLowerCase()}`} onClick={toggle} disabled={busy||modeBusy||!modeAllowed}><i/><span><b>{mode}</b><small>{mode==='AUTO'?'Automatic':'Manual'}</small></span></button><div className="connectionPill productionConnection premiumConnection" title="Backend / bridge status"><i/><span><b>{info?'Connected':'Unknown'}</b><small><Database/> API / HALCON</small></span></div></div>
-    <div className="topStatus productionStatus premiumHeaderRight">{stats&&<><div className="premiumHeaderMetric yield"><small>YIELD</small><b>{yieldPct.toFixed(1)}%</b><em>{stats.evaluated} evaluated</em></div><div className="premiumHeaderMetric total"><small>LENSES</small><b>{stats.total.toLocaleString()}</b><em className={stats.nokRate>5?'dangerText':''}>{stats.nokRate.toFixed(1)}% NOK</em></div></>}<div className="premiumHeaderMetric clock"><small>{now.toLocaleDateString(undefined,{month:'short',day:'2-digit'})}</small><b>{now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</b><em>{now.toLocaleDateString(undefined,{weekday:'short'})}</em></div><div className="userMenu"><button className="userButton productionUser premiumUser" onClick={()=>setOpen(v=>!v)}><CircleUserRound/><span><b>{info?.session.username||'Operator'}</b><small>{info?.session.role||'Production'}</small></span><ChevronDown/></button>{open&&<div className="userPopover premiumUserPopover"><div className="popoverTitle"><ShieldCheck/> User & workstation</div><p className="popoverHint">Authenticated workstation access.</p><label>User<input value={user} onChange={e=>setUser(e.target.value)}/></label><label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)}/></label><button onClick={login}><LogIn/> Sign in</button><div className="userUtilityRow"><button disabled={info?.session.role!=='Administrator'} onClick={()=>{setOpen(false);window.dispatchEvent(new Event('lens-open-customizer'))}}><Palette/>Customize UI</button><button onClick={()=>{setOpen(false);onRefresh()}}><RefreshCw/>Refresh</button></div></div>}</div></div>
+    <div className="topStatus productionStatus premiumHeaderRight">{stats&&<><div className="premiumHeaderMetric yield"><small>YIELD</small><b>{yieldPct.toFixed(1)}%</b><em>{stats.evaluated} evaluated</em></div><div className="premiumHeaderMetric total"><small>LENSES</small><b>{stats.total.toLocaleString()}</b><em className={stats.nokRate>5?'dangerText':''}>{stats.nokRate.toFixed(1)}% NOK</em></div></>}<div className="premiumHeaderMetric clock"><small>{now.toLocaleDateString(undefined,{month:'short',day:'2-digit'})}</small><b>{now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</b><em>{now.toLocaleDateString(undefined,{weekday:'short'})}</em></div><div className="userMenu"><button className="userButton productionUser premiumUser" onClick={()=>setOpen(v=>!v)}><CircleUserRound/><span><b>{info?.session.username||'Operator'}</b><small>{info?.session.role||'Production'}</small></span><ChevronDown/></button>{open&&<div className="userPopover premiumUserPopover"><div className="popoverTitle"><ShieldCheck/> User & workstation</div><p className="popoverHint">Authenticated workstation access.</p><label>User<input value={user} onChange={e=>setUser(e.target.value)}/></label><label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)}/></label><button onClick={login}><LogIn/> Sign in</button><div className="userUtilityRow">{canCustomize?<button onClick={()=>{setOpen(false);window.dispatchEvent(new Event('lens-open-customizer'))}}><Palette/>Customize UI</button>:<ViewerThemeButton/>}<button onClick={()=>{setOpen(false);onRefresh()}}><RefreshCw/>Refresh</button></div></div>}</div></div>
     {notice&&<button className="oakHeaderNotice legacy" onClick={()=>setNotice('')}>{notice}</button>}
   </header>
 }

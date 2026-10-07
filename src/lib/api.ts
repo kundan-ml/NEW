@@ -63,7 +63,8 @@ export const api={
  version:()=>request<any>('/system/version'),timeoutTable:()=>request<any>('/system/timeout-table'),folderStructure:()=>request<any>('/system/folder-structure'),
  trayLayout:()=>request<{images_per_tray:number;supported_images_per_tray:number[]}>('/system/tray-layout'),setWtCapacity:(capacity:number)=>request<{capacity:number;supported:number[]}>('/system/wt-capacity',{method:'PUT',body:JSON.stringify({capacity})}),
  datasets:async()=>{const rows=await request<DatasetSummary[]>('/datasets');return rows.filter(row=>row.source_type!=='setup-upload'&&!(row.source_type==='upload'&&/^(?:Registration|Focus Check) · Camera Head [1-4]$/.test(row.name)))},samples:(id:string,limit=1000)=>request<{total:number;items:Sample[]}>(`/datasets/${id}/samples?limit=${limit}`),results:(id:string)=>request<{items:InspectionResult[]}>(`/results/${id}?limit=1000`),
- loadPath:(path:string,name?:string)=>request<any>('/datasets/from-path',{method:'POST',body:JSON.stringify({path,name})}),
+ localFolders:(path?:string)=>request<{path:string;parent:string|null;folders:{name:string;path:string}[];truncated:boolean}>(`/datasets/local-folders${path?`?path=${encodeURIComponent(path)}`:''}`),
+ loadPath:(path:string,name?:string)=>request<DatasetSummary>('/datasets/from-path',{method:'POST',body:JSON.stringify({path,name})}),
  uploadFolder:async(files:FileList,name:string,progress?:UploadProgress)=>{
    const images=Array.from(files).filter(file=>/\.(?:bmp|tiff?)$/i.test(file.name));
    if(!images.length)throw new Error('This folder contains no supported inspection images. Choose a folder with BMP, TIF, or TIFF files.');

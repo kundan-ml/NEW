@@ -13568,3 +13568,25 @@ html[data-theme="premium-white"][data-workspace="manual"] .inspectionHistoryColu
 html[data-theme="premium-white"][data-workspace="manual"] .inspectionLogPanel .inspectionLogTabs {
   background: var(--studio-bottomTabs-fill) !important;
 }
+/* Dataset intake and live message presentation. */
+html[data-theme] .uploadModalWindow{display:flex;flex-direction:column}
+.uploadModalWindow :is(.uploadModalBrand,.uploadFlow,.uploadModalFooter){flex-shrink:0}
+.uploadModalWindow .uploadModalBody{min-height:0;overflow:auto}
+.uploadModalWindow :is(.uploadRouteCard label,.uploadModalBody>label){font-size:11px}
+.uploadModalWindow .uploadRouteHead b{font-size:13px}.uploadModalWindow .uploadRouteHead small{font-size:11px;line-height:1.5}
+.uploadModalWindow .uploadRouteCard>small{display:block;margin-top:12px;font-size:11px;line-height:1.5;color:var(--text-secondary)}
+.uploadModalWindow .uploadStatus{font-size:11px}.uploadModalWindow .uploadStatus em{font-size:10px}
+.uploadModalWindow .uploadFolder{min-height:82px}.uploadModalWindow .uploadFolderCopy b{font-size:14px}.uploadModalWindow .uploadFolderCopy :is(small,em){font-size:11px}
+.uploadModalWindow .uploadSourceSelector{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:6px 0 18px}
+.uploadModalWindow .uploadSourceSelector button{display:flex;align-items:center;gap:12px;padding:16px;text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:12px;transition:background .18s,border-color .18s;min-width:0}
+.uploadSourceSelector button>svg{width:23px;height:23px;flex-shrink:0;color:var(--text-secondary)}
+.uploadSourceSelector span{display:flex;flex-direction:column;gap:5px;min-width:0}.uploadSourceSelector b{font-size:13px;color:var(--text-primary)}.uploadSourceSelector small{font-size:11px;color:var(--text-secondary)}
+.uploadModalWindow .uploadSourceSelector button[aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--surface));box-shadow:inset 0 1px 0 color-mix(in srgb,var(--accent) 20%,transparent)}
+.uploadSourceSelector button[aria-pressed="true"]>svg{color:var(--accent)}
+.uploadModalWindow .uploadRouteCard{border-radius:14px;background:var(--surface);border:1px solid var(--border);padding:18px}
+.uploadModalWindow .modalInline{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}.uploadModalWindow .modalInline input{min-width:0;width:100%}.uploadModalWindow .modalInline button{min-height:42px;border-radius:8px}.uploadModalWindow .modalInline button:last-child{grid-column:1/-1}
+.systemMessageNotice{padding:12px!important;color:var(--text-secondary);font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+@media(max-width:600px){.uploadModalWindow .uploadSourceSelector{grid-template-columns:1fr}.uploadModalWindow .uploadSourceSelector button{padding:12px}}
+.serverFolderBrowser{display:flex;flex-direction:column;gap:5px;max-height:160px;overflow:auto;margin-top:12px;padding:10px;border:1px solid var(--border);border-radius:10px}
+.serverFolderBrowser>div{display:flex;justify-content:space-between;align-items:center;gap:8px}.serverFolderBrowser b{font-size:11px;overflow-wrap:anywhere}.serverFolderBrowser button{display:flex;align-items:center;gap:7px;text-align:left;flex-shrink:0;padding:8px;border-radius:6px;border:1px solid var(--control-border);background:var(--control-button);color:var(--control-text);font:500 12px var(--font-ui,inherit);min-height:36px;cursor:pointer}.serverFolderBrowser button:hover{background:var(--surface-hover);border-color:var(--accent)}
+.uploadModalWindow :is(.modalBadge,.uploadSourceSelector button[aria-pressed="true"]>svg){color:var(--text-primary)}

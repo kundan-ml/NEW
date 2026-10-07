@@ -75,11 +75,11 @@ async function fulfill(viewer,event) {
   if(route==='/api/image'){
     contentType='image/svg+xml';
     body='<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480"><rect width="640" height="480" fill="#050505"/><circle cx="320" cy="240" r="190" fill="#777"/></svg>';
-  }else if(route==='/api/ui-config/access')body={canCustomize:false};
-  else if(route==='/api/ui-config')body={manualSkeleton:viewer.classic,theme:'graphite'};
+  }else if(route==='/api/ui-config/access')body={canCustomize:viewer.role==='Administrator',loggedIn:viewer.role!=='NoUser',role:viewer.role};
+  else if(route==='/api/ui-config')body={manualSkeleton:viewer.classic,theme:'graphite',uiLocked:false};
   else if(route.endsWith('/system/info'))body={app:'Trend fixture',version:'3',mode:'AUTO',bridge:'fixture',
     settings:{station_name:'Station 1',installation_name:'Fixture',line_name:'Fixture',station_index:1,wt_capacity:16,role:'Operator',channel_labels:{h:'Telecentric',d:'Dark Field',n:'Diffuse',p:'Phase Contrast'},image_format:'BMP'},
-    session:{username:'qa-fixture',role:'Operator',logged_in:true}};
+    session:{username:'qa-fixture',role:viewer.role,logged_in:viewer.role!=='NoUser'}};
   else if(route.endsWith('/inspection/live'))body=viewer.empty?{type:'snapshot',stream_id:'empty',sequence:0,current_job_id:null,job:null,results:[]}:snapshot;
   else if(route.endsWith('/datasets'))body=viewer.empty?[]:[previousDataset,dataset];
   else if(route.endsWith('/datasets/trend/samples'))body={total:samples.length,items:samples};
@@ -90,7 +90,7 @@ async function fulfill(viewer,event) {
   else if(route.endsWith('/config/status-symbol-legend'))body=fixtureLegend;
   else if(route.endsWith('/config/image-filters'))body={positions:Array.from({length:16},(_,i)=>i+1),result_types:['OK','NOK','WARN'],error_classes:[],apply_to_display:false};
   else if(route.endsWith('/logs'))body={items:[]};
-  else if(route.endsWith('/auth/current'))body={username:'qa-fixture',role:'Operator',logged_in:true};
+  else if(route.endsWith('/auth/current'))body={username:'qa-fixture',role:viewer.role,logged_in:viewer.role!=='NoUser'};
   await viewer.cdp.send('Fetch.fulfillRequest',{requestId:event.requestId,responseCode:200,
     responseHeaders:[{name:'Content-Type',value:contentType},{name:'Cache-Control',value:'no-store'}],
     body:Buffer.from(typeof body==='string'?body:JSON.stringify(body)).toString('base64')});
@@ -113,15 +113,15 @@ function socketFixture(initial) {
 async function waitFor(viewer,expression,label,timeout=15000) {
   const deadline=Date.now()+timeout;
   while(Date.now()<deadline){if(await viewer.evaluate(expression))return;await pause(100);}
-  throw Error(`${viewer.classic?'Classic':'Modern'} ${viewer.empty?'empty':'live'}: ${label}; DOM=${await viewer.evaluate('document.body.innerText.slice(0,1200)')}; errors=${JSON.stringify(viewer.errors)}`);
+  throw Error(`${viewer.classic?'Classic':'Modern'} ${viewer.empty?'empty':'live'}: ${label} [${viewer.role}]; chart=${await viewer.evaluate(`JSON.stringify({count:document.querySelector('.trendLineWorkspace')?.getAttribute('data-count'),range:document.querySelector('[aria-label="Trend time range"]')?.value,scope:document.querySelector('.trendLineWorkspace')?.getAttribute('data-scope'),now:Date.now(),theme:document.documentElement.dataset.theme,viewerTheme:sessionStorage.getItem('lens-viewer-theme'),admin:document.documentElement.dataset.canCustomize,workspace:document.documentElement.dataset.workspace})`)}; DOM=${await viewer.evaluate('document.body.innerText.slice(0,1200)')}; errors=${JSON.stringify(viewer.errors)}`);
 }
 
-async function makeViewer(classic,empty=false) {
+async function makeViewer(classic,empty=false,role='Operator') {
   const {browserContextId}=await browser.send('Target.createBrowserContext');
   const {targetId}=await browser.send('Target.createTarget',{url:'about:blank',browserContextId});
   const targets=await fetch(`http://127.0.0.1:${port}/json`).then(response=>response.json());
   const cdp=connect(targets.find(target=>target.id===targetId).webSocketDebuggerUrl);await cdp.ready;
-  const viewer={cdp,classic,empty,errors:[],mutations:[]};viewers.push(viewer);
+  const viewer={cdp,classic,empty,role,errors:[],mutations:[]};viewers.push(viewer);
   viewer.evaluate=async expression=>{const output=await cdp.send('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true});if(output.exceptionDetails)throw Error(output.exceptionDetails.exception?.description||output.exceptionDetails.text);return output.result.value;};
   cdp.on('Runtime.exceptionThrown',event=>viewer.errors.push(event.exceptionDetails.exception?.description||event.exceptionDetails.text));
   cdp.on('Fetch.requestPaused',event=>fulfill(viewer,event).catch(error=>{if(!/Invalid InterceptionId/.test(String(error)))viewer.errors.push(String(error));}));
@@ -139,6 +139,7 @@ async function makeViewer(classic,empty=false) {
   await viewer.evaluate(`(()=>{const prefs=JSON.parse(localStorage.getItem('lens-ui-prefs-v13')||'{}');prefs.manualSkeleton=${classic};prefs.theme='graphite';window.dispatchEvent(new StorageEvent('storage',{key:'lens-ui-prefs-v13',newValue:JSON.stringify(prefs)}));})()`);
   await waitFor(viewer,`document.documentElement.dataset.workspace===${JSON.stringify(classic?'manual':'modern')}`,'appearance fixture');
   await waitFor(viewer,classic?`!!document.querySelector('.inspectionLogTabs')`:`!!document.querySelector('.referenceTrendPanel')`,'selected layout rendered');
+  if(process.env.TREND_QA_ACCESS_ONLY==='1')return viewer;
   for(let attempt=0;attempt<10;attempt++){
     await viewer.evaluate(`Array.from(document.querySelectorAll('button')).find(button=>button.textContent.trim()==='Trend Line').click()`);
     await pause(100);
@@ -154,7 +155,7 @@ async function makeViewer(classic,empty=false) {
 
 async function resize(viewer,width,height){await viewer.cdp.send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});await pause(120);}
 async function select(viewer,label){await viewer.evaluate(`Array.from(document.querySelectorAll('.trendLineWorkspace [role="tab"]')).find(tab=>tab.textContent.trim()===${JSON.stringify(label)}).click()`);await pause(100);}
-async function range(viewer,value){const selected=viewer.classic&&value==='all'?'24h':value;await viewer.evaluate(`(()=>{const input=document.querySelector('.trendLineWorkspace [aria-label="Trend time range"]');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(input,${JSON.stringify(selected)});input.dispatchEvent(new Event('change',{bubbles:true}));})()`);await pause(100);}
+async function range(viewer,value){const selected=value;await viewer.evaluate(`(()=>{const input=document.querySelector('.trendLineWorkspace [aria-label="Trend time range"]');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(input,${JSON.stringify(selected)});input.dispatchEvent(new Event('change',{bubbles:true}));})()`);await pause(100);}
 async function screenshot(viewer,name){const value=await viewer.cdp.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(temporaryRoot,name),Buffer.from(value.data,'base64'));}
 async function appearance(viewer,theme){
   await viewer.evaluate(`(()=>{const prefs=JSON.parse(localStorage.getItem('lens-ui-prefs-v13')||'{}');prefs.theme=${JSON.stringify(theme)};for(const key of Object.keys(prefs))if(key.startsWith('custom'))prefs[key]='';for(const style of Object.values(prefs.componentStyles||{})){style.background='';style.text='';style.border='';style.opacity=1;}for(const gradient of Object.values(prefs.layerGradients||{}))gradient.enabled=false;window.dispatchEvent(new StorageEvent('storage',{key:'lens-ui-prefs-v13',newValue:JSON.stringify(prefs)}));})()`);
@@ -257,7 +258,22 @@ async function defectCounting(viewer,expected){
   if(expected.classes.length){
     await viewer.evaluate(`document.querySelector('.defectClassButton').click()`);
     assert(await viewer.evaluate(`document.querySelector('.defectClassButton[aria-pressed="true"]')!==null`),'A class tap selects its detailed outcome information');
+    await galleryCheck(viewer);
   }
+}
+
+async function galleryCheck(viewer){
+  await waitFor(viewer,`!!document.querySelector('.defectGallery')`,'Class click opens defect image popup');
+  assert(await viewer.evaluate(`document.querySelectorAll('.defectGallery article').length>0`),'Matching lens images are shown');
+  assert(await viewer.evaluate(`document.querySelectorAll('.defectGallery img').length>=4`),'All four illumination images are available');
+  assert(await viewer.evaluate(`Array.from(document.querySelectorAll('.defectGallery .defectImageFacts')).some(item=>item.textContent.includes('Lens ID')&&item.textContent.includes('Inference time'))`),'Gallery shows lens identity and inspection information');
+  assert(!await viewer.evaluate(`document.querySelector('.defectGallery').scrollWidth>document.querySelector('.defectGallery').clientWidth+1`),'Gallery does not overflow horizontally');
+  await screenshot(viewer,`trend-line-${viewer.classic?'classic':'modern'}-defect-gallery-qa.png`);
+  const outer=await viewer.evaluate(`!!document.querySelector('.trendExplorerWindow')`);
+  await viewer.cdp.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+  await viewer.cdp.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+  await waitFor(viewer,`!document.querySelector('.defectGallery')`,'Escape closes only the nested gallery');
+  assert.equal(await viewer.evaluate(`!!document.querySelector('.trendExplorerWindow')`),outer,'Closing image popup preserves its parent');
 }
 
 async function analyticsFit(viewer,label){
@@ -316,7 +332,7 @@ async function trayAccuracy(viewer,source,label){
 }
 
 async function trayFit(viewer,label){
-  const safety=await viewer.evaluate(`(()=>{const root=document.querySelector('.trayDefectChart');if(!root)return {found:false};const rect=root.getBoundingClientRect(),parent=root.closest('.trendPlot').getBoundingClientRect();const classes=Array.from(root.querySelectorAll('button[data-class-key]')).filter(item=>item.getClientRects().length).map(item=>{const box=item.getBoundingClientRect(),grid=item.parentElement.getBoundingClientRect(),code=item.querySelector('.trayDefectClassCode');return {key:item.getAttribute('data-class-key'),height:box.height,width:box.width,truncated:!!code?.getClientRects().length&&code.scrollWidth>code.clientWidth+1,outside:box.top<grid.top-1||box.bottom>grid.bottom+1||box.left<grid.left-1||box.right>grid.right+1}});const svg=root.querySelector('svg').getBoundingClientRect(),labels=Array.from(root.querySelectorAll('.trayClassFloorLabel text')).map(item=>({name:item.textContent,box:item.getBoundingClientRect()})),overlaps=[];for(let index=0;index<labels.length;index++)for(const other of labels.slice(index+1)){const first=labels[index].box,second=other.box;if(Math.min(first.right,second.right)-Math.max(first.left,second.left)>1&&Math.min(first.bottom,second.bottom)-Math.max(first.top,second.top)>1)overlaps.push({first:labels[index].name,firstBox:first.toJSON(),second:other.name,secondBox:second.toJSON()});}return {found:true,nan:/NaN|Infinity|undefined/.test(root.innerHTML),scrollX:root.scrollWidth>root.clientWidth+1,scrollY:root.scrollHeight>root.clientHeight+1,clipped:rect.bottom>parent.bottom+1||rect.right>parent.right+1,classes,floorLabelOverlaps:overlaps,floorLabelsClipped:labels.filter(item=>item.box.left<svg.left-1||item.box.right>svg.right+1||item.box.top<svg.top-1||item.box.bottom>svg.bottom+1).map(item=>item.name)};})()`);
+  const safety=await viewer.evaluate(`(()=>{const root=document.querySelector('.trayDefectChart');if(!root)return {found:false};const rect=root.getBoundingClientRect(),parent=root.closest('.trendPlot').getBoundingClientRect();const classes=Array.from(root.querySelectorAll('button[data-class-key]')).filter(item=>item.getClientRects().length).map(item=>{const box=item.getBoundingClientRect(),grid=item.parentElement.getBoundingClientRect(),code=item.querySelector('.trayDefectClassCode');return {key:item.getAttribute('data-class-key'),height:box.height,width:box.width,truncated:!!code?.getClientRects().length&&code.scrollWidth>code.clientWidth+1,outside:box.top<grid.top-1||box.bottom>grid.bottom+1||box.left<grid.left-1||box.right>grid.right+1}});const svg=root.querySelector('svg[role="img"]').getBoundingClientRect(),labels=Array.from(root.querySelectorAll('.trayClassFloorLabel text')).map(item=>({name:item.textContent,box:item.getBoundingClientRect()})),overlaps=[];for(let index=0;index<labels.length;index++)for(const other of labels.slice(index+1)){const first=labels[index].box,second=other.box;if(Math.min(first.right,second.right)-Math.max(first.left,second.left)>1&&Math.min(first.bottom,second.bottom)-Math.max(first.top,second.top)>1)overlaps.push({first:labels[index].name,firstBox:first.toJSON(),second:other.name,secondBox:second.toJSON()});}return {found:true,nan:/NaN|Infinity|undefined/.test(root.innerHTML),scrollX:root.scrollWidth>root.clientWidth+1,scrollY:root.scrollHeight>root.clientHeight+1,clipped:rect.bottom>parent.bottom+1||rect.right>parent.right+1,classes,floorLabelOverlaps:overlaps,floorLabelsClipped:labels.filter(item=>item.box.left<svg.left-1||item.box.right>svg.right+1||item.box.top<svg.top-1||item.box.bottom>svg.bottom+1).map(item=>item.name)};})()`);
   assert(safety.found&&!safety.nan,`${label}: measured 3D component has valid geometry`);
   assert(!safety.scrollX&&!safety.scrollY&&!safety.clipped,`${label}: 3D chart fits without a scrollbar ${JSON.stringify(safety)}`);
   assert(safety.classes.every(item=>!item.outside&&item.height>=12&&item.width>=28),`${label}: every visible class legend fits its grid ${JSON.stringify(safety.classes.filter(item=>item.outside||item.height<12||item.width<28))}`);
@@ -333,15 +349,34 @@ async function traySelection(viewer,label){
   await viewer.cdp.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
   await waitFor(viewer,`(()=>{const readout=document.querySelector('.trayDefectReadout');return readout?.getAttribute('data-selected-class')===${JSON.stringify(bar.key)}&&readout.getAttribute('data-selected-tray')===${JSON.stringify(bar.tray)}})()`,`${label}: keyboard reveals selected tray/class details`);
   assert(await viewer.evaluate(`document.querySelector('.trayDefectReadout').textContent.includes(${JSON.stringify(String(bar.count))})`),`${label}: selection exposes the actual defect occurrence count`);
+  await galleryCheck(viewer);
+  await trayMouseControls(viewer);
+}
+
+async function trayMouseControls(viewer){
+  const point=await viewer.evaluate(`(()=>{const r=document.querySelector('.trayDefectChart svg[role="img"]').getBoundingClientRect();return {x:r.left+r.width*.4,y:r.top+r.height*.4};})()`);
+  await viewer.cdp.send('Input.dispatchMouseEvent',{type:'mouseWheel',...point,deltaX:0,deltaY:-120});
+  await waitFor(viewer,`Number(document.querySelector('[data-tray-camera]').getAttribute('data-zoom'))>1`,'Mouse wheel zooms tray chart');
+  const angle=await viewer.evaluate(`Number(document.querySelector('[aria-label="3D chart rotation"]').value)`);
+  for(const modifiers of [0,8]){
+    await viewer.cdp.send('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount:1,modifiers});
+    await viewer.cdp.send('Input.dispatchMouseEvent',{type:'mouseMoved',x:point.x+35,y:point.y+12,button:'left',buttons:1,modifiers});
+    await viewer.cdp.send('Input.dispatchMouseEvent',{type:'mouseReleased',x:point.x+35,y:point.y+12,button:'left',clickCount:1,modifiers});
+  }
+  assert(await viewer.evaluate(`Number(document.querySelector('[data-tray-camera]').getAttribute('data-pan-x'))!==0`),'Shift-drag pans chart');
+  assert.notEqual(await viewer.evaluate(`Number(document.querySelector('[aria-label="3D chart rotation"]').value)`),angle,'Mouse drag rotates chart');
+  assert(!await viewer.evaluate(`!!document.querySelector('.defectGallery')`),'Dragging does not accidentally open an image popup');
+  await viewer.evaluate(`document.querySelector('[aria-label="Reset 3D view"]').click()`);
+  await waitFor(viewer,`Number(document.querySelector('[data-tray-camera]').getAttribute('data-zoom'))===1`,'Reset restores chart zoom');
 }
 
 async function trayFiltering(viewer,label){
-  const selected=await viewer.evaluate(`(()=>{const button=document.querySelector('.trayDefectChart button[data-class-key]');if(!button)return null;const key=button.getAttribute('data-class-key'),count=Number(button.getAttribute('data-count'));button.click();return {key,count};})()`);
+  const selected=await viewer.evaluate(`(()=>{const button=document.querySelector('.trayDefectChart button[data-class-key]');if(!button)return null;const key=button.getAttribute('data-class-key'),count=Number(button.getAttribute('data-count'));button.parentElement.querySelector('.trayClassVisibility').click();return {key,count};})()`);
   if(!selected)return;
   await waitFor(viewer,`Array.from(document.querySelectorAll('.trayDefectChart button[data-class-key]')).find(button=>button.getAttribute('data-class-key')===${JSON.stringify(selected.key)})?.getAttribute('aria-pressed')==='false'`,`${label}: class tap hides its columns`);
   assert.equal(await viewer.evaluate(`Array.from(document.querySelectorAll('.trayDefectChart [data-tray-key][data-defect-class]')).filter(bar=>bar.getAttribute('data-defect-class')===${JSON.stringify(selected.key)}).length`),0,`${label}: hidden class is removed from plotted columns`);
   assert.equal(await viewer.evaluate(`Number(document.querySelector('.trayDefectChart').getAttribute('data-visible-defects'))`),await viewer.evaluate(`Number(document.querySelector('.trayDefectChart').getAttribute('data-displayed-defects'))`)-selected.count,`${label}: visible subtotal explains the class filter`);
-  await viewer.evaluate(`Array.from(document.querySelectorAll('.trayDefectChart button[data-class-key]')).find(button=>button.getAttribute('data-class-key')===${JSON.stringify(selected.key)}).click()`);
+  await viewer.evaluate(`Array.from(document.querySelectorAll('.trayDefectChart button[data-class-key]')).find(button=>button.getAttribute('data-class-key')===${JSON.stringify(selected.key)}).parentElement.querySelector('.trayClassVisibility').click()`);
   await waitFor(viewer,`Number(document.querySelector('.trayDefectChart').getAttribute('data-visible-defects'))===Number(document.querySelector('.trayDefectChart').getAttribute('data-displayed-defects'))`,`${label}: class restored without data loss`);
 }
 
@@ -371,6 +406,55 @@ async function cumulativeAccuracy(viewer,source,label){
   chrome=spawn(process.env.CHROME_BINARY||'/usr/bin/google-chrome',['--headless=new','--no-sandbox','--disable-gpu',`--remote-debugging-port=${port}`,`--user-data-dir=${profile}`,'about:blank'],{stdio:'ignore',env:{...process.env,TMPDIR:temporaryRoot,TMP:temporaryRoot,TEMP:temporaryRoot}});
   let version;for(let i=0;i<100;i++){try{version=await fetch(`http://127.0.0.1:${port}/json/version`).then(response=>response.json());break;}catch{await pause(100);}}
   assert(version,'Chrome started');browser=connect(version.webSocketDebuggerUrl);await browser.ready;
+  if(process.env.TREND_QA_ACCESS_ONLY==='1'){
+    for(const classic of [true,false])for(const role of ['NoUser','Operator','Tester','Administrator']){
+      const viewer=await makeViewer(classic,false,role);
+      await waitFor(viewer,`document.documentElement.dataset.loggedIn===${JSON.stringify(role!=='NoUser'?'true':'false')}`,'Authentication permission hydrated');
+      await viewer.evaluate(`(()=>{const p=JSON.parse(localStorage.getItem('lens-ui-prefs-v13'));p.uiLocked=false;window.dispatchEvent(new StorageEvent('storage',{key:'lens-ui-prefs-v13',newValue:JSON.stringify(p)}));})()`);
+      await pause(100);
+      assert.equal(await viewer.evaluate(`document.documentElement.dataset.uiLocked`),role==='Administrator'?'false':'true');
+      const before=await viewer.evaluate(`document.documentElement.style.getPropertyValue(${JSON.stringify(classic?'--inspection-history-width':'--history-fr')})`);
+      const point=await viewer.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(classic?'[title="Drag to resize WT history"]':'[title="Drag to resize history and viewer"]')}),r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()`);
+      await viewer.cdp.send('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount:1});
+      await viewer.cdp.send('Input.dispatchMouseEvent',{type:'mouseMoved',x:point.x-40,y:point.y,buttons:1,button:'left'});
+      await viewer.cdp.send('Input.dispatchMouseEvent',{type:'mouseReleased',x:point.x-40,y:point.y,button:'left',clickCount:1});
+      const after=await viewer.evaluate(`document.documentElement.style.getPropertyValue(${JSON.stringify(classic?'--inspection-history-width':'--history-fr')})`);
+      if(role==='Administrator')assert.notEqual(after,before,'Administrator retains layout drag controls');
+      else{
+        assert.equal(after,before,'Non-admin cannot drag a panel even when saved profile is unlocked');
+        assert(await viewer.evaluate(`!!document.querySelector('[aria-label="Switch to light theme (Premium White)"]')`),'Viewer gets theme icon');
+        await viewer.evaluate(`document.querySelector('[aria-label="Switch to light theme (Premium White)"]').click()`);
+        await waitFor(viewer,`document.documentElement.dataset.theme==='premium-white'`,'Light toggle applies Premium White');
+        assert.equal(await viewer.evaluate(`JSON.parse(localStorage.getItem('lens-ui-prefs-v13')).theme`),'graphite','Viewer theme does not overwrite shared preferences');
+        await viewer.evaluate(`document.querySelector('[aria-label="Switch to dark theme (Graphite)"]').click()`);
+        await waitFor(viewer,`document.documentElement.dataset.theme==='graphite'`,'Dark toggle applies Graphite');
+        await viewer.evaluate(`window.dispatchEvent(new Event('lens-open-customizer'))`);
+        assert(!await viewer.evaluate(`!!document.querySelector('.customDrawer')`),'Non-admin cannot open customization through events');
+        assert.equal(viewer.mutations.length,0,'Viewer does not write configuration');
+      }
+      if(role==='NoUser'){
+        if(classic)assert(await viewer.evaluate(`Array.from(document.querySelectorAll('.sharedClassicHeader button')).filter(b=>['Image Filter','Registration','Focus','Settings','BV Test','Info','Help','Trendline','Exit','Dataset'].includes(b.textContent.trim())).every(b=>b.disabled)`),'Signed-out navigation is disabled');
+        for(const event of ['lens-open-registration','lens-open-focus','lens-open-settings','lens-open-bv-test','lens-open-info','lens-open-image-filter'])await viewer.evaluate(`window.dispatchEvent(new Event(${JSON.stringify(event)}))`);
+        await pause(100);
+        assert(!await viewer.evaluate(`!!document.querySelector('.registrationModal,.focusModal,.settingsModal,.bvTestModal,.infoModal,.imageFilterModal')`),'Signed-out popup events are blocked');
+        assert(await viewer.evaluate(`Array.from(document.querySelectorAll('button')).filter(b=>b.textContent.trim()==='Trend Line').every(b=>b.disabled)`),'Signed-out Trend Line is disabled');
+        if(classic)assert(await viewer.evaluate(`Array.from(document.querySelectorAll('.sharedClassicHeader button')).find(b=>b.textContent.trim()==='Switch User').disabled===false`),'Switch User remains available while signed out');
+        await viewer.cdp.send('Page.navigate',{url:`${base}/settings`});
+        await waitFor(viewer,`location.pathname==='/'&&!!document.querySelector('.historyTable')`,'Signed-out direct settings link returns to dashboard');
+        await pause(300);
+        assert(!await viewer.evaluate(`!!document.querySelector('.settingsModal')`),'Direct popup URL cannot bypass sign-in restriction');
+      }
+      if(role==='Operator'){
+        await viewer.evaluate(`document.querySelector('[aria-label="Switch to light theme (Premium White)"]').click()`);
+        await waitFor(viewer,`document.documentElement.dataset.theme==='premium-white'`,'Viewer theme selected before reload');
+        await viewer.cdp.send('Page.reload');
+        await waitFor(viewer,`document.documentElement.dataset.theme==='premium-white'&&document.documentElement.dataset.loggedIn==='true'`,'Private viewer appearance survives refresh');
+      }
+      assert.deepEqual(viewer.errors,[],'No browser errors in role-gated UI');
+      reports.push({mode:classic?'Classic':'Modern',role,passed:true});
+    }
+    console.log(JSON.stringify({accessChecks:reports},null,2));return;
+  }
   const classic=await makeViewer(true),modern=await makeViewer(false);
   const labels=['Live','Yield','Defects','3D Trays','Timing'];
   for(const viewer of [classic,modern]){
@@ -379,8 +463,15 @@ async function cumulativeAccuracy(viewer,source,label){
     assert(clock,'Live clock has machine-readable time');await pause(1150);
     assert.notEqual(await viewer.evaluate(`document.querySelector('.trendLiveClock time,time.trendLiveClock,.trendLiveClock[datetime]')?.getAttribute('datetime')`),clock,'Live clock advances without data refresh');
     const initialAnalytics=analyticsTotals(snapshot.results);
+    const rangeOptions=await viewer.evaluate(`Array.from(document.querySelector('[aria-label="Trend time range"]').options).map(option=>({value:option.value,label:option.textContent}))`);
+    const lifetimeIndex=rangeOptions.findIndex(option=>option.value==='all');
+    assert.equal(rangeOptions[lifetimeIndex].label,'Lifetime');
+    assert.equal(rangeOptions[lifetimeIndex-1].value,'24h');
+    if(viewer.classic)assert.equal(rangeOptions[lifetimeIndex+1].value,'custom');
     await cumulativeAccuracy(viewer,snapshot.results,`${viewer.classic?'Classic':'Modern'} retained running totals`);
     await qualityAccuracy(viewer,initialAnalytics,`${viewer.classic?'Classic':'Modern'} all retained results`);
+    await viewer.evaluate(`document.querySelector('.yieldClassImpact button').click()`);
+    await galleryCheck(viewer);
     await defectAccuracy(viewer,initialAnalytics,`${viewer.classic?'Classic':'Modern'} all retained results`);
     await defectCounting(viewer,initialAnalytics);
     const skipTablet=process.env.TREND_QA_SKIP_TABLET==='1'||viewer.classic&&process.env.TREND_QA_SKIP_CLASSIC_TABLET==='1';
@@ -511,13 +602,17 @@ async function cumulativeAccuracy(viewer,source,label){
   }
   reports.push({cases:'Backend clock two minutes ahead: newest streaming frame remains visible immediately in rolling and all-results windows'});
   const behind=result(20,'OK',Date.now());
-  snapshot={...snapshot,sequence:5,job:{...snapshot.job,completed:20,current_sample_id:'trend-21'},results:[...snapshot.results,behind]};
-  const behindUpdate={type:'result',stream_id:snapshot.stream_id,sequence:5,current_job_id:snapshot.current_job_id,job:snapshot.job,result:behind};
   for(const viewer of [classic,modern]){
     await viewer.evaluate(`window.__trendRealNow=Date.now;Date.now=()=>window.__trendRealNow()+360000`);
     await range(viewer,'5m');
-    await waitFor(viewer,`document.querySelector('.trendLineWorkspace').getAttribute('data-count')==='0'`,'historical results do not pull an idle rolling window into the past',5000);
+    await waitFor(viewer,`document.querySelector('.trendLineWorkspace').getAttribute('data-count')==='0'`,'historical results do not pull an idle rolling window into the past',10000);
     await cumulativeAccuracy(viewer,snapshot.results.filter(inspection=>inspection.sample_id!=='trend-20'),`${viewer.classic?'Classic':'Modern'} no current intervals`);
+  }
+  // Publish the fresh frame only after BOTH tabs have checked idle history;
+  // background polling must not deliver it early to the second tab.
+  snapshot={...snapshot,sequence:5,job:{...snapshot.job,completed:20,current_sample_id:'trend-21'},results:[...snapshot.results,behind]};
+  const behindUpdate={type:'result',stream_id:snapshot.stream_id,sequence:5,current_job_id:snapshot.current_job_id,job:snapshot.job,result:behind};
+  for(const viewer of [classic,modern]){
     await viewer.evaluate(`window.__trendBroadcast(${JSON.stringify(behindUpdate)})`);
     await waitFor(viewer,`document.querySelector('.trendLineWorkspace').getAttribute('data-count')==='18'`,'fresh active frame corrects client clock ahead of backend');
     await viewer.evaluate('Date.now=window.__trendRealNow');

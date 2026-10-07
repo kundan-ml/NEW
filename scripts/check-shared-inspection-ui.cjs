@@ -41,6 +41,8 @@ const datasets = ['old', 'live'].map((id, index) => ({
 const makeJob = (id, completed, status = 'running') => ({ id, dataset_id: 'live', status, total: 32, completed, current_sample_id: `live-${completed + 1}`, summary: { OK: completed, NOK: 0, WARN: 0 } });
 let snapshot = { type: 'snapshot', stream_id: 'fixture-stream', sequence: 100, current_job_id: 'job-a', job: makeJob('job-a', 5), results: Array.from({ length: 5 }, (_, i) => result('live', i + 1)) };
 let delayedLive = null;
+let delayedThumbnail = '';
+let fixtureLogs = [];
 let setupPreviewFixtures=false;
 let machineMode='AUTO';
 let setupSession=0;
@@ -80,6 +82,7 @@ async function fixtureRequest(viewer, event) {
   if (route === '/api/image') {
     contentType = 'image/svg+xml';
     const small = url.searchParams.get('thumbnail') === '1';
+    if(small&&url.searchParams.get('sampleId')===delayedThumbnail)await pause(700);
     if (!small) await pause(800);
     body = `<svg xmlns="http://www.w3.org/2000/svg" width="${small ? 160 : 640}" height="${small ? 120 : 480}" viewBox="0 0 640 480"><rect width="640" height="480" fill="#050505"/><circle cx="320" cy="240" r="190" fill="#777"/><text x="20" y="35" fill="white">${url.searchParams.get('sampleId')}</text></svg>`;
   } else if (setupPreviewFixtures && route.endsWith('/datasets/uploads') && method==='POST') {
@@ -109,19 +112,20 @@ async function fixtureRequest(viewer, event) {
   } else if (manualInspectionFixtures&&route.endsWith('/inspect/old/sample/old-1')&&method==='POST') {
     const output=result('old',1),defect={...fixtureDefect,name:'Manual regression defect'};
     body={...output,status:'NOK',defects:[defect],created_at:'2026-10-05T12:00:01Z',channels:output.channels.map(channel=>({...channel,status:'NOK',defects:channel.channel==='h'?[defect]:[],elapsed_ms:78.901}))};
-  } else if (route === '/api/ui-config/access') body = { canCustomize: false };
+  } else if (route === '/api/ui-config/access') body = { canCustomize: false,loggedIn:true };
   else if (route === '/api/ui-config') body = { manualSkeleton: viewer.classic, theme: 'graphite' };
   else if (route.endsWith('/inspection/live')) {
     body = structuredClone(snapshot);
     if (delayedLive && !delayedLive.used) { delayedLive.used = true; body = delayedLive.value; await pause(delayedLive.delay); }
-  } else if (route.endsWith('/system/info')) body = { app: 'Lens Inspection', version: '3', mode: machineMode, bridge: 'HALCON fixture', settings: { station_name: 'Station 1', line_name: 'Fixture', installation_name: 'Fixture', station_index: 1, wt_capacity: 16, role: viewer.classic ? 'Administrator' : 'Operator', channel_labels: { h: 'Telecentric', d: 'Dark Field', n: 'Diffuse', p: 'Phase Contrast' }, image_format: 'BMP' }, session: { username: viewer.classic ? 'admin-fixture' : 'operator-fixture', role: viewer.classic ? 'Administrator' : 'Operator', logged_in: true } };
+  } else if (route.endsWith('/system/info')) body = { app: 'Lens Inspection', version: '3', mode: viewer.forceMode||machineMode, bridge: 'HALCON fixture', settings: { station_name: 'Station 1', line_name: 'Fixture', installation_name: 'Fixture', station_index: 1, wt_capacity: 16, role: viewer.classic ? 'Administrator' : 'Operator', channel_labels: { h: 'Telecentric', d: 'Dark Field', n: 'Diffuse', p: 'Phase Contrast' }, image_format: 'BMP' }, session: { username: viewer.classic ? 'admin-fixture' : 'operator-fixture', role: viewer.classic ? 'Administrator' : 'Operator', logged_in: true } };
   else if (route.endsWith('/storage/state')) body = { active: false, saved_lenses: 0, saved_images: 0, event_count: 0, position_counts: {}, error_counts: {}, reason: 'Fixture' };
   else if (route.endsWith('/config/status-symbol-legend')) body = { statuses: [], defects: [] };
   else if (route.endsWith('/config/image-filters')) body = imageFilterSettings;
   else if (route.endsWith('/datasets')) body = datasets;
   else if (/\/datasets\/[^/]+\/samples$/.test(route)) { const id = route.split('/').at(-2); body = { total: sampleRows[id].length, items: sampleRows[id] }; }
   else if (/\/results\/[^/]+$/.test(route)) { const id = route.split('/').at(-1); body = { items: id === 'old' ? Array.from({ length: 16 }, (_, i) => result('old', i + 1)) : snapshot.job?.dataset_id === id ? snapshot.results : [] }; }
-  else if (route.endsWith('/logs')) body = { items: [] };
+  else if (route.endsWith('/logs')) body = { items: fixtureLogs };
+  else if (route.endsWith('/datasets/local-folders')) body = {path:'/fixture/images',parent:'/fixture',folders:[{name:'Inspection set',path:'/fixture/images/set'}],truncated:false};
   else if (route.endsWith('/auth/current')) body = { username: 'fixture', role: 'Operator', logged_in: true };
   else body = {};
   if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
@@ -142,7 +146,7 @@ function socketFixture(initial) {
     const rectangle=CanvasRenderingContext2D.prototype.strokeRect;
     CanvasRenderingContext2D.prototype.strokeRect=function(...args){window.__qaOverlays++;return rectangle.apply(this,args);};
     const draw=CanvasRenderingContext2D.prototype.drawImage;
-    CanvasRenderingContext2D.prototype.drawImage=function(image,...args){if(image instanceof HTMLImageElement){window.__qaDraws.push(image.naturalWidth);if(args.length===4)window.__qaDrawCalls.push({x:args[0],y:args[1],width:args[2],height:args[3]});}return draw.call(this,image,...args);};
+    CanvasRenderingContext2D.prototype.drawImage=function(image,...args){if(image instanceof HTMLImageElement){window.__qaDraws.push(image.naturalWidth);window.__qaLastCanvasPreview=image.dataset.previewUrl||'';if(args.length===4)window.__qaDrawCalls.push({x:args[0],y:args[1],width:args[2],height:args[3]});}return draw.call(this,image,...args);};
     localStorage.setItem('lens-operation-mode','MANUAL');
     window.__qaSnapshot=${JSON.stringify(initial)};
     window.__qaSockets=[];window.__qaSocketBlock=false;window.__qaSocketOpens=0;
@@ -289,12 +293,34 @@ async function checkBvCanvasContainment(viewer,dimensions){
   for(const viewer of viewers)await checkPinchDoesNotSelect(viewer);
   reports.push({case:'two-touch pinch with stationary finger over defect does not select on final release'});
   reports.push({ case: 'independent profiles late join + backend-authoritative mode', classic: await inspect(classic), modern: await inspect(modern) });
-  await advance(6); await Promise.all(viewers.map(viewer => checkPosition(viewer, 6)));
+  delayedThumbnail='live-8';
+  await advance(8);await pause(150);
+  for(const viewer of viewers){
+    await checkPosition(viewer,5);
+    assert.equal((await inspect(viewer)).images,5,'WT View must retain the presented frame while the next preview is decoding');
+  }
+  await Promise.all(viewers.map(viewer => checkPosition(viewer, 8)));
+  for(const viewer of viewers)assert(await viewer.evaluate(`window.__qaLastCanvasPreview.includes('sampleId=live-8')`),'Canvas must already have painted the same frame as the newly selected history position');
+  delayedThumbnail='';
+  reports.push({case:'Canvas, WT View and WT History advance together after delayed thumbnail decode'});
+  fixtureLogs=[{time:new Date().toISOString(),level:'INFO',message:'Live fixture inspection message'}];
+  await classic.evaluate(`Array.from(document.querySelectorAll('button')).find(button=>button.textContent.trim()==='System messages').click()`);
+  await waitFor(classic,`document.querySelector('.referenceMessageRows')?.textContent.includes('Live fixture inspection message')`,'system messages refresh during an active job');
+  await openWt(classic);
+  reports.push({case:'System messages refresh without waiting for job completion'});
+  await classic.evaluate(`Array.from(document.querySelectorAll('button')).find(button=>button.textContent.trim()==='Dataset').click()`);
+  await waitFor(classic,`!!document.querySelector('.uploadSourceSelector')`,'dataset source selector');
+  await classic.evaluate(`Array.from(document.querySelectorAll('.uploadModalWindow button')).find(button=>button.textContent.includes('Browse server')).click()`);
+  await waitFor(classic,`document.querySelector('.serverFolderBrowser')?.textContent.includes('Inspection set')`,'backend folder browser');
+  assert(await classic.evaluate(`(()=>{const element=document.querySelector('.uploadModalWindow'),r=element.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight&&getComputedStyle(document.querySelector('.uploadSourceSelector')).display==='grid'})()`),'Dataset popup and source options fit the viewport');
+  if(process.env.UPLOAD_QA_SCREENSHOT){const capture=await classic.cdp.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(process.env.UPLOAD_QA_SCREENSHOT,Buffer.from(capture.data,'base64'));}
+  await classic.evaluate(`document.querySelector('.uploadModalWindow .modalClose').click()`);
+  reports.push({case:'Theme-matched dataset popup and direct folder browser fit viewport'});
   await modern.cdp.send('Page.reload', { ignoreCache: true });
   await waitFor(modern, '!!document.querySelector(".viewerPositionPill")', 'reload hydration');
-  await modern.evaluate(`window.__qaBroadcast(${JSON.stringify(snapshot)})`); await checkPosition(modern, 6);
+  await modern.evaluate(`window.__qaBroadcast(${JSON.stringify(snapshot)})`); await checkPosition(modern, 8);
   await applyAppearance(modern);
-  for (let position = 7; position <= 16; position++) await advance(position);
+  for (let position = 9; position <= 16; position++) await advance(position);
   await Promise.all(viewers.map(viewer => checkPosition(viewer, 16)));
   await advance(17); await Promise.all(viewers.map(viewer => checkPosition(viewer, 1, 'WT 3')));
   await openWt(classic); await pause(150);
@@ -309,16 +335,17 @@ async function checkBvCanvasContainment(viewer,dimensions){
   reports.push({ case: 'reload + tray16 rollover', classic: await inspect(classic), modern: await inspect(modern) });
   imageFilterSettings={...imageFilterSettings,positions:[16],apply_to_display:true};
   for(const viewer of viewers)await viewer.evaluate(`window.dispatchEvent(new Event('lens-image-filter-changed'))`);
-  await Promise.all(viewers.map(viewer=>checkPosition(viewer,16,'WT 2')));
+  await Promise.all(viewers.map(viewer=>checkPosition(viewer,1,'WT 3')));
   await advance(18);
   for(const viewer of viewers){
-    await checkPosition(viewer,16,'WT 2');
-    await checkGallery(viewer,['live-17','live-18'],'latest tray gallery despite rejected live canvas positions');
+    await checkPosition(viewer,2,'WT 3');
+    assert(await viewer.evaluate(`window.__qaLastCanvasPreview.includes('sampleId=live-18')`),'Restrictive position filter must not freeze the actual live canvas frame');
+    await checkGallery(viewer,['live-17','live-18'],'live gallery follows the same tray as the canvas despite idle review filters');
   }
   snapshot={...snapshot,sequence:snapshot.sequence+1,job:{...snapshot.job,status:'completed'}};
   await broadcast({type:'completed',stream_id:snapshot.stream_id,sequence:snapshot.sequence,current_job_id:snapshot.current_job_id,job:snapshot.job});
-  for(const viewer of viewers)await checkGallery(viewer,['live-17','live-18'],'filtered gallery remains on latest tray after completion');
-  reports.push({case:'display filter holds matching canvas without hiding/resetting current tray on rollover or completion'});
+  for(const viewer of viewers){await checkPosition(viewer,2,'WT 3');await checkGallery(viewer,['live-17','live-18'],'latest frame and tray remain synchronized after completion');}
+  reports.push({case:'Restrictive idle display filter cannot freeze live canvas; canvas, history and WT stay synchronized through completion'});
   imageFilterSettings={...imageFilterSettings,positions:Array.from({length:16},(_,index)=>index+1),apply_to_display:false};
   for(const viewer of viewers)await viewer.evaluate(`window.dispatchEvent(new Event('lens-image-filter-changed'))`);
   await Promise.all(viewers.map(viewer=>checkPosition(viewer,2,'WT 3')));
@@ -340,10 +367,16 @@ async function checkBvCanvasContainment(viewer,dimensions){
   delayedLive = null;
   reports.push({ case: 'same dataset rerun + stale snapshot', classic: await inspect(classic), modern: await inspect(modern) });
   await classic.evaluate(`document.querySelector('.historyTable button[aria-label^="WT 1 position 1 "]').click()`);
+  await checkPosition(classic,3,'WT 2');
+  reports.push({case:'Automatic inspection stays on the latest completed frame when history is clicked'});
+  classic.forceMode='SETUP';
+  await classic.evaluate(`window.dispatchEvent(new Event('lens-system-changed'))`);
+  await waitFor(classic,`localStorage.getItem('lens-operation-mode')==='MANUAL'`,'Manual mode permits held historical inspection');
+  await classic.evaluate(`document.querySelector('.historyTable button[aria-label^="WT 1 position 1 "]').click()`);
   await checkPosition(classic, 1, 'WT 1');
   assert.equal((await inspect(classic)).sockets, 1, 'Historical selection must not close the global observer');
   await advance(4, 'job-b', 'b'); await checkPosition(classic, 1, 'WT 1');
-  assert(await classic.evaluate(`document.querySelector('.viewerHoldControl').getAttribute('aria-pressed')==='true'`),'History selection holds the canvas without stopping the observer');
+  assert.equal((await inspect(classic)).mode,'MANUAL','Manual history selection preserves review mode without stopping the observer');
   await checkGallery(classic,['live-1','live-2','live-3','live-4'],'held historic lens does not freeze live WT gallery');
   snapshot = { ...snapshot, sequence: snapshot.sequence + 1, job: { ...snapshot.job, status: 'completed' } };
   await broadcast({ type: 'completed', stream_id: snapshot.stream_id, sequence: snapshot.sequence, current_job_id: 'job-b', job: snapshot.job });
@@ -363,11 +396,14 @@ async function checkBvCanvasContainment(viewer,dimensions){
     await waitFor(viewer,`Array.from(document.querySelectorAll('.referenceInfoRow')).some(row=>row.innerText.includes('Inference time')&&row.innerText.includes('78.901 ms'))`,'manual reinspection updates the held inference timing');
     await waitFor(viewer,`(document.querySelector('.inspectionDefectList')||document.querySelector('.oakDefectList'))?.textContent.includes('Manual regression defect')`,'manual reinspection updates held defects');
     assert(await viewer.evaluate(`Array.from(document.querySelectorAll('.referenceInfoRow')).some(row=>row.innerText.includes('Result')&&row.innerText.includes('NOK'))`),'Held lens shows the new manual result');
-    await viewer.evaluate(`document.querySelector('.viewerHoldControl').click()`);
+    await viewer.evaluate(`document.querySelector('.viewerHoldControl')?.click()`);
   }
   manualInspectionFixtures=false;
   assert.equal(manualFixtureWrites.length,2,'Exactly two isolated manual inspections are intercepted');
   reports.push({case:'manual reinspection updates result, defects and exact timing of held lens in both modes'});
+  delete classic.forceMode;
+  await classic.evaluate(`window.dispatchEvent(new Event('lens-system-changed'))`);
+  await waitFor(classic,`localStorage.getItem('lens-operation-mode')==='AUTO'`,'Restore automatic mode after manual hold test');
   // Standalone Inspect Selected is also shared: retain the other positions,
   // append the newly inspected lens last, and follow it in all idle viewers.
   snapshot = { ...snapshot, sequence: snapshot.sequence + 1, current_job_id: 'single-job',

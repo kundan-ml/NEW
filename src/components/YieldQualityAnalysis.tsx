@@ -9,7 +9,7 @@ import type {StatusSymbolLegend} from '@/types';
 import {seriesStyle} from './LiveDefectTrend';
 import './yield-quality-analysis.css';
 
-type Props={model:InspectionTrends;legend?:StatusSymbolLegend|null};
+type Props={model:InspectionTrends;legend?:StatusSymbolLegend|null;onClassClick?:(name:string)=>void};
 const percent=(value:number|null)=>value===null?'—':`${value.toFixed(1)}%`;
 const time=(value:number,includeDate=false)=>new Date(value).toLocaleString([],{
   ...(includeDate?{month:'short' as const,day:'numeric' as const}:{}),
@@ -23,7 +23,7 @@ function useChartSize(){
   return {ref,...size};
 }
 
-export function YieldQualityAnalysis({model,legend}:Props){
+export function YieldQualityAnalysis({model,legend,onClassClick}:Props){
   const analysis=useMemo(()=>buildQualityAnalysis(model),[model]);
   const codes=useMemo(()=>defectClassCodes(analysis.classes.map(item=>item.name)),[analysis.classes]);
   const[selectedClass,setSelectedClass]=useState<string|null>(null);
@@ -47,7 +47,7 @@ export function YieldQualityAnalysis({model,legend}:Props){
       <section className="qualityYieldTimeline"><header><span><strong>Yield over time</strong><small>Measured inspection intervals</small></span><span className={`qualityYieldDelta ${change!==null&&change<0?'isDown':''}`} title="Change between the latest two occupied intervals">{change===null?'No comparison yet':`${change>0?'+':''}${change.toFixed(1)} pp`}</span></header><YieldTimeline model={model}/><small className="qualityTimelineNote">Dots = measured yield · dashed gaps = no yield measurement</small></section>
     </div>
     <section className="qualityClassSection"><header><span><strong>Affected lenses by defect class</strong><small>One lens can appear in more than one class</small></span><b>{analysis.activeClasses} {analysis.activeClasses===1?'class':'classes'}</b></header>
-      <div className="yieldClassImpact" style={classLayout}>{analysis.classes.map(item=>{const color=seriesStyle(item,legend).color;return <button key={item.key} data-quality-class={item.key} data-lenses={item.lenses} data-occurrences={item.occurrences} aria-pressed={selectedClass===item.key} aria-label={`${item.name}: ${item.lenses} affected lenses, ${item.occurrences} occurrences`} title={`${item.name} · ${item.lenses} affected lenses (${item.affectedPercent.toFixed(1)}% of inspected) · ${item.occurrences} occurrences`} onClick={()=>setSelectedClass(selectedClass===item.key?null:item.key)} style={{'--quality-class-color':color} as CSSProperties}><span className="qualityClassCode">{codes.get(item.name)}</span><span className="qualityClassLabel">{item.name}</span><b>{item.lenses}<small> {item.lenses===1?'lens':'lenses'}</small></b><span className="qualityClassMeter"><i style={{width:`${item.affectedPercent}%`}}/></span><em>{item.affectedPercent.toFixed(1)}%</em></button>})}{!analysis.classes.length&&<div className="qualityClassEmpty">{model.total?'No defects reported in this period':'Class information appears after inspection'}</div>}</div>
+      <div className="yieldClassImpact" style={classLayout}>{analysis.classes.map(item=>{const color=seriesStyle(item,legend).color;return <button key={item.key} data-quality-class={item.key} data-lenses={item.lenses} data-occurrences={item.occurrences} aria-pressed={selectedClass===item.key} aria-label={`${item.name}: ${item.lenses} affected lenses, ${item.occurrences} occurrences`} title={`${item.name} · ${item.lenses} affected lenses (${item.affectedPercent.toFixed(1)}% of inspected) · ${item.occurrences} occurrences`} onClick={()=>{setSelectedClass(selectedClass===item.key?null:item.key);onClassClick?.(item.name)}} style={{'--quality-class-color':color} as CSSProperties}><span className="qualityClassCode">{codes.get(item.name)}</span><span className="qualityClassLabel">{item.name}</span><b>{item.lenses}<small> {item.lenses===1?'lens':'lenses'}</small></b><span className="qualityClassMeter"><i style={{width:`${item.affectedPercent}%`}}/></span><em>{item.affectedPercent.toFixed(1)}%</em></button>})}{!analysis.classes.length&&<div className="qualityClassEmpty">{model.total?'No defects reported in this period':'Class information appears after inspection'}</div>}</div>
       <footer className="qualityClassReadout" role="status">{active?<><b>{active.name}</b><span>{active.lenses} affected {active.lenses===1?'lens':'lenses'} · {active.occurrences} {active.occurrences===1?'occurrence':'occurrences'} · {active.affectedPercent.toFixed(1)}% of inspected</span></>:<span>No-lens and no-test results remain in inspection and class counts, but are excluded from yield.</span>}</footer>
     </section>
   </section>;

@@ -7,6 +7,7 @@ import {
   Microscope,Search,Settings,ShieldCheck,SlidersHorizontal,Sparkles,Wrench,X
 } from 'lucide-react';
 import {manualUrl} from '@/lib/api';
+import {useUI} from './UIProvider';
 
 const commands=[
   {name:'Live Inspection',detail:'Main operator workspace, WT view, yield and lens viewer',href:'/',icon:Microscope,keys:'G I'},
@@ -25,6 +26,7 @@ const commands=[
 ];
 
 export function CommandPalette({open,onClose,onCustomize}:{open:boolean;onClose:()=>void;onCustomize:()=>void}){
+  const{canCustomize,loggedIn}=useUI();
   const[q,setQ]=useState('');
   const[active,setActive]=useState(0);
   const router=useRouter();
@@ -44,7 +46,7 @@ export function CommandPalette({open,onClose,onCustomize}:{open:boolean;onClose:
   },[q]);
 
   useEffect(()=>{setActive(0)},[q]);
-  if(!open)return null;
+  if(!open||!loggedIn)return null;
 
   function go(href:string){
     onClose();
@@ -88,7 +90,7 @@ export function CommandPalette({open,onClose,onCustomize}:{open:boolean;onClose:
 
       <div className="paletteMeta">
         <span>Navigation</span>
-        <button onClick={()=>{onClose();onCustomize()}}><Sparkles/>Customize interface</button>
+        {canCustomize&&<button onClick={()=>{onClose();onCustomize()}}><Sparkles/>Customize interface</button>}
       </div>
 
       <div className="commandResults">

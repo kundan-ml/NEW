@@ -2,7 +2,7 @@
 
 import {useEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
-import {FolderInput,FolderUp,Loader2,X} from 'lucide-react';
+import {FolderInput,FolderUp,Loader2,X,Folder,ArrowUp} from 'lucide-react';
 import {api} from '@/lib/api';
 
 export function DatasetLoader({open,onClose,onLoaded}:{open:boolean;onClose:()=>void;onLoaded:(id:string)=>void}){
@@ -11,6 +11,10 @@ export function DatasetLoader({open,onClose,onLoaded}:{open:boolean;onClose:()=>
   const[busy,setBusy]=useState(false);
   const[err,setErr]=useState('');
   const[uploadPercent,setUploadPercent]=useState<number|null>(null);
+  const[source,setSource]=useState<'server'|'upload'>('server');
+  const[folders,setFolders]=useState<Awaited<ReturnType<typeof api.localFolders>>|null>(null);
+  const[browsing,setBrowsing]=useState(false);
+  const[folderBusy,setFolderBusy]=useState(false);
   const inputRef=useRef<HTMLInputElement>(null);
 
   useEffect(()=>{
@@ -22,11 +26,18 @@ export function DatasetLoader({open,onClose,onLoaded}:{open:boolean;onClose:()=>
 
   if(!open||typeof document==='undefined')return null;
 
+  async function browse(folder?:string){
+    setFolderBusy(true);setErr('');
+    try{const listing=await api.localFolders(folder);setFolders(listing);setPath(listing.path);setBrowsing(true);}
+    catch(error){setErr(error instanceof Error?error.message:'Cannot browse the backend folder. You can enter its path directly.');}
+    finally{setFolderBusy(false);}
+  }
+
   async function loadPath(){
     setUploadPercent(null);
     setBusy(true);setErr('');
     try{
-      const d=await api.loadPath(path,name);
+      const d=await api.loadPath(path.trim(),name);
       onLoaded(d.id);
       onClose();
     }catch(e){
@@ -57,29 +68,34 @@ export function DatasetLoader({open,onClose,onLoaded}:{open:boolean;onClose:()=>
     <div className="modernModal uploadModalWindow" role="dialog" aria-modal="true" aria-labelledby="upload-folder-title">
       <header className="uploadModalBrand">
         <div className="modalBadge"><FolderInput/></div>
-        <span><small>EMAGE GROUP · DATA INTAKE</small><h2 id="upload-folder-title">Upload inspection images</h2><p>Add a complete camera folder for WT processing and live inference.</p></span>
+        <span><small>EMAGE GROUP · DATA INTAKE</small><h2 id="upload-folder-title">Load inspection images</h2><p>Read backend-local images directly, or upload from a different computer.</p></span>
         <button className="modalClose" onClick={onClose} disabled={busy} aria-label="Close upload folder"><X/></button>
       </header>
       <div className="uploadModalBody">
-        <div className="uploadStatus"><i/><span>Ready for import</span><em>H · D · N · P frame set</em></div>
+        <div className="uploadStatus"><i/><span>{busy?'Preparing inspection':source==='server'?'Direct disk access':'Folder upload'}</span><em>H · D · N · P</em></div>
         <label>Dataset name
           <input value={name} onChange={e=>setName(e.target.value)} placeholder="Inspection lot"/>
         </label>
-        <div className="uploadRouteCard">
+        <div className="uploadSourceSelector"><button type="button" disabled={busy} aria-pressed={source==='server'} onClick={()=>setSource('server')}><Folder/><span><b>Backend folder</b><small>Read directly · no upload</small></span></button><button type="button" disabled={busy} aria-pressed={source==='upload'} onClick={()=>setSource('upload')}><FolderUp/><span><b>Upload folder</b><small>Images on another computer</small></span></button></div>
+        {source==='server'&&<div className="uploadRouteCard">
           <div className="uploadRouteHead"><i>01</i><span><b>Server folder</b><small>Use images already available on the inspection PC</small></span></div>
           <label>Folder path on backend machine
             <div className="modalInline">
               <input placeholder="D:\\Inspection Data\\Lot 01" value={path} onChange={e=>setPath(e.target.value)}/>
-              <button onClick={loadPath} disabled={busy||!path}>{busy?<Loader2 className="spin"/>:<FolderInput/>}Load</button>
+              <button onClick={()=>void browse(path.trim()||undefined)} disabled={busy||folderBusy}>{folderBusy?<Loader2 className="spin"/>:<Folder/>}Browse server</button>
+              <button onClick={loadPath} disabled={busy||!path.trim()}>{busy?<Loader2 className="spin"/>:<FolderInput/>}Read directly</button>
             </div>
           </label>
-        </div>
-        <div className="orLine"><span>OR UPLOAD FROM THIS COMPUTER</span></div>
+          {browsing&&folders&&<div className="serverFolderBrowser" aria-label="Backend folders"><div><b>{folders.path}</b>{folders.parent&&<button type="button" onClick={()=>void browse(folders.parent!)} disabled={folderBusy}><ArrowUp size={14}/>Parent</button>}</div>{folders.folders.map(folder=><button type="button" key={folder.path} disabled={folderBusy} onClick={()=>void browse(folder.path)}><Folder size={14}/>{folder.name}</button>)}{!folders.folders.length&&<small>No subfolders. Select Read directly to load this folder.</small>}{folders.truncated&&<small>Showing the first 500 folders. Enter a path to navigate directly.</small>}</div>}
+          <small>Original files remain in this folder. No upload or image copy is performed.</small>
+        </div>}
+        {source==='upload'&&<>
         <input ref={inputRef} type="file" multiple {...dirProps} hidden onChange={e=>upload(e.target.files)}/>
         <div className="uploadDropZone">
           <span className="uploadDropGlow"/>
           <button className="uploadFolder" onClick={()=>inputRef.current?.click()} disabled={busy}>{busy?<><Loader2 className="spin"/><span className="uploadFolderCopy"><small>PROCESSING FOLDER</small><b>{uploadPercent===100?'Validating camera images…':'Importing image folder…'}</b><em>{uploadPercent===null?'Preparing inspection data':`${uploadPercent}% uploaded · one dataset`}</em></span><i>{uploadPercent===null?'Wait':`${uploadPercent}%`}</i></>:<><FolderUp/><span className="uploadFolderCopy"><small>LOCAL IMAGE FOLDER</small><b>Choose and upload image folder</b><em>Preserves camera folders and file names</em></span><i>Browse</i></>}</button>
         </div>
+        </>}
         <div className="uploadAssurance"><span><i>✓</i> Folder structure retained</span><span><i>✓</i> Four camera channels validated</span><span><i>✓</i> Automatic queue available</span></div>
         {err&&<div className="errorBox">{err}</div>}
       </div>

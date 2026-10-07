@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import {usePathname} from 'next/navigation';
+import {usePathname,useRouter} from 'next/navigation';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {
   ChartNoAxesCombined,
@@ -22,6 +22,7 @@ import {useUI} from './UIProvider';
 import {CustomizationDrawer} from './CustomizationDrawer';
 import {CommandPalette} from './CommandPalette';
 import {ClassicHeader} from './ClassicHeader';
+import {ViewerThemeButton} from './ViewerThemeButton';
 import {ImageFilterWorkspace} from './ImageFilterWorkspace';
 import {RegistrationWorkspace} from './RegistrationWorkspace';
 import {FocusWorkspace} from './FocusWorkspace';
@@ -51,7 +52,8 @@ export function AppShell({children}:{children:React.ReactNode}){
 
 function ShellInner({children}:{children:React.ReactNode}){
   const path=usePathname();
-  const{prefs,set}=useUI();
+  const{prefs,set,loggedIn,authReady,canCustomize}=useUI();
+  const router=useRouter();
   const[customize,setCustomize]=useState(false);
   const[palette,setPalette]=useState(false);
   const[imageFilterOpen,setImageFilterOpen]=useState(false);
@@ -68,6 +70,7 @@ function ShellInner({children}:{children:React.ReactNode}){
   const pageName=items.find(([href])=>href===path)?.[1]||'Lens Inspection';
   const reportBvActivity=useCallback((active:boolean)=>{bvTestActive.current=active},[]);
   const openPopup=useCallback((kind:'imageFilter'|'registration'|'focus'|'settings'|'bvTest'|'info')=>{
+    if(!loggedIn)return;
     if(bvTestActive.current&&kind!=='bvTest')return;
     setCustomize(false);
     setImageFilterOpen(kind==='imageFilter');
@@ -76,7 +79,13 @@ function ShellInner({children}:{children:React.ReactNode}){
     setSettingsOpen(kind==='settings');
     setBvTestOpen(kind==='bvTest');
     setInfoOpen(kind==='info');
-  },[]);
+  },[loggedIn]);
+
+  useEffect(()=>{if(authReady&&((!loggedIn&&path!=='/')||(path==='/ui-studio'&&!canCustomize)))router.replace('/');},[authReady,loggedIn,canCustomize,path,router]);
+  useEffect(()=>{
+    if(!canCustomize)setCustomize(false);
+    if(!loggedIn){setPalette(false);setImageFilterOpen(false);setRegistrationOpen(false);setFocusOpen(false);setSettingsOpen(false);setBvTestOpen(false);setInfoOpen(false);}
+  },[loggedIn,canCustomize]);
 
   useEffect(()=>{if(!sharedChrome)return;void api.system().then(setSystem).catch(()=>{});const timer=window.setInterval(()=>setNow(new Date()),1000);return()=>window.clearInterval(timer)},[sharedChrome,path]);
 
@@ -84,7 +93,7 @@ function ShellInner({children}:{children:React.ReactNode}){
     function key(e:KeyboardEvent){
       if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){
         e.preventDefault();
-        setPalette(true);
+        if(loggedIn)setPalette(true);
       }
       if(e.key==='Escape'){
         if(document.querySelector('.canvasPopupBackdrop'))return;
@@ -99,8 +108,8 @@ function ShellInner({children}:{children:React.ReactNode}){
         }
       }
     }
-    function custom(){setCustomize(true)}
-    function command(){setPalette(true)}
+    function custom(){if(canCustomize)setCustomize(true)}
+    function command(){if(loggedIn)setPalette(true)}
     function imageFilter(){openPopup('imageFilter')}
     function registration(){openPopup('registration')}
     function focus(){openPopup('focus')}
@@ -127,9 +136,10 @@ function ShellInner({children}:{children:React.ReactNode}){
       window.removeEventListener('lens-open-bv-test',bvTest);
       window.removeEventListener('lens-open-info',info);
     };
-  },[openPopup]);
+  },[openPopup,loggedIn,canCustomize]);
 
   useEffect(()=>{
+    if(!authReady)return;
     const query=new URLSearchParams(window.location.search);
     if(query.get('registration')==='1'){openPopup('registration');query.delete('registration')}
     else if(query.get('focus')==='1'){openPopup('focus');query.delete('focus')}
@@ -138,17 +148,18 @@ function ShellInner({children}:{children:React.ReactNode}){
     else if(query.get('info')==='1'){openPopup('info');query.delete('info')}
     else return;
     window.history.replaceState({},'',`${window.location.pathname}${query.size?`?${query}`:''}`);
-  },[openPopup]);
+  },[openPopup,authReady]);
 
   return <div className={`appShell ${prefs.sidebarCollapsed?'sidebarCollapsed':''} ${prefs.manualSkeleton?'manualSkeletonShell pdfSkeletonMode':''}`}>
     {!prefs.manualSkeleton&&<aside className="sideRail productionRail">
-      <button className="brandArea productionBrand emageRailBrand" onClick={()=>setCustomize(true)} title="Emage Group interface settings" aria-label="Open interface settings">
+      <button disabled={!canCustomize} className="brandArea productionBrand emageRailBrand" onClick={()=>{if(canCustomize)setCustomize(true)}} title="Emage Group interface settings" aria-label="Open interface settings">
         <span className="emageMark"><img src="/brand/emage-mark.png" alt="Emage Group"/></span>
       </button>
 
       <nav className="productionNav" aria-label="Primary navigation">
         {items.map(([href,label,Icon])=>
-          <Link key={href} href={href} title={label} aria-current={path===href?'page':undefined} className={`sideNav ${path===href?'active':''}`} onClick={event=>{
+          <Link key={href} href={href} title={label} aria-disabled={!loggedIn&&href!=='/'} tabIndex={!loggedIn&&href!=='/'?-1:undefined} aria-current={path===href?'page':undefined} className={`sideNav ${path===href?'active':''}`} onClick={event=>{
+            if(!loggedIn&&href!=='/'){event.preventDefault();return;}
             if(href==='/settings'||href==='/bv-test'||href==='/system'){
               event.preventDefault();
               openPopup(href==='/settings'?'settings':href==='/bv-test'?'bvTest':'info');
@@ -160,13 +171,14 @@ function ShellInner({children}:{children:React.ReactNode}){
       </nav>
 
       <div className="railFoot productionRailFoot">
-        <button className="sideNav utilityNav" onClick={()=>void openManual().catch(error=>setHelpError(error.message))} title="Open English manual"><BookOpen/><span>Help</span></button>
+        <button disabled={!loggedIn} className="sideNav utilityNav" onClick={()=>void openManual().catch(error=>setHelpError(error.message))} title="Open English manual"><BookOpen/><span>Help</span></button>
         <div className="railOnline" title="Production hardware connection status is not reported"><i/><span>File-input station</span></div>
-        <button className="sideNav utilityNav" onClick={()=>setCustomize(true)} title="Interface Studio">
+        {canCustomize?<button className="sideNav utilityNav" onClick={()=>setCustomize(true)} title="Interface Studio">
           <Settings/><span>Customize</span>
-        </button>
+        </button>:<ViewerThemeButton className="sideNav utilityNav"/>}
         <button
           className="collapseRail"
+          disabled={!canCustomize}
           onClick={()=>set('sidebarCollapsed',!prefs.sidebarCollapsed)}
           title={prefs.sidebarCollapsed?'Expand navigation':'Collapse navigation'}
           aria-expanded={!prefs.sidebarCollapsed}
@@ -198,7 +210,7 @@ function ShellInner({children}:{children:React.ReactNode}){
         <div className="sharedHeaderClock"><small>{now.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})}</small><b>{now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</b></div>
         <div className="sharedHeaderUser"><span><b>{system?.session.username||'Operator'}</b><small>{system?.session.role||'Production'}</small></span></div>
       </header>}
-      <div className="sharedPageBody">{children}</div>
+      <div className="sharedPageBody">{(path==='/'||loggedIn)&&(path!=='/ui-studio'||canCustomize)?children:null}</div>
       {sharedChrome&&<footer className="sharedAppFooter"><span><i/>System ready</span><span>{pageName}</span><span>{system?.mode==='AUTO'?'Automatic operation':'Setup operation'}</span><span>{system?.version?`v${system.version}`:'Emage Group'}</span></footer>}
     </main>
 
@@ -210,10 +222,10 @@ function ShellInner({children}:{children:React.ReactNode}){
     {settingsOpen&&<SettingsWorkspace onClose={()=>setSettingsOpen(false)}/>}
     {bvTestOpen&&<BvTestWorkspace onActivityChange={reportBvActivity} onClose={()=>{if(!bvTestActive.current)setBvTestOpen(false)}}/>}
     {infoOpen&&<InfoWorkspace onClose={()=>setInfoOpen(false)}/>}
-    <CommandPalette
+    {loggedIn&&<CommandPalette
       open={palette}
       onClose={()=>setPalette(false)}
-      onCustomize={()=>setCustomize(true)}
-    />
+      onCustomize={()=>{if(canCustomize)setCustomize(true)}}
+    />}
   </div>;
 }

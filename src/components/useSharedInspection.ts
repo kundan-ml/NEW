@@ -1,12 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, sharedInspectionSocketUrl } from '@/lib/api';
+import { api, sharedInspectionSocketUrl, thumbnailUrl } from '@/lib/api';
+import { prepareDecodedPreview } from '@/lib/preview-cache';
 import { isInspectionMessage, reduceInspectionMessage } from '@/lib/shared-inspection';
 import type { LiveInspectionSnapshot } from '@/types';
 
 /** Observe only: mounting/reloading a workspace must never start inference. */
-export function useSharedInspection() {
+export function useSharedInspection(channel = 'h') {
+  const channelRef = useRef(channel);
+  channelRef.current = channel;
   const [snapshot, setSnapshot] = useState<LiveInspectionSnapshot | null>(null);
   const resyncRef = useRef<() => void>(() => {});
   const resync = useCallback(() => resyncRef.current(), []);
@@ -26,6 +29,8 @@ export function useSharedInspection() {
     let inFlight = false;
     let forceNext = false;
     let controller: AbortController | null = null;
+    let presentation = 0;
+    let presentedFrame = '';
 
     function receive(value: unknown) {
       if (stopped || !isInspectionMessage(value)) return;
@@ -33,7 +38,21 @@ export function useSharedInspection() {
       if (next.snapshot !== current) {
         current = next.snapshot;
         revision += 1;
-        setSnapshot(current);
+        const snapshot = current;
+        const latest = snapshot?.results.at(-1);
+        const frame = latest ? `${snapshot?.stream_id}:${latest.dataset_id}:${latest.sample_id}:${latest.created_at}:${channelRef.current}` : '';
+        const token = ++presentation;
+        const publish = () => {
+          if (stopped || token !== presentation) return;
+          presentedFrame = frame;
+          setSnapshot(snapshot);
+        };
+        // Publish frame metadata and statuses only once its canvas preview is
+        // decoded. Keep reducing incoming messages so stale events never win.
+        if (snapshot && latest && frame !== presentedFrame) {
+          void prepareDecodedPreview(thumbnailUrl(snapshot.job?.dataset_id || latest.dataset_id, latest.sample_id, channelRef.current))
+            .then(publish, publish); // A missing preview must not hide job errors/results.
+        } else publish();
       }
       if (next.resync) requestSnapshot(true);
     }
@@ -45,7 +64,8 @@ export function useSharedInspection() {
       // socket streams frames immediately; HTTP also recovers blocked sockets.
       const healthy = socketHealthy && Date.now() - lastSocketMessage < 45000;
       if (socketHealthy && !healthy) socket?.close();
-      pollTimer = setTimeout(() => requestSnapshot(false), healthy ? 15000 : 1000);
+      const active=current?.job?.status==='running'||current?.job?.status==='queued';
+      pollTimer = setTimeout(() => requestSnapshot(false), healthy ? 15000 : active ? 250 : 1000);
     }
 
     function requestSnapshot(force: boolean) {

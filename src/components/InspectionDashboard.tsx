@@ -39,7 +39,7 @@ import {
 import { API, api, previewUrl, sampleThumbnailUrl, thumbnailUrl } from "@/lib/api";
 import { lensSnapshotArchive } from "@/lib/lens-snapshot";
 import { warmPreviews } from "@/lib/preview-cache";
-import { averageInferenceMs, formatInferenceMs, inferenceElapsedMs, INFERENCE_TIMING_DESCRIPTION } from "@/lib/inference-timing";
+import { inferenceTimingDescription, averageInferenceMs, formatInferenceMs, inferenceElapsedMs, INFERENCE_TIMING_DESCRIPTION } from "@/lib/inference-timing";
 import type {
   DatasetSummary,
   Defect,
@@ -113,7 +113,7 @@ export function InspectionDashboard({
 }: {
   inspectionMode?: boolean;
 }) {
-  const { prefs, patch, canCustomize } = useUI();
+  const { prefs, patch, canCustomize, loggedIn, authReady } = useUI();
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
   const [datasetId, setDatasetId] = useState("");
@@ -124,6 +124,7 @@ export function InspectionDashboard({
   const [channel, setChannel] = useState("h");
   const [job, setJob] = useState<Job | null>(null);
   const [logs, setLogs] = useState<LogRow[]>([]);
+  const [logsError, setLogsError] = useState('');
   const [loader, setLoader] = useState(false);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
@@ -174,7 +175,7 @@ export function InspectionDashboard({
   const [newPasswordConfirm, setNewPasswordConfirm] = useState("");
   const [newUserRole, setNewUserRole] = useState<"Operator" | "Tester">("Operator");
   const [statusNow, setStatusNow] = useState<Date | null>(null);
-  const { snapshot: sharedInspection, resync: resyncInspection } = useSharedInspection();
+  const { snapshot: sharedInspection, resync: resyncInspection } = useSharedInspection(channel);
   const sharedInspectionRef = useRef(sharedInspection);
   sharedInspectionRef.current = sharedInspection;
   const sharedKey = sharedInspection?.job ? `${sharedInspection.stream_id}:${sharedInspection.job.id}` : "";
@@ -188,13 +189,15 @@ export function InspectionDashboard({
   const wtCapacity = info?.settings.wt_capacity || 16;
 
   useEffect(() => {
+    if(!authReady)return;
     const query = new URLSearchParams(window.location.search);
     if (query.get("login") === "1") setLoginOpen(true);
-    if (query.get("dataset") === "1") setLoader(true);
-    if (query.get("trendline") === "1") setTrendPopupOpen(true);
+    if (loggedIn&&query.get("dataset") === "1") setLoader(true);
+    if (loggedIn&&query.get("trendline") === "1") setTrendPopupOpen(true);
     if (query.has("login") || query.has("dataset") || query.has("trendline"))
       window.history.replaceState({}, "", window.location.pathname);
-  }, []);
+  }, [authReady,loggedIn]);
+  useEffect(()=>{if(!loggedIn){setLoader(false);setTrendPopupOpen(false);setInspectionBottomTab(current=>current==='trend-line'?'messages':current);setModernTrendTab('statistics');}},[loggedIn]);
   useEffect(() => {
     // Credentials are never carried into a freshly opened authentication
     // dialog. This also replaces values restored by password managers.
@@ -363,16 +366,22 @@ export function InspectionDashboard({
   useEffect(() => {
     refreshSystem();
     refreshDatasets();
-    api
-      .logs()
-      .then((x) => {
-        if (x.items.length) setLogs(x.items.reverse());
-      })
-      .catch(() => { });
     return () => {
       selectionVersionRef.current += 1;
       historyVersionRef.current += 1;
     };
+  }, []);
+
+  useEffect(() => {
+    let stopped=false;
+    let timer:ReturnType<typeof setTimeout>;
+    const refresh=async()=>{
+      try { const response=await api.logs(); if(!stopped){setLogs([...response.items].reverse());setLogsError('');} }
+      catch(error){if(!stopped)setLogsError(error instanceof Error?error.message:'System messages are unavailable');}
+      finally {if(!stopped)timer=setTimeout(refresh,2000);}
+    };
+    void refresh();
+    return()=>{stopped=true;clearTimeout(timer);};
   }, []);
 
   // Subscribe independently of the selected historical frame. Only a new
@@ -457,17 +466,21 @@ export function InspectionDashboard({
     const firstAttach = appliedSharedRef.current.key !== sharedKey;
     const newFrame = latestFrame !== appliedSharedRef.current.latestFrame;
     const running = sharedJob.status === "queued" || sharedJob.status === "running";
+    const autoFollow=operationMode==='AUTO'&&(running||newFrame);
     const displayPolicy=JSON.stringify([operationMode,displayFilter,statusLegend?.defects]);
     const policyChanged=appliedDisplayPolicyRef.current!==displayPolicy;
     const resume=resumeLiveRef.current&&!hold;
-    const filterActive=operationMode==='AUTO'&&displayFilter?.apply_to_display;
+    // Live synchronization wins over an idle-review display filter. Otherwise
+    // History/WT advance while canvas remains on an older matching defect.
+    const filterActive=operationMode==='AUTO'&&displayFilter?.apply_to_display&&!autoFollow;
     const displayResult=filterActive?sharedInspection.results.slice().reverse().find(result=>{
       const candidate=cached.samples.find(item=>item.id===result.sample_id);
       return candidate&&matchesDisplayFilter(candidate,result,displayFilter,statusLegend);
     }):newest;
     // Local MANUAL controls how uploads start, not whether another operator's
     // live inspection is visible. Idle historical browsing remains untouched.
-    if ((firstAttach || newFrame || resume || policyChanged)&&!hold&&(!filterActive||displayResult)) {
+    if ((firstAttach || newFrame || resume || policyChanged)&&(!hold||autoFollow)&&(!filterActive||displayResult)) {
+      if(autoFollow){setHold(false);setHeldResult(null);setFollowLiveTray(true);}
       selectionVersionRef.current += 1;
       setDatasetId(sharedJob.dataset_id);
       setSamples(cached.samples);
@@ -614,7 +627,8 @@ export function InspectionDashboard({
   // the last live tray on completion until an explicit historical selection.
   const trayGlobalWt=followLiveTray?liveTrayEntry?.wt||activeGlobalWt:activeGlobalWt;
   const wtEntries = useMemo(() => globalHistory.filter(entry => entry.wt === trayGlobalWt), [globalHistory, trayGlobalWt]);
-  const trayThumbnailScope = JSON.stringify(wtEntries.flatMap(entry => Object.keys(entry.sample.images)
+  const previewStreaming=job?.status==='running'||job?.status==='queued';
+  const trayThumbnailScope = JSON.stringify(wtEntries.filter(entry=>!previewStreaming||entry.result||entry.sample.id===job?.current_sample_id).slice().reverse().flatMap(entry => Object.keys(entry.sample.images)
     .filter(candidate => !entry.sample.images[candidate].relative_path.startsWith("demo:"))
     .map(candidate => ({ channel: candidate, url: thumbnailUrl(entry.datasetId, entry.sample.id, candidate) }))));
   useEffect(() => {
@@ -622,16 +636,17 @@ export function InspectionDashboard({
     if (!previews.length) return;
     const controller = new AbortController();
     const urlsFor = (allChannels: boolean) => previews.filter(preview => allChannels ? preview.channel !== channel : preview.channel === channel).map(preview => preview.url);
+    const streaming=job?.status==='running'||job?.status==='queued';
     // Only the active tray is warmed. Other illuminations follow at low
     // concurrency, so switching back is served from memory/browser cache.
-    const active = warmPreviews(urlsFor(false), controller.signal, 3);
+    const active = warmPreviews(urlsFor(false), controller.signal, streaming?1:3);
     const timer = window.setTimeout(() => {
       void active.then(() => {
         if (!controller.signal.aborted) return warmPreviews(urlsFor(true), controller.signal, 2);
       });
-    }, 500);
+    }, streaming?2000:500);
     return () => { controller.abort(); window.clearTimeout(timer); };
-  }, [trayThumbnailScope, channel]);
+  }, [trayThumbnailScope, channel,job?.status]);
   const visibleGlobalHistory = useMemo(() => {
     if (!liveDatasetId) return globalHistory;
     const liveEntries=globalHistory.filter(entry=>entry.datasetId===liveDatasetId);
@@ -740,6 +755,7 @@ export function InspectionDashboard({
     : 0;
 
   function closeApplication() {
+    if(!loggedIn)return;
     if (!window.confirm("Close DSM BV 4Cam Inspection System?")) return;
     window.close();
     window.setTimeout(() => {
@@ -748,6 +764,7 @@ export function InspectionDashboard({
   }
 
   async function run(targetDatasetId = datasetId, targetSampleCount = samples.length) {
+    if(!loggedIn)return;
     const sharedStatus = sharedInspectionRef.current?.job?.status;
     if (!targetDatasetId || isRunning || sharedStatus === "queued" || sharedStatus === "running") return;
     if (!targetSampleCount) {
@@ -775,6 +792,8 @@ export function InspectionDashboard({
     setToast(`New lot imported · ${loadedSamples.length} lenses`);
     if (operationMode === "AUTO" && loadedSamples.length) {
       await run(id, loadedSamples.length);
+    } else if (loadedSamples.length) {
+      setToast(`Folder loaded · ${loadedSamples.length} lenses · Manual mode: inference has not started. Use Inspect selected, or load the folder in Automatic mode.`);
     }
   }
   async function stop() {
@@ -860,6 +879,7 @@ export function InspectionDashboard({
     }
   }
   async function toggleStorage() {
+    if(!loggedIn)return;
     try {
       setStorage(
         storage?.active||storage?.schedule_key ? await api.storageStop() : await api.storageStart(),
@@ -897,6 +917,7 @@ export function InspectionDashboard({
     finally {setBusy(false)}
   }
   function select(id: string) {
+    if(operationMode==='AUTO'&&['running','queued'].includes(sharedInspectionRef.current?.job?.status||''))return;
     if (!['running','queued'].includes(sharedInspectionRef.current?.job?.status || '')) setFollowLiveTray(false);
     setHold(true);setHeldResult({datasetId,sampleId:id,result:resultMap.get(id)});
     selectionVersionRef.current += 1;
@@ -911,6 +932,7 @@ export function InspectionDashboard({
       );
   }
   function selectHistoryEntry(entry: GlobalHistoryEntry) {
+    if(operationMode==='AUTO'&&['running','queued'].includes(sharedInspectionRef.current?.job?.status||''))return;
     if (!['running','queued'].includes(sharedInspectionRef.current?.job?.status || '')) setFollowLiveTray(false);
     setHold(true);setHeldResult({datasetId:entry.datasetId,sampleId:entry.sample.id,result:entry.datasetId===datasetId?resultMap.get(entry.sample.id)||entry.result:entry.result});
     selectionVersionRef.current += 1;
@@ -943,7 +965,7 @@ export function InspectionDashboard({
     kind: "history" | "details",
     e: ReactPointerEvent<HTMLButtonElement>,
   ) {
-    if (prefs.uiLocked || window.innerWidth < 1060) return;
+    if (!bottomLayoutEditing || window.innerWidth < 1060) return;
     e.preventDefault();
     const host = e.currentTarget.parentElement;
     if (!host) return;
@@ -985,7 +1007,7 @@ export function InspectionDashboard({
     kind: "history" | "control" | "details",
     e: ReactPointerEvent<HTMLButtonElement>,
   ) {
-    if (prefs.uiLocked || window.innerWidth < 1060) return;
+    if (!bottomLayoutEditing || window.innerWidth < 1060) return;
     e.preventDefault();
     const pointerId = e.pointerId;
     const handle = e.currentTarget;
@@ -1034,7 +1056,7 @@ export function InspectionDashboard({
     window.addEventListener("pointercancel", up);
   }
   function beginBottomResize(e: ReactPointerEvent<HTMLButtonElement>) {
-    if (prefs.uiLocked) return;
+    if (!bottomLayoutEditing) return;
     e.preventDefault();
     const pointerId = e.pointerId;
     const handle = e.currentTarget;
@@ -1151,9 +1173,9 @@ export function InspectionDashboard({
             onFocus={()=>window.dispatchEvent(new Event("lens-open-focus"))}
             onSettings={()=>window.dispatchEvent(new Event("lens-open-settings"))}
             onBvTest={()=>window.dispatchEvent(new Event("lens-open-bv-test"))}
-            onDataset={()=>setLoader(true)}
+            onDataset={()=>loggedIn&&setLoader(true)}
             onInfo={()=>window.dispatchEvent(new Event("lens-open-info"))}
-            onTrendLine={()=>setTrendPopupOpen(true)}
+            onTrendLine={()=>{if(loggedIn)setTrendPopupOpen(true)}}
             onExit={()=>setToast("Exit is disabled in the browser interface")}
             onUi={()=>window.dispatchEvent(new Event("lens-open-customizer"))}
           />
@@ -1165,7 +1187,7 @@ export function InspectionDashboard({
             modeBusy={modeBusy}
             onOperationMode={() => changeOperationMode()}
             onRefresh={refreshSystem}
-            onUpload={() => setLoader(true)}
+            onUpload={() => loggedIn&&setLoader(true)}
             onLayout={() =>
               window.dispatchEvent(new Event("lens-open-customizer"))
             }
@@ -1189,7 +1211,7 @@ export function InspectionDashboard({
                 <small>PRODUCTION SOURCE</small>
                 <b>Unified WT stream · {globalHistory.length} lenses</b>
               </span>
-              <button onClick={() => setLoader(true)}>Upload Folder</button>
+              <button onClick={() => loggedIn&&setLoader(true)}>Upload Folder</button>
               <button
                 className="iconOnly"
                 onClick={() => refreshDatasets()}
@@ -1360,7 +1382,7 @@ export function InspectionDashboard({
                   value={sample?.metadata.u_index || "—"}
                 />
               </div>
-              {/* <div className="inspectionMachineActions"><button onClick={()=>setLoader(true)}><FolderOpen/>Upload dataset</button><button onClick={()=>window.dispatchEvent(new Event('lens-open-customizer'))}><LayoutDashboard/>Layout settings</button></div> */}
+              {/* <div className="inspectionMachineActions"><button onClick={()=>loggedIn&&setLoader(true)}><FolderOpen/>Upload dataset</button><button onClick={()=>window.dispatchEvent(new Event('lens-open-customizer'))}><LayoutDashboard/>Layout settings</button></div> */}
             </section>
             <button
               className="inspectionVerticalSplit controlSplit"
@@ -1430,7 +1452,7 @@ export function InspectionDashboard({
                   value={currentResult?.status || "WAITING"}
                   status={currentResult?.status}
                 />
-                <InfoRow label="Inference time" value={currentInferenceTime} title={INFERENCE_TIMING_DESCRIPTION} />
+                <InfoRow label="Inference time" value={currentInferenceTime} title={inferenceTimingDescription(currentResult)} />
                 <InfoRow label="Width Px" value={currentDimension("width_px")} />
                 <InfoRow label="Height Px" value={currentDimension("height_px")} />
                 <InfoRow label="Camera Count" value={currentMeasurements?.camera_count ?? "—"} />
@@ -1531,7 +1553,7 @@ export function InspectionDashboard({
                 >
                   Trend statistics
                 </button>
-                <button className={inspectionBottomTab === "trend-line" ? "active" : ""} onClick={() => setInspectionBottomTab("trend-line")}>Trend Line</button>
+                <button disabled={!loggedIn} className={inspectionBottomTab === "trend-line" ? "active" : ""} onClick={() => setInspectionBottomTab("trend-line")}>Trend Line</button>
                 <span />
                 {inspectionBottomTab === "wt" && (
                   <div className="inspectionWtTabMeta">
@@ -1588,11 +1610,13 @@ export function InspectionDashboard({
               </div>
               {inspectionBottomTab === "messages" && (
                 <div className="inspectionLogRows referenceMessageRows">
+                  {logsError&&<div className="systemMessageNotice" role="status">Messages connection: {logsError}</div>}
+                  {!filteredLogs.length&&<div className="systemMessageNotice">{job?`Inspection ${job.status} · ${job.completed} / ${job.total} lenses${job.error?` · ${job.error}`:''}`:logFilter==='all'?'No system messages yet. New backend messages appear automatically.':'No messages match this filter.'}</div>}
                   {filteredLogs.map((l, i) => (
                     <div className={l.level} key={`${l.time}-${i}`}>
                       <time>{l.time.includes("T") ? new Date(l.time).toLocaleTimeString() : l.time}</time>
-                      <b className={`inspectionLogLevel ${l.level.toLowerCase()}`}>{l.level}</b>
-                      <span>{l.message}</span>
+                      <small >{l.level} {l.message} </small>
+                      {/* <span>{l.message}</span> */}
                     </div>
                   ))}
                 </div>
@@ -1680,7 +1704,7 @@ export function InspectionDashboard({
                   </div>
                 </div>
               )}
-              {inspectionBottomTab === "trend-line" && <TrendLineWorkspace liveDefects results={yieldResults} capacity={wtCapacity} legend={statusLegend} trayLabels={trendTrayLabels} liveResultAt={sharedInspection?.results.at(-1)?.created_at} running={job?.status==='running'||job?.status==='queued'}/>}
+              {inspectionBottomTab === "trend-line" && <TrendLineWorkspace history={globalHistory} liveDefects results={yieldResults} capacity={wtCapacity} legend={statusLegend} trayLabels={trendTrayLabels} liveResultAt={sharedInspection?.results.at(-1)?.created_at} running={job?.status==='running'||job?.status==='queued'}/>}
             </section>
           </div>
         </div>
@@ -1773,7 +1797,7 @@ export function InspectionDashboard({
           onClose={() => setLoader(false)}
           onLoaded={(id) => { void handleLotLoaded(id) }}
         />
-        {trendPopupOpen&&<TrendLineWorkspace modal liveDefects initialView="live" onClose={()=>setTrendPopupOpen(false)} results={yieldResults} capacity={wtCapacity} legend={statusLegend} trayLabels={trendTrayLabels} liveResultAt={sharedInspection?.results.at(-1)?.created_at} running={job?.status==='running'||job?.status==='queued'}/>}
+        {trendPopupOpen&&<TrendLineWorkspace history={globalHistory} modal liveDefects initialView="live" onClose={()=>setTrendPopupOpen(false)} results={yieldResults} capacity={wtCapacity} legend={statusLegend} trayLabels={trendTrayLabels} liveResultAt={sharedInspection?.results.at(-1)?.created_at} running={job?.status==='running'||job?.status==='queued'}/>}
       </div>
     );
 
@@ -1788,7 +1812,7 @@ export function InspectionDashboard({
         modeBusy={modeBusy}
         onOperationMode={() => changeOperationMode()}
         onRefresh={refreshSystem}
-        onUpload={() => setLoader(true)}
+        onUpload={() => loggedIn&&setLoader(true)}
         onLayout={() => window.dispatchEvent(new Event("lens-open-customizer"))}
         stats={
           prefs.showKpis
@@ -1810,7 +1834,7 @@ export function InspectionDashboard({
             <small>SOURCE</small>
             <b>Unified WT stream · {globalHistory.length} lenses</b>
           </span>
-          <button onClick={() => setLoader(true)} title="Load image folder">
+          <button onClick={() => loggedIn&&setLoader(true)} title="Load image folder">
             Load
           </button>
           <button onClick={() => refreshDatasets()} title="Refresh datasets">
@@ -1825,7 +1849,7 @@ export function InspectionDashboard({
             <span>{storage?.active ? "Recording" : storage?.schedule_key?"Scheduled":"Storage"}</span>
           </button>
         </div>
-        <div className="oakDeckGroup oakModuleToggles" aria-label="Dashboard modules">
+        <div className="oakDeckGroup oakModuleToggles" aria-label="Dashboard modules" inert={!bottomLayoutEditing}>
           <button
             className={prefs.showHistory ? "active" : ""}
             onClick={() => patch({ showHistory: !prefs.showHistory })}
@@ -1859,7 +1883,7 @@ export function InspectionDashboard({
             <span>Workspace</span>
           </button>
         </div>
-        <div className="oakDeckGroup oakDeckRight">
+        <div className="oakDeckGroup oakDeckRight" inert={!bottomLayoutEditing}>
           <div className="oakDensity">
             <button
               className={prefs.density === "compact" ? "active" : ""}
@@ -1995,7 +2019,7 @@ export function InspectionDashboard({
                     value={currentResult?.status || "WAITING"}
                     status={currentResult?.status}
                   />
-                  <InfoRow label="Inference time" value={currentInferenceTime} title={INFERENCE_TIMING_DESCRIPTION} />
+                  <InfoRow label="Inference time" value={currentInferenceTime} title={inferenceTimingDescription(currentResult)} />
                   <InfoRow label="Width Px" value={currentDimension("width_px")} />
                   <InfoRow label="Height Px" value={currentDimension("height_px")} />
                   <InfoRow label="Camera Count" value={currentMeasurements?.camera_count ?? "—"} />
@@ -2140,11 +2164,11 @@ export function InspectionDashboard({
               <div className={`referenceBottomPanel referenceTrendPanel ${modernTrendTab==='line'?'hasTrendLine':''}`} aria-label="Yield and trend" style={{flexGrow:prefs.trendWidth}}>
                 <div className="referencePanelTabs trendOuterTabs" aria-label="Trend views">
                   <button className={modernTrendTab==='statistics'?'active':''} onClick={()=>setModernTrendTab('statistics')}>Yield Trend</button>
-                  <button className={modernTrendTab==='line'?'active':''} onClick={()=>{setModernTrendTab('line');setTrendInitialView(undefined)}}>Trend Line</button>
-                  <button className="trendShortcut" onClick={()=>{setModernTrendTab('line');setTrendInitialView('defects')}}>Defect Types</button>
-                  <button className="trendShortcut" onClick={()=>{setModernTrendTab('line');setTrendInitialView('3d')}}>3D Trays</button>
+                  <button disabled={!loggedIn} className={modernTrendTab==='line'?'active':''} onClick={()=>{setModernTrendTab('line');setTrendInitialView(undefined)}}>Trend Line</button>
+                  <button disabled={!loggedIn} className="trendShortcut" onClick={()=>{setModernTrendTab('line');setTrendInitialView('defects')}}>Defect Types</button>
+                  <button disabled={!loggedIn} className="trendShortcut" onClick={()=>{setModernTrendTab('line');setTrendInitialView('3d')}}>3D Trays</button>
                 </div>
-                {modernTrendTab==='line'?<TrendLineWorkspace results={yieldResults} capacity={wtCapacity} legend={statusLegend} trayLabels={trendTrayLabels} initialView={trendInitialView} liveResultAt={sharedInspection?.results.at(-1)?.created_at} running={job?.status==='running'||job?.status==='queued'}/>:<div className="referenceTrendBody">
+                {modernTrendTab==='line'?<TrendLineWorkspace history={globalHistory} results={yieldResults} capacity={wtCapacity} legend={statusLegend} trayLabels={trendTrayLabels} initialView={trendInitialView} liveResultAt={sharedInspection?.results.at(-1)?.created_at} running={job?.status==='running'||job?.status==='queued'}/>:<div className="referenceTrendBody">
                   <TrendChart results={yieldResults} capacity={wtCapacity} />
                   <div className="referenceTrendKpis">
                     <div className="miniYieldRing">
@@ -2186,18 +2210,20 @@ export function InspectionDashboard({
               <div className="referenceBottomPanel referenceLogsPanel" aria-label="System logs" style={{flexGrow:prefs.logsWidth}}>
                 <div className="referencePanelTabs" aria-label="System log filters">
                   <button
-                    className="active"
+                    className={logFilter==='all'?'active':''}
                     onClick={() => setLogFilter("all")}
                   >
                     All
                   </button>
-                  <button onClick={() => setLogFilter("warning")}>
+                  <button className={logFilter==='warning'?'active':''} onClick={() => setLogFilter("warning")}>
                     Warnings
                   </button>
-                  <button onClick={() => setLogFilter("error")}>Errors</button>
-                  <button onClick={() => setLogFilter("system")}>System</button>
+                  <button className={logFilter==='error'?'active':''} onClick={() => setLogFilter("error")}>Errors</button>
+                  <button className={logFilter==='system'?'active':''} onClick={() => setLogFilter("system")}>System</button>
                 </div>
                 <div className="referenceLogs">
+                  {logsError&&<div className="systemMessageNotice" role="status">Messages connection: {logsError}</div>}
+                  {!filteredLogs.length&&<div className="systemMessageNotice">{job?`Inspection ${job.status} · ${job.completed} / ${job.total} lenses${job.error?` · ${job.error}`:''}`:'No matching messages. Backend messages refresh automatically.'}</div>}
                   {filteredLogs.slice(0, 16).map((l, i) => (
                     <div key={`${l.time}-${i}`}>
                       <time>
@@ -2258,6 +2284,7 @@ export function InspectionDashboard({
                   <div className="inspectionPrimaryActions">
                   <button
                     className="closeApplication primaryCommand"
+                    disabled={!loggedIn}
                     onClick={closeApplication}
                   >
                     <Power />
@@ -2286,7 +2313,7 @@ export function InspectionDashboard({
                     {isRunning ? <Loader2 className="spin"/> : <Play/>}
                     <span>{isRunning ? "Inspection running" : "Run All"}</span>
                   </button>
-                  <button onClick={() => {setLoader(true);setMoreActionsOpen(false)}}>
+                  <button onClick={() => {loggedIn&&setLoader(true);setMoreActionsOpen(false)}}>
                     <FolderOpen />
                     <span>Upload Folder</span>
                   </button>
@@ -2294,7 +2321,7 @@ export function InspectionDashboard({
                     <Target />
                     <span>Recipe Setup</span>
                   </button>
-                  <button
+                  <button className="adminLayoutAction"
                     onClick={() =>
                       window.dispatchEvent(new Event("lens-open-customizer"))
                     }

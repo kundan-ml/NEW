@@ -6892,6 +6892,14 @@ html[data-ui-locked="true"] .oakHorizontalSplit {
   opacity: .34
 }
 
+html[data-can-customize="false"] .inspectionLayoutButton,
+html[data-can-customize="false"] .adminLayoutAction {
+  display: none;
+}
+html[data-can-customize="false"] :is(.oakModuleToggles,.oakDeckRight) { opacity: .55; }
+.pdfMenuStrip button:disabled,.productionRail button:disabled,.productionRail a[aria-disabled="true"] { opacity:.4;cursor:not-allowed; }
+.serverFolderBrowser{display:flex;flex-direction:column;gap:4px;max-height:180px;overflow:auto;margin-top:10px}.serverFolderBrowser>div{display:flex;justify-content:space-between;align-items:center;gap:8px}.serverFolderBrowser b{font-size:10px;overflow-wrap:anywhere}.serverFolderBrowser button{display:flex;align-items:center;gap:7px;text-align:left;flex-shrink:0}.uploadModalWindow .orLine button[aria-pressed="true"]{color:var(--accent);border-color:var(--accent)}
+
 /* Live theme propagation throughout the inspection workspace. */
 .oakWorkstationPage {
   --oak-blue: var(--accent) !important;

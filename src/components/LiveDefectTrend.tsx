@@ -22,7 +22,8 @@ type Size = { width: number; height: number };
 type SeriesStyle = { color: string; dash: string };
 
 const normalized = (name: string) => name.trim().replace(/\s+/g, ' ').toLocaleLowerCase('en-US');
-const timeLabel = (time: number, seconds = true) => new Date(time).toLocaleTimeString([], {
+const timeLabel = (time: number, seconds = true, dates = false) => new Date(time).toLocaleString([], {
+  ...(dates ? { month: 'short', day: 'numeric' } : {}),
   hour: '2-digit', minute: '2-digit', ...(seconds ? { second: '2-digit' } : {}),
 });
 
@@ -158,7 +159,7 @@ export function LiveDefectTrend({ model, legend }: Props) {
     setHoverTime(model.buckets[next].time);
   }
 
-  const tickCount = width < 420 ? 2 : width < 750 ? 4 : 6;
+  const tickCount = duration >= 86_400_000 ? (width < 750 ? 2 : 4) : width < 420 ? 2 : width < 750 ? 4 : 6;
   const tickMs = Math.max(1_000, Math.ceil(duration / tickCount / 1_000) * 1_000);
   const firstTick = Math.ceil(model.start / tickMs) * tickMs;
   const timeTicks = Array.from({ length: tickCount + 1 }, (_, index) => firstTick + index * tickMs)
@@ -176,7 +177,7 @@ export function LiveDefectTrend({ model, legend }: Props) {
   return <div className="classicDefectTrend" data-window-start={model.start} data-window-end={model.end}
     data-count={overallTotal} data-window-count={model.totalDefects} data-count-mode="cumulative" data-inspected={model.inspected}>
     <div className="liveDefectWindowSummary" data-total={overallTotal} data-window-total={model.totalDefects}>
-      <div><strong>Cumulative defects by class</strong><span>{timeLabel(model.start, duration < 3_600_000)} — {timeLabel(model.end, duration < 3_600_000)}</span></div>
+      <div><strong>Cumulative defects by class</strong><span>{timeLabel(model.start, duration < 3_600_000, duration >= 86_400_000)} — {timeLabel(model.end, duration < 3_600_000, duration >= 86_400_000)}</span></div>
       <small>Running history totals · +{model.totalDefects.toLocaleString()} in visible period</small>
     </div>
     <div className="liveDefectBody" onPointerLeave={event=>{if(event.pointerType!=='touch')setHoverTime(null)}}>
@@ -213,7 +214,7 @@ export function LiveDefectTrend({ model, legend }: Props) {
         </g>
         <g clipPath={`url(#${plotId}-time)`}><g ref={timeGroup} className="liveDefectTimeGrid">
           {timeTicks.map(time => <g key={time}><line x1={x(time)} x2={x(time)} y1={top} y2={bottom}/>
-            <text x={x(time)} y={height - 8} textAnchor="middle">{timeLabel(time, duration < 3_600_000)}</text></g>)}
+            <text x={x(time)} y={height - 8} textAnchor="middle">{timeLabel(time, duration < 3_600_000, duration >= 86_400_000)}</text></g>)}
         </g></g>
         <text className="liveDefectAxisTitle" x={left} y={12}>Cumulative defect count</text>
         <g clipPath={`url(#${plotId})`}><g ref={seriesGroup}>

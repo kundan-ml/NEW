@@ -18,7 +18,7 @@ export function CustomizationDrawer({open,onClose,popout=false}:{open:boolean;on
   const[legendNotice,setLegendNotice]=useState('');
   useEffect(()=>{if(open&&canCustomize)api.trayLayout().then(layout=>{setWtCapacity(layout.images_per_tray);setTrayCapacities(layout.supported_images_per_tray)}).catch(()=>{})},[open,canCustomize]);
   useEffect(()=>{if(open)api.statusSymbolLegend().then(setLegend).catch(()=>setLegendNotice('Status configuration is unavailable.'))},[open]);
-  if(!open)return null;
+  if(!open||!canCustomize)return null;
 
   const themes=Object.values(THEMES);
   const activeTokens=THEMES[prefs.theme].tokens;
