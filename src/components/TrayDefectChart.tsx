@@ -61,6 +61,9 @@ export function TrayDefectChart({ model, legend, angle, trayLabels, onAngleChang
 
   const label = (row: TrayDefectRow) => trayLabels?.get(row.tray.key) ?? row.tray.wt;
   const trayCount = analysis.trays.length;
+  const inspectedLenses = analysis.trays.reduce((total,row)=>total+row.tray.total,0);
+  const affectedLenses = analysis.trays.reduce((total,row)=>total+row.affectedLenses,0);
+  const peakTray = analysis.trays.reduce<TrayDefectRow|null>((peak,row)=>!peak||row.totalOccurrences>peak.totalOccurrences?row:peak,null);
   const classCount = visibleClasses.length;
   const maximum = Math.max(1, ...analysis.trays.flatMap(row => row.columns.filter(item => !hidden.has(item.classKey)).map(item => item.occurrences)));
   const magnitude = 10 ** Math.floor(Math.log10(maximum));
@@ -189,7 +192,12 @@ export function TrayDefectChart({ model, legend, angle, trayLabels, onAngleChang
 
   return <section ref={root} className={`trayDefectChart ${compact ? 'isCompact' : ''} ${dense ? 'hasDenseClasses' : ''}`} aria-label="3D tray defect analysis"
     data-total-defects={analysis.totalOccurrences} data-displayed-defects={analysis.displayedOccurrences} data-visible-defects={visibleTotal} data-class-count={analysis.classes.length} data-angle={angle}>
-    <header className="trayDefectIntro"><div><small>TRAY × CLASS INTELLIGENCE</small><h3>Defects in perspective</h3><p>Column height = actual defect occurrences · select a column for details</p></div>
+    <header className="trayDefectIntro trayDefectMetricsOnly">
+      <div className="trayOverview" aria-label="Displayed tray summary">
+        <span><small>Inspected lenses</small><b>{inspectedLenses.toLocaleString()}</b></span>
+        <span><small>With defects</small><b>{affectedLenses.toLocaleString()}<em>{inspectedLenses?` · ${(affectedLenses/inspectedLenses*100).toFixed(1)}%`:''}</em></b></span>
+        <span title="Tray with the most defect occurrences among displayed trays"><small>Highest defect tray</small><b>{peakTray&&peakTray.totalOccurrences?`WT ${label(peakTray)}`:'—'}<em>{peakTray&&peakTray.totalOccurrences?` · ${peakTray.totalOccurrences} defects`:''}</em></b></span>
+      </div>
       <div className="trayDefectFacts"><span><strong>{analysis.displayedOccurrences.toLocaleString()}</strong><small>Defects</small></span><span><strong>{trayCount}</strong><small>Trays</small></span><span><strong>{analysis.classes.length}</strong><small>Classes</small></span></div>
     </header>
     <div className="trayDefectBody">
