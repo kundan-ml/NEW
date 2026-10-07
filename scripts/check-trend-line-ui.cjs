@@ -28,7 +28,7 @@ const epoch = Date.now();
 const ages = [2*3600000,30*60000,60000,30000,10000];
 const statuses = ['OK','NOK','WARN','NOK','OK'];
 function result(index, status = statuses[(index-1)%statuses.length], at = epoch-(ages[index-1]||0)) {
-  const defects = status === 'NOK' ? [{name:index%2?'NonCircular':'Surface Imperfection',confidence:1,severity:'major',channel:'h'}] : [];
+  const defects = status === 'NOK' ? [{name:index===2||index%2?'NonCircular':'Surface Imperfection',confidence:1,severity:'major',channel:'h'}] : [];
   return {dataset_id:'trend',sample_id:`trend-${index}`,position:(index-1)%16+1,wt_index:Math.floor((index-1)/16)+1,
     category:'Inspection',status,defects,created_at:new Date(at).toISOString(),
     channels:channels.map(channel=>({channel,image_path:'/fixture/image.bmp',status,defects:channel==='h'?defects:[],measurements:{},engine:'fixture-dsm',elapsed_ms:12+index+.25})),
@@ -46,7 +46,10 @@ let fixtureLegend={statuses:[
   {key:'NOK',label:'Inspection NOK',color:'#e64669',symbol:'x'},
   {key:'WARN',label:'Warning',color:'#efb84c',symbol:'triangle'},
   {key:'IDLE',label:'Not inspected',color:'#6b7280',symbol:'dot'},
-],defects:[],fallback_defect:{key:'DEFECT',label:'Unclassified defect',color:'#e64669',symbol:'x'}};
+],defects:[
+  {key:'surface',label:'Surface Imperfection',match_terms:['Surface Imperfection'],color:'#a86af5',symbol:'S'},
+  {key:'non-circular',label:'NonCircular',match_terms:['NonCircular'],color:'#25c0d7',symbol:'NC'},
+],fallback_defect:{key:'DEFECT',label:'Unclassified defect',color:'#e64669',symbol:'x'}};
 const viewers = [];
 const reports = [];
 let browser, chrome;
@@ -267,6 +270,103 @@ async function analyticsFit(viewer,label){
   assert(classes.every(item=>!item.outside&&item.height>=12&&item.width>=28),`${label}: visible class entries fit their grid with readable hit areas ${JSON.stringify(classes.filter(item=>item.outside||item.height<12||item.width<28))}`);
 }
 
+// The 3D comparison counts every named instance on its actual tray. Neither
+// NOK status nor the four copies in per-channel output create extra columns.
+function trayDefectTotals(source){
+  const latest=new Map();
+  for(const inspection of source){
+    const key=JSON.stringify([inspection.dataset_id,inspection.sample_id]);
+    const previous=latest.get(key);
+    if(!previous||Date.parse(inspection.created_at)>=Date.parse(previous.created_at))latest.set(key,inspection);
+  }
+  const trays=new Map(),classes=new Map();
+  for(const inspection of latest.values()){
+    const key=JSON.stringify([inspection.dataset_id,inspection.wt_index]);
+    const tray=trays.get(key)||{key,total:0,classes:new Map()};
+    tray.total+=1;
+    for(const defect of inspection.defects){
+      const name=defect.name.trim().replace(/\s+/g,' '),classKey=name.toLocaleLowerCase('en-US');
+      if(!classKey)continue;
+      tray.classes.set(classKey,(tray.classes.get(classKey)||0)+1);
+      classes.set(classKey,(classes.get(classKey)||0)+1);
+    }
+    trays.set(key,tray);
+  }
+  const bars=[...trays.values()].flatMap(tray=>[...tray.classes].map(([classKey,count])=>({tray:tray.key,key:classKey,count})))
+    .sort((a,b)=>a.tray.localeCompare(b.tray)||a.key.localeCompare(b.key));
+  return {trays:[...trays.values()].map(({key,total})=>({key,total})).sort((a,b)=>a.key.localeCompare(b.key)),
+    bars,classes:[...classes].map(([key,count])=>({key,count})).sort((a,b)=>a.key.localeCompare(b.key)),
+    occurrences:bars.reduce((sum,bar)=>sum+bar.count,0)};
+}
+
+async function trayAccuracy(viewer,source,label){
+  const expected=trayDefectTotals(source);
+  await select(viewer,'3D Trays');
+  await waitFor(viewer,`!!document.querySelector('.trayDefectChart')`,`${label}: grouped 3D tray view`);
+  await waitFor(viewer,`Number(document.querySelector('.trayDefectChart').getAttribute('data-total-defects'))===${expected.occurrences}`,`${label}: latest tray occurrence counts`);
+  const trays=await viewer.evaluate(`Array.from(document.querySelectorAll('.trayDefectChart [data-trend-tray]')).map(item=>({key:item.getAttribute('data-trend-tray'),total:Number(item.getAttribute('data-total'))})).sort((a,b)=>a.key.localeCompare(b.key))`);
+  assert.deepEqual(trays,expected.trays,`${label}: complete and partial trays retain measured inspection totals`);
+  const bars=await viewer.evaluate(`Array.from(document.querySelectorAll('.trayDefectChart [data-tray-key][data-defect-class]')).map(item=>({tray:item.getAttribute('data-tray-key'),key:item.getAttribute('data-defect-class'),count:Number(item.getAttribute('data-count'))})).filter(item=>item.count>0).sort((a,b)=>a.tray.localeCompare(b.tray)||a.key.localeCompare(b.key))`);
+  assert.deepEqual(bars,expected.bars,`${label}: one 3D column per tray/class counts actual reported instances`);
+  const classes=await viewer.evaluate(`Array.from(document.querySelectorAll('.trayDefectChart button[data-class-key]')).map(item=>({key:item.getAttribute('data-class-key'),count:Number(item.getAttribute('data-count'))})).sort((a,b)=>a.key.localeCompare(b.key))`);
+  assert.deepEqual(classes,expected.classes,`${label}: every observed class is named in the side legend`);
+  assert.equal(await viewer.evaluate(`document.querySelector('.trayDefectChart svg[role="img"]').getAttribute('aria-label')`),'3D tray defect comparison',`${label}: accessible chart explains its actual dimensions`);
+  assert.equal(await viewer.evaluate(`Number(document.querySelector('.trayDefectChart').getAttribute('data-displayed-defects'))`),expected.occurrences,`${label}: displayed total agrees with bar counts`);
+  return expected;
+}
+
+async function trayFit(viewer,label){
+  const safety=await viewer.evaluate(`(()=>{const root=document.querySelector('.trayDefectChart');if(!root)return {found:false};const rect=root.getBoundingClientRect(),parent=root.closest('.trendPlot').getBoundingClientRect();const classes=Array.from(root.querySelectorAll('button[data-class-key]')).filter(item=>item.getClientRects().length).map(item=>{const box=item.getBoundingClientRect(),grid=item.parentElement.getBoundingClientRect(),code=item.querySelector('.trayDefectClassCode');return {key:item.getAttribute('data-class-key'),height:box.height,width:box.width,truncated:!!code?.getClientRects().length&&code.scrollWidth>code.clientWidth+1,outside:box.top<grid.top-1||box.bottom>grid.bottom+1||box.left<grid.left-1||box.right>grid.right+1}});const svg=root.querySelector('svg').getBoundingClientRect(),labels=Array.from(root.querySelectorAll('.trayClassFloorLabel text')).map(item=>({name:item.textContent,box:item.getBoundingClientRect()})),overlaps=[];for(let index=0;index<labels.length;index++)for(const other of labels.slice(index+1)){const first=labels[index].box,second=other.box;if(Math.min(first.right,second.right)-Math.max(first.left,second.left)>1&&Math.min(first.bottom,second.bottom)-Math.max(first.top,second.top)>1)overlaps.push({first:labels[index].name,firstBox:first.toJSON(),second:other.name,secondBox:second.toJSON()});}return {found:true,nan:/NaN|Infinity|undefined/.test(root.innerHTML),scrollX:root.scrollWidth>root.clientWidth+1,scrollY:root.scrollHeight>root.clientHeight+1,clipped:rect.bottom>parent.bottom+1||rect.right>parent.right+1,classes,floorLabelOverlaps:overlaps,floorLabelsClipped:labels.filter(item=>item.box.left<svg.left-1||item.box.right>svg.right+1||item.box.top<svg.top-1||item.box.bottom>svg.bottom+1).map(item=>item.name)};})()`);
+  assert(safety.found&&!safety.nan,`${label}: measured 3D component has valid geometry`);
+  assert(!safety.scrollX&&!safety.scrollY&&!safety.clipped,`${label}: 3D chart fits without a scrollbar ${JSON.stringify(safety)}`);
+  assert(safety.classes.every(item=>!item.outside&&item.height>=12&&item.width>=28),`${label}: every visible class legend fits its grid ${JSON.stringify(safety.classes.filter(item=>item.outside||item.height<12||item.width<28))}`);
+  if(safety.floorLabelOverlaps.length||safety.floorLabelsClipped.length||safety.classes.some(item=>item.truncated))await screenshot(viewer,`trend-line-${viewer.classic?'classic':'modern'}-3d-label-diagnostic-qa.png`);
+  assert.deepEqual(safety.floorLabelOverlaps,[],`${label}: geometric floor initials never overlap ${JSON.stringify(safety.floorLabelOverlaps)}`);
+  assert.deepEqual(safety.floorLabelsClipped,[],`${label}: geometric class labels remain inside the SVG`);
+  if(await viewer.evaluate(`!!document.querySelector('.trendExplorerWindow')`))assert(safety.classes.every(item=>!item.truncated),`${label}: expanded legend keeps collision-free class initials fully readable ${JSON.stringify(safety.classes.filter(item=>item.truncated))}`);
+}
+
+async function traySelection(viewer,label){
+  const bar=await viewer.evaluate(`(()=>{const bar=document.querySelector('.trayDefectChart [data-tray-key][data-defect-class][data-count]:not([data-count="0"])');if(!bar)return null;bar.focus();return {tray:bar.getAttribute('data-tray-key'),key:bar.getAttribute('data-defect-class'),count:Number(bar.getAttribute('data-count'))};})()`);
+  if(!bar)return;
+  await viewer.cdp.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+  await viewer.cdp.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+  await waitFor(viewer,`(()=>{const readout=document.querySelector('.trayDefectReadout');return readout?.getAttribute('data-selected-class')===${JSON.stringify(bar.key)}&&readout.getAttribute('data-selected-tray')===${JSON.stringify(bar.tray)}})()`,`${label}: keyboard reveals selected tray/class details`);
+  assert(await viewer.evaluate(`document.querySelector('.trayDefectReadout').textContent.includes(${JSON.stringify(String(bar.count))})`),`${label}: selection exposes the actual defect occurrence count`);
+}
+
+async function trayFiltering(viewer,label){
+  const selected=await viewer.evaluate(`(()=>{const button=document.querySelector('.trayDefectChart button[data-class-key]');if(!button)return null;const key=button.getAttribute('data-class-key'),count=Number(button.getAttribute('data-count'));button.click();return {key,count};})()`);
+  if(!selected)return;
+  await waitFor(viewer,`Array.from(document.querySelectorAll('.trayDefectChart button[data-class-key]')).find(button=>button.getAttribute('data-class-key')===${JSON.stringify(selected.key)})?.getAttribute('aria-pressed')==='false'`,`${label}: class tap hides its columns`);
+  assert.equal(await viewer.evaluate(`Array.from(document.querySelectorAll('.trayDefectChart [data-tray-key][data-defect-class]')).filter(bar=>bar.getAttribute('data-defect-class')===${JSON.stringify(selected.key)}).length`),0,`${label}: hidden class is removed from plotted columns`);
+  assert.equal(await viewer.evaluate(`Number(document.querySelector('.trayDefectChart').getAttribute('data-visible-defects'))`),await viewer.evaluate(`Number(document.querySelector('.trayDefectChart').getAttribute('data-displayed-defects'))`)-selected.count,`${label}: visible subtotal explains the class filter`);
+  await viewer.evaluate(`Array.from(document.querySelectorAll('.trayDefectChart button[data-class-key]')).find(button=>button.getAttribute('data-class-key')===${JSON.stringify(selected.key)}).click()`);
+  await waitFor(viewer,`Number(document.querySelector('.trayDefectChart').getAttribute('data-visible-defects'))===Number(document.querySelector('.trayDefectChart').getAttribute('data-displayed-defects'))`,`${label}: class restored without data loss`);
+}
+
+async function cumulativeAccuracy(viewer,source,label){
+  await select(viewer,'Live');
+  const expected=analyticsTotals(source);
+  await waitFor(viewer,`document.querySelector('.classicDefectTrend')?.getAttribute('data-count-mode')==='cumulative'`,`${label}: cumulative defect lines in both layouts`);
+  await waitFor(viewer,`Number(document.querySelector('.classicDefectTrend').getAttribute('data-count'))===${expected.occurrences}`,`${label}: retained overall defect count`);
+  const classes=await viewer.evaluate(`Array.from(document.querySelectorAll('.liveDefectLegendItem')).map(item=>({key:item.getAttribute('data-defect-key'),count:Number(item.getAttribute('data-class-total')),window:Number(item.getAttribute('data-window-total'))})).sort((a,b)=>a.key.localeCompare(b.key))`);
+  assert.deepEqual(classes.map(({key,count})=>({key,count})),expected.classes.map(({key,occurrences})=>({key,count:occurrences})),`${label}: rolling display retains each class's complete running total`);
+  const series=await viewer.evaluate(`Array.from(document.querySelectorAll('.classicDefectTrend [data-defect-series]')).map(path=>{const key=path.getAttribute('data-defect-series');const points=Array.from(document.querySelectorAll('.classicDefectTrend [data-defect-point]')).filter(point=>point.getAttribute('data-defect-point')===key).map(point=>({time:Number(point.getAttribute('data-time')),interval:Number(point.getAttribute('data-count')),cumulative:Number(point.getAttribute('data-cumulative-count')),y:Number(point.getAttribute('cy'))})).sort((a,b)=>a.time-b.time);return {key,total:Number(path.getAttribute('data-overall-count')),mode:path.getAttribute('data-count-mode'),lastY:Number(path.getAttribute('data-latest-y')),path:path.getAttribute('d'),points};}).sort((a,b)=>a.key.localeCompare(b.key))`);
+  assert.deepEqual(series.map(({key,total})=>({key,count:total})),expected.classes.map(({key,occurrences})=>({key,count:occurrences})),`${label}: classes with no recent detection still have a retained line`);
+  for(const line of series){
+    assert.equal(line.mode,'cumulative',`${label}: ${line.key} plots cumulative values`);
+    assert(!/NaN|Infinity|undefined/.test(line.path)&&Number.isFinite(line.lastY),`${label}: ${line.key} has a valid held baseline`);
+    assert(line.points.every((point,index)=>point.cumulative>=point.interval&&(!index||point.cumulative>=line.points[index-1].cumulative&&point.y<=line.points[index-1].y+.01)),`${label}: ${line.key} never drops to zero between detections`);
+    if(line.points.length){
+      const last=line.points.at(-1);
+      assert.equal(last.cumulative,line.total,`${label}: ${line.key} latest measured point reaches its running total`);
+      assert(Math.abs(last.y-line.lastY)<.01,`${label}: ${line.key} tail holds its last cumulative level`);
+    }
+  }
+  return classes;
+}
+
 (async()=>{
   chrome=spawn(process.env.CHROME_BINARY||'/usr/bin/google-chrome',['--headless=new','--no-sandbox','--disable-gpu',`--remote-debugging-port=${port}`,`--user-data-dir=${profile}`,'about:blank'],{stdio:'ignore',env:{...process.env,TMPDIR:temporaryRoot,TMP:temporaryRoot,TEMP:temporaryRoot}});
   let version;for(let i=0;i<100;i++){try{version=await fetch(`http://127.0.0.1:${port}/json/version`).then(response=>response.json());break;}catch{await pause(100);}}
@@ -279,6 +379,7 @@ async function analyticsFit(viewer,label){
     assert(clock,'Live clock has machine-readable time');await pause(1150);
     assert.notEqual(await viewer.evaluate(`document.querySelector('.trendLiveClock time,time.trendLiveClock,.trendLiveClock[datetime]')?.getAttribute('datetime')`),clock,'Live clock advances without data refresh');
     const initialAnalytics=analyticsTotals(snapshot.results);
+    await cumulativeAccuracy(viewer,snapshot.results,`${viewer.classic?'Classic':'Modern'} retained running totals`);
     await qualityAccuracy(viewer,initialAnalytics,`${viewer.classic?'Classic':'Modern'} all retained results`);
     await defectAccuracy(viewer,initialAnalytics,`${viewer.classic?'Classic':'Modern'} all retained results`);
     await defectCounting(viewer,initialAnalytics);
@@ -286,20 +387,23 @@ async function analyticsFit(viewer,label){
     const dimensionsToCheck=skipTablet?[[1920,1080],[1366,768]]:[[1920,1080],[1366,768],[1024,768]];
     for(const dimensions of dimensionsToCheck){
       await resize(viewer,...dimensions);
-      for(const label of labels){await select(viewer,label);await chartSafety(viewer,`${viewer.classic?'Classic':'Modern'} ${dimensions} ${label}`);if(label==='Yield'||label==='Defects')await analyticsFit(viewer,`${viewer.classic?'Classic':'Modern'} ${dimensions} ${label}`);}
+      for(const label of labels){await select(viewer,label);await chartSafety(viewer,`${viewer.classic?'Classic':'Modern'} ${dimensions} ${label}`);if(label==='Yield'||label==='Defects')await analyticsFit(viewer,`${viewer.classic?'Classic':'Modern'} ${dimensions} ${label}`);if(label==='3D Trays')await trayFit(viewer,`${viewer.classic?'Classic':'Modern'} ${dimensions} ${label}`);}
       if(dimensions[0]===1024){await viewer.evaluate(`document.querySelector('.trendLineWorkspace').scrollIntoView({block:'nearest'})`);await pause(150);await screenshot(viewer,`trend-line-${viewer.classic?'classic':'modern'}-1024-qa.png`);}
     }
     await range(viewer,'5m');
     await waitFor(viewer,`document.querySelector('.trendLineWorkspace').getAttribute('data-count')==='3'`,'5m rolling range excludes two older fixture frames');
     const recentAnalytics=analyticsTotals(snapshot.results.filter(inspection=>Date.parse(inspection.created_at)>=Date.now()-300000));
+    const retainedClasses=await cumulativeAccuracy(viewer,snapshot.results,`${viewer.classic?'Classic':'Modern'} five-minute cumulative baseline`);
+    assert(retainedClasses.some(item=>item.key==='noncircular'&&item.count===1&&item.window===0),'Older class remains at its running total when no detections exist in the visible period');
     await qualityAccuracy(viewer,recentAnalytics,`${viewer.classic?'Classic':'Modern'} selected five-minute period`);
     await defectAccuracy(viewer,recentAnalytics,`${viewer.classic?'Classic':'Modern'} selected five-minute period`);
-    await range(viewer,'all');await select(viewer,'3D Trays');
+    await range(viewer,'all');await trayAccuracy(viewer,snapshot.results,`${viewer.classic?'Classic':'Modern'} partial tray`);
     const trays=await viewer.evaluate(`Array.from(document.querySelectorAll('.trendLineWorkspace [data-trend-tray]')).map(bar=>Number(bar.getAttribute('data-total')))`);
     assert.deepEqual(trays,[5],'3D chart represents measured partial-tray totals, not dummy bars');
     assert(await viewer.evaluate(`document.querySelector('.trendLineWorkspace [data-trend-tray]').getAttribute('aria-label').startsWith('WT 2,')`),'Trend tray label matches globally numbered WT History, not dataset-local WT1');
-    assert.deepEqual(await viewer.evaluate(`Array.from(document.querySelectorAll('.trendLineWorkspace [data-trend-tray] [data-status]')).map(bar=>[bar.getAttribute('data-status'),Number(bar.getAttribute('data-count'))])`),[['ok',2],['nok',2],['warn',1]],'3D stacks use actual OK/NOK/Warning outcomes');
-    assert.deepEqual(await viewer.evaluate(`Array.from(document.querySelectorAll('.trendLineWorkspace [data-trend-tray] [data-status]')).map(bar=>bar.getAttribute('fill'))`),['#14b8a6','#e64669','#efb84c'],'3D chart uses configured status legend colors');
+    assert.deepEqual(await viewer.evaluate(`Array.from(document.querySelectorAll('.trayDefectChart [data-tray-key][data-defect-class]')).map(bar=>[bar.getAttribute('data-defect-class'),bar.getAttribute('data-color')]).sort((a,b)=>a[0].localeCompare(b[0]))`),[['noncircular','#25c0d7'],['surface imperfection','#a86af5']],'3D columns use configured defect class colors, not generic status stacks');
+    await traySelection(viewer,`${viewer.classic?'Classic':'Modern'} tray columns`);
+    await trayFiltering(viewer,`${viewer.classic?'Classic':'Modern'} tray legend filtering`);
     await viewer.evaluate(`(()=>{const input=document.querySelector('[aria-label="3D chart rotation"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'60');input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
     await waitFor(viewer,`document.querySelector('.trendRotation output').textContent==='60°'`,'rotation slider updates 3D perspective');
     await viewer.evaluate(`document.querySelector('.trendViewTabs [aria-selected="true"]').focus()`);
@@ -316,7 +420,7 @@ async function analyticsFit(viewer,label){
       await select(viewer,label);await chartSafety(viewer,`${viewer.classic?'Classic':'Modern'} expanded ${label}`);await analyticsFit(viewer,`${viewer.classic?'Classic':'Modern'} expanded ${label}`);
       await screenshot(viewer,`trend-line-${viewer.classic?'classic':'modern'}-${label.toLowerCase()}-expanded-qa.png`);
     }
-    await select(viewer,'3D Trays');
+    await select(viewer,'3D Trays');await trayFit(viewer,`${viewer.classic?'Classic':'Modern'} expanded 3D Trays`);
     await screenshot(viewer,`trend-line-${viewer.classic?'classic':'modern'}-3d-expanded-qa.png`);
     await viewer.evaluate(`document.querySelector('[aria-label="Close Trend Line"]').click()`);
     await waitFor(viewer,'!document.querySelector(".trendExplorerWindow")','explorer dismisses to same page');
@@ -324,30 +428,33 @@ async function analyticsFit(viewer,label){
     for(const dimensions of [[1920,1080],[1366,768]]){
       await resize(viewer,...dimensions);await screenshot(viewer,`trend-line-${viewer.classic?'classic':'modern'}-${dimensions[0]}-qa.png`);
     }
-    reports.push({mode:viewer.classic?'Classic':'Modern',responsiveSizes:dimensionsToCheck,cases:'live clock, 5 graph tabs, keyboard navigation, time range, partial-tray 3D counts/rotation, expanded explorer'});
+    reports.push({mode:viewer.classic?'Classic':'Modern',responsiveSizes:dimensionsToCheck,cases:'live clock, cumulative defect lines with retained five-minute baseline, 5 graph tabs, keyboard navigation, time range, partial-tray per-class 3D counts/colors/filter/rotation, expanded explorer'});
   }
-  fixtureLegend={...fixtureLegend,statuses:fixtureLegend.statuses.map(status=>status.key==='NOK'?{...status,color:'#d35bf7'}:status)};
+  fixtureLegend={...fixtureLegend,defects:fixtureLegend.defects.map(defect=>defect.key==='surface'?{...defect,color:'#d35bf7'}:defect)};
   for(const viewer of [classic,modern]){
     await viewer.evaluate(`window.dispatchEvent(new Event('lens-status-legend-changed'))`);
     await select(viewer,'3D Trays');
-    await waitFor(viewer,`document.querySelector('.trendLineWorkspace [data-status="nok"]')?.getAttribute('fill')==='#d35bf7'`,'legend color change applies immediately');
+    await waitFor(viewer,`document.querySelector('.trayDefectChart [data-defect-class="surface imperfection"]')?.getAttribute('data-color')==='#d35bf7'`,'defect legend color change applies immediately to 3D columns');
     await select(viewer,'Timing');
   }
-  snapshot={...snapshot,sequence:2,job:{...snapshot.job,completed:6,current_sample_id:'trend-7',summary:{OK:3,NOK:2,WARN:1}},results:[...snapshot.results,result(6,'OK',Date.now())]};
+  const increment=result(6,'NOK',Date.now());
+  increment.defects=['Surface Imperfection','Surface Imperfection','NonCircular'].map(name=>({name,confidence:1,severity:'major',channel:'h'}));
+  increment.channels=increment.channels.map(channel=>({...channel,defects:channel.channel==='h'?increment.defects:[]}));
+  snapshot={...snapshot,sequence:2,job:{...snapshot.job,completed:6,current_sample_id:'trend-7',summary:{OK:2,NOK:3,WARN:1}},results:[...snapshot.results,increment]};
   const update={type:'result',stream_id:snapshot.stream_id,sequence:2,current_job_id:snapshot.current_job_id,job:snapshot.job,result:snapshot.results.at(-1)};
   for(const viewer of [classic,modern]){
     await viewer.evaluate(`window.__trendBroadcast(${JSON.stringify(update)})`);
     await waitFor(viewer,`document.querySelector('.trendLineWorkspace').getAttribute('data-count')==='6'`,'live incremental result updates chart');
     assert.equal(await viewer.evaluate(`document.querySelector('.trendLineWorkspace').getAttribute('data-view')`),'timing','Streaming results retain the selected graph tab');
-    await select(viewer,'3D Trays');
+    await trayAccuracy(viewer,snapshot.results,`${viewer.classic?'Classic':'Modern'} repeated-instance incremental frame`);
     assert.deepEqual(await viewer.evaluate(`Array.from(document.querySelectorAll('.trendLineWorkspace [data-trend-tray]')).map(bar=>Number(bar.getAttribute('data-total')))`),[6],'3D counts update on every frame');
-    await select(viewer,'Live');await screenshot(viewer,`trend-line-${viewer.classic?'classic':'modern'}-qa.png`);
+    await cumulativeAccuracy(viewer,snapshot.results,`${viewer.classic?'Classic':'Modern'} live cumulative increments`);await screenshot(viewer,`trend-line-${viewer.classic?'classic':'modern'}-qa.png`);
   }
   snapshot={...snapshot,sequence:3,job:{...snapshot.job,completed:18,current_sample_id:'trend-19'},results:Array.from({length:18},(_,i)=>result(i+1))};
   for(const viewer of [classic,modern]){
     await viewer.evaluate(`window.__trendBroadcast(${JSON.stringify(snapshot)})`);
     await waitFor(viewer,`document.querySelector('.trendLineWorkspace').getAttribute('data-count')==='18'`,'multiple measured trays');
-    await select(viewer,'3D Trays');
+    await trayAccuracy(viewer,snapshot.results,`${viewer.classic?'Classic':'Modern'} multiple trays`);
     assert.deepEqual(await viewer.evaluate(`Array.from(document.querySelectorAll('.trendLineWorkspace [data-trend-tray]')).map(bar=>Number(bar.getAttribute('data-total')))`),[16,2],'3D chart supports complete and partial trays simultaneously');
     assert.deepEqual(await viewer.evaluate(`Array.from(document.querySelectorAll('.trendLineWorkspace [data-trend-tray]')).map(bar=>bar.getAttribute('aria-label').split(',')[0])`),['WT 2','WT 3'],'Multiple tray labels remain aligned with global history numbering');
     await select(viewer,'Timing');
@@ -356,12 +463,12 @@ async function analyticsFit(viewer,label){
     await viewer.evaluate(`Array.from(document.querySelectorAll('button')).find(button=>button.textContent.trim()==='Trend Line').click()`);
     await waitFor(viewer,`document.querySelector('.trendLineWorkspace')?.getAttribute('data-view')==='timing'`,'graph choice restored when reopening Trend Line');
   }
-  reports.push({cases:'18 live results: complete/partial tray comparison and persisted graph choice across existing trend tabs'});
+  reports.push({cases:'Repeated-class incremental frame increases each cumulative series; 18 live results compare complete/partial tray/class columns and preserve graph choice across existing trend tabs'});
   for(const viewer of [classic,modern]){
     await appearance(viewer,'premium-white');
     for(const dimensions of [[1920,1080],[1366,768],[1024,768]]){
       await resize(viewer,...dimensions);
-      for(const label of labels){await select(viewer,label);await chartSafety(viewer,`${viewer.classic?'Classic':'Modern'} White ${dimensions} ${label}`);if(label==='Yield'||label==='Defects')await analyticsFit(viewer,`${viewer.classic?'Classic':'Modern'} White ${dimensions} ${label}`);}
+      for(const label of labels){await select(viewer,label);await chartSafety(viewer,`${viewer.classic?'Classic':'Modern'} White ${dimensions} ${label}`);if(label==='Yield'||label==='Defects')await analyticsFit(viewer,`${viewer.classic?'Classic':'Modern'} White ${dimensions} ${label}`);if(label==='3D Trays')await trayFit(viewer,`${viewer.classic?'Classic':'Modern'} White ${dimensions} ${label}`);}
       if(dimensions[0]===1024){await viewer.evaluate(`document.querySelector('.trendLineWorkspace').scrollIntoView({block:'nearest'})`);await pause(150);await screenshot(viewer,`trend-line-${viewer.classic?'classic':'modern'}-white-1024-qa.png`);}
     }
     const contrast=await viewer.evaluate(`(()=>{const root=document.querySelector('.trendLineWorkspace'),style=getComputedStyle(root);const luminance=color=>{const rgb=color.match(/[\\d.]+/g).slice(0,3).map(Number).map(value=>{value/=255;return value<=.04045?value/12.92:Math.pow((value+.055)/1.055,2.4)});return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722};const a=luminance(style.color),b=luminance(style.backgroundColor);return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);})()`);
@@ -370,7 +477,7 @@ async function analyticsFit(viewer,label){
     await appearance(viewer,'graphite');
     await viewer.cdp.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
     assert(await viewer.evaluate(`matchMedia('(pointer:coarse)').matches`),'Touch fixture activates coarse-pointer styles');
-    for(const label of labels){await touchTab(viewer,label);await chartSafety(viewer,`${viewer.classic?'Classic':'Modern'} touch ${label}`);if(label==='Yield'||label==='Defects')await analyticsFit(viewer,`${viewer.classic?'Classic':'Modern'} touch ${label}`);}
+    for(const label of labels){await touchTab(viewer,label);await chartSafety(viewer,`${viewer.classic?'Classic':'Modern'} touch ${label}`);if(label==='Yield'||label==='Defects')await analyticsFit(viewer,`${viewer.classic?'Classic':'Modern'} touch ${label}`);if(label==='3D Trays')await trayFit(viewer,`${viewer.classic?'Classic':'Modern'} touch ${label}`);}
     const touchSizes=await viewer.evaluate(`Array.from(document.querySelectorAll('.trendLineWorkspace [role="tab"]')).map(button=>button.getBoundingClientRect().height)`);
     assert(touchSizes.every(height=>height>=40),'Touch graph tabs have at least40px targets');
     await touchTab(viewer,'Live');
@@ -381,6 +488,14 @@ async function analyticsFit(viewer,label){
     await pause(250);
     assert(await viewer.evaluate(`!!document.querySelector('.trendReadout,.liveDefectReadout')`),'Touch details stay readable after finger release');
     await screenshot(viewer,`trend-line-${viewer.classic?'classic':'modern'}-touch-qa.png`);
+    await touchTab(viewer,'3D Trays');
+    const trayPoint=await viewer.evaluate(`(()=>{const bar=document.querySelector('.trayDefectChart [data-tray-key][data-defect-class]');if(!bar)return null;const rect=bar.getBoundingClientRect();return {x:rect.left+rect.width*.5,y:rect.top+rect.height*.6,key:bar.getAttribute('data-defect-class'),tray:bar.getAttribute('data-tray-key')};})()`);
+    if(trayPoint){
+      await viewer.cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:trayPoint.x,y:trayPoint.y,radiusX:4,radiusY:4}]});
+      await viewer.cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+      await waitFor(viewer,`!!document.querySelector('.trayDefectReadout[data-selected-tray][data-selected-class]')`,'touch selects a tray/class column');await pause(250);
+      assert(await viewer.evaluate(`!!document.querySelector('.trayDefectReadout[data-selected-tray][data-selected-class]')`),'3D tray details remain visible after finger release');
+    }
     await viewer.cdp.send('Emulation.setTouchEmulationEnabled',{enabled:false});
     reports.push({mode:viewer.classic?'Classic':'Modern',cases:'Premium White three-size graph matrix, accessible contrast, real touch graph selection and40px targets'});
   }
@@ -402,6 +517,7 @@ async function analyticsFit(viewer,label){
     await viewer.evaluate(`window.__trendRealNow=Date.now;Date.now=()=>window.__trendRealNow()+360000`);
     await range(viewer,'5m');
     await waitFor(viewer,`document.querySelector('.trendLineWorkspace').getAttribute('data-count')==='0'`,'historical results do not pull an idle rolling window into the past',5000);
+    await cumulativeAccuracy(viewer,snapshot.results.filter(inspection=>inspection.sample_id!=='trend-20'),`${viewer.classic?'Classic':'Modern'} no current intervals`);
     await viewer.evaluate(`window.__trendBroadcast(${JSON.stringify(behindUpdate)})`);
     await waitFor(viewer,`document.querySelector('.trendLineWorkspace').getAttribute('data-count')==='18'`,'fresh active frame corrects client clock ahead of backend');
     await viewer.evaluate('Date.now=window.__trendRealNow');
@@ -443,15 +559,39 @@ async function analyticsFit(viewer,label){
       await appearance(viewer,theme);
       for(const dimensions of [[1920,1080],[1366,768],[1024,768],[768,768]]){
         await resize(viewer,...dimensions);
-        for(const label of ['Yield','Defects']){
-          await select(viewer,label);await chartSafety(viewer,`${viewer.classic?'Classic':'Modern'} expanded ${theme} ${dimensions} ${label}`);await analyticsFit(viewer,`${viewer.classic?'Classic':'Modern'} expanded ${theme} ${dimensions} ${label}`);
-          if(dimensions[0]===1366)await screenshot(viewer,`trend-line-${viewer.classic?'classic':'modern'}-${label.toLowerCase()}-${theme}-expanded-qa.png`);
+        for(const label of ['Yield','Defects','3D Trays']){
+          await select(viewer,label);await chartSafety(viewer,`${viewer.classic?'Classic':'Modern'} expanded ${theme} ${dimensions} ${label}`);if(label==='3D Trays')await trayFit(viewer,`${viewer.classic?'Classic':'Modern'} expanded ${theme} ${dimensions} ${label}`);else await analyticsFit(viewer,`${viewer.classic?'Classic':'Modern'} expanded ${theme} ${dimensions} ${label}`);
+          if(dimensions[0]===1366)await screenshot(viewer,`trend-line-${viewer.classic?'classic':'modern'}-${label.toLowerCase().replaceAll(' ','-')}-${theme}-expanded-qa.png`);
         }
       }
     }
     await viewer.evaluate(`document.querySelector('[aria-label="Close Trend Line"]').click()`);
     await waitFor(viewer,'!document.querySelector(".trendExplorerWindow")','quality explorer closes');
     await resize(viewer,1920,1080);await appearance(viewer,'graphite');
+  }
+  // Two trays, repeated occurrences on one lens, a named defect even when
+  // status is OK, and a blank detector label all stay separate dimensions.
+  const secondTray=result(17,'NOK',Date.now());
+  secondTray.defects=['Bubble','Bubble','Surface Imperfection'].map(name=>({name,confidence:1,severity:'major',channel:'h'}));
+  secondTray.channels=secondTray.channels.map(channel=>({...channel,defects:channel.channel==='h'?secondTray.defects:[]}));
+  const blankLabel=result(18,'NOK',Date.now());
+  blankLabel.defects=[{name:'   ',confidence:1,severity:'major',channel:'h'}];
+  blankLabel.channels=blankLabel.channels.map(channel=>({...channel,defects:channel.channel==='h'?blankLabel.defects:[]}));
+  snapshot={...snapshot,sequence:snapshot.sequence+1,results:[...qualityResults,secondTray,blankLabel],job:{...snapshot.job,completed:7,current_sample_id:'trend-19'}};
+  for(const viewer of [classic,modern]){
+    await viewer.evaluate(`window.__trendBroadcast(${JSON.stringify(snapshot)})`);
+    await waitFor(viewer,`document.querySelector('.trendLineWorkspace').getAttribute('data-count')==='7'`,'3D grouped multi-tray fixture');
+    await cumulativeAccuracy(viewer,snapshot.results,`${viewer.classic?'Classic':'Modern'} repeated classes across trays`);
+    await trayAccuracy(viewer,snapshot.results,`${viewer.classic?'Classic':'Modern'} real tray/class occurrence grid`);
+    await traySelection(viewer,`${viewer.classic?'Classic':'Modern'} grouped column selection`);
+    await trayFiltering(viewer,`${viewer.classic?'Classic':'Modern'} grouped class filter`);
+    assert.deepEqual(await viewer.evaluate(`Array.from(document.querySelectorAll('.trayDefectChart [data-trend-tray]')).map(bar=>bar.getAttribute('aria-label').split(',')[0])`),['WT 2','WT 3'],'Grouped 3D tray labels preserve globally numbered WT History');
+    await viewer.evaluate(`document.querySelector('.trendLineWorkspace [aria-label="Expand Trend Line"]').click()`);await waitFor(viewer,'!!document.querySelector(".trendExplorerWindow")','grouped 3D explorer expands');await pause(220);
+    for(const theme of ['graphite','premium-white']){
+      await appearance(viewer,theme);await resize(viewer,1366,768);await trayFit(viewer,`${viewer.classic?'Classic':'Modern'} ${theme} multi-tray 3D`);
+      await screenshot(viewer,`trend-line-${viewer.classic?'classic':'modern'}-3d-${theme}-grouped-qa.png`);
+    }
+    await viewer.evaluate(`document.querySelector('[aria-label="Close Trend Line"]').click()`);await waitFor(viewer,'!document.querySelector(".trendExplorerWindow")','grouped 3D explorer closes');await appearance(viewer,'graphite');
   }
   const manyClasses=result(1,'NOK',Date.now());
   manyClasses.defects=Array.from({length:20},(_,index)=>({name:`HALCON detailed category ${index+1}`,confidence:1,severity:'major',channel:'h'}));
@@ -465,9 +605,9 @@ async function analyticsFit(viewer,label){
     await defectAccuracy(viewer,expected,`${viewer.classic?'Classic':'Modern'} all twenty HALCON classes`);
     await viewer.evaluate(`document.querySelector('.trendLineWorkspace [aria-label="Expand Trend Line"]').click()`);
     await waitFor(viewer,'!!document.querySelector(".trendExplorerWindow")','many-class explorer expands');await pause(220);
-    for(const dimensions of [[1366,768],[768,768]]){
-      await resize(viewer,...dimensions);
-      for(const label of ['Yield','Defects']){await select(viewer,label);await chartSafety(viewer,`${viewer.classic?'Classic':'Modern'} ${dimensions} twenty classes ${label}`);await analyticsFit(viewer,`${viewer.classic?'Classic':'Modern'} ${dimensions} twenty classes ${label}`);if(dimensions[0]===768)await screenshot(viewer,`trend-line-${viewer.classic?'classic':'modern'}-${label.toLowerCase()}-twenty-classes-768-qa.png`);}
+    for(const theme of ['graphite','premium-white'])for(const dimensions of [[1366,768],[768,768]]){
+      await appearance(viewer,theme);await resize(viewer,...dimensions);
+      for(const label of ['Yield','Defects','3D Trays']){await select(viewer,label);await chartSafety(viewer,`${viewer.classic?'Classic':'Modern'} ${theme} ${dimensions} twenty classes ${label}`);if(label==='3D Trays')await trayFit(viewer,`${viewer.classic?'Classic':'Modern'} ${theme} ${dimensions} twenty classes ${label}`);else await analyticsFit(viewer,`${viewer.classic?'Classic':'Modern'} ${theme} ${dimensions} twenty classes ${label}`);if(dimensions[0]===768)await screenshot(viewer,`trend-line-${viewer.classic?'classic':'modern'}-${label.toLowerCase().replaceAll(' ','-')}-${theme}-twenty-classes-768-qa.png`);}
     }
     await viewer.evaluate(`document.querySelector('[aria-label="Close Trend Line"]').click()`);
     await waitFor(viewer,'!document.querySelector(".trendExplorerWindow")','many-class explorer closes');
@@ -478,13 +618,21 @@ async function analyticsFit(viewer,label){
     await qualityAccuracy(viewer,analyticsTotals(snapshot.results),`${viewer.classic?'Classic':'Modern'} excluded-only No Lens result`);
     await defectAccuracy(viewer,analyticsTotals(snapshot.results),`${viewer.classic?'Classic':'Modern'} excluded-only diagnostics remain visible`);
   }
+  snapshot={...snapshot,sequence:snapshot.sequence+1,results:[blankLabel],job:{...snapshot.job,completed:1}};
+  for(const viewer of [classic,modern]){
+    await viewer.evaluate(`window.__trendBroadcast(${JSON.stringify(snapshot)})`);
+    await trayAccuracy(viewer,snapshot.results,`${viewer.classic?'Classic':'Modern'} NOK with no named defect`);
+    assert.equal(await viewer.evaluate(`document.querySelectorAll('.trayDefectChart [data-tray-key][data-defect-class]').length`),0,'NOK status alone never fabricates an unnamed 3D defect column');
+  }
   snapshot={...savedSnapshot,sequence:snapshot.sequence+1};
   for(const viewer of [classic,modern])await viewer.evaluate(`window.__trendBroadcast(${JSON.stringify(snapshot)})`);
-  reports.push({cases:'Yield/Defects actual occurrence vs affected-lens counts, repeated classes, no-lens yield exclusion, class selection, all20classes, no-scroll four-size dark/White popup matrix'});
+  reports.push({cases:'Yield/Defects actual occurrence vs affected-lens counts, repeated classes, no-lens yield exclusion; grouped 3D multi-tray class columns, global WT labels, selection, class filters, blank-label NOK; all20classes, no-scroll four-size dark/White popup matrix'});
   for(const classicMode of [true,false]){
     const empty=await makeViewer(classicMode,true);
     await waitFor(empty,`document.querySelector('.trendLineWorkspace').getAttribute('data-count')==='0'`,'empty inspection history');
-    for(const label of labels){await select(empty,label);await chartSafety(empty,`${classicMode?'Classic':'Modern'} empty ${label}`);if(label==='Yield'||label==='Defects')await analyticsFit(empty,`${classicMode?'Classic':'Modern'} empty ${label}`);}
+    for(const label of labels){await select(empty,label);await chartSafety(empty,`${classicMode?'Classic':'Modern'} empty ${label}`);if(label==='Yield'||label==='Defects')await analyticsFit(empty,`${classicMode?'Classic':'Modern'} empty ${label}`);if(label==='3D Trays')await trayFit(empty,`${classicMode?'Classic':'Modern'} empty ${label}`);}
+    await cumulativeAccuracy(empty,[],`${classicMode?'Classic':'Modern'} empty cumulative trend`);
+    await trayAccuracy(empty,[],`${classicMode?'Classic':'Modern'} empty grouped tray chart`);
     await qualityAccuracy(empty,analyticsTotals([]),`${classicMode?'Classic':'Modern'} empty Yield`);
     await defectAccuracy(empty,analyticsTotals([]),`${classicMode?'Classic':'Modern'} empty Defects`);
     reports.push({mode:classicMode?'Classic':'Modern',cases:'all5 empty-state graphs, no synthetic values or invalid attributes'});

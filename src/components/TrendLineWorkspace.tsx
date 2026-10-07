@@ -4,11 +4,12 @@ import {useEffect,useId,useMemo,useRef,useState,type KeyboardEvent,type PointerE
 import {createPortal} from 'react-dom';
 import {Activity,BarChart3,Box,Clock3,Maximize2,Minimize2,TrendingUp,X} from 'lucide-react';
 import type {InspectionResult,StatusSymbolLegend} from '@/types';
-import {buildInspectionTrends,buildLiveDefectTrends,clampLiveDefectDuration,type InspectionTrends,type TrendBucket,type TrendRange} from '@/lib/inspection-trends';
+import {buildInspectionTrends,buildLiveDefectTrends,clampLiveDefectDuration,type TrendBucket,type TrendRange} from '@/lib/inspection-trends';
 import {LiveDefectTrend} from './LiveDefectTrend';
 import {OverallDefectTrend} from './OverallDefectTrend';
 import {YieldQualityAnalysis} from './YieldQualityAnalysis';
 import {DefectAnalysis} from './DefectAnalysis';
+import {TrayDefectChart} from './TrayDefectChart';
 import './trend-line.css';
 
 export type TrendView='live'|'yield'|'defects'|'3d'|'timing';
@@ -41,7 +42,7 @@ export function TrendLineWorkspace({results,capacity=16,running=false,liveResult
   const[view,setView]=useState<TrendView>(initialView||'live');
   const[scope,setScope]=useState<'live'|'overall'>('live');
   const isOverall=liveDefects&&scope==='overall';
-  const isRichAnalysis=!isOverall&&(view==='yield'||view==='defects');
+  const isRichAnalysis=!isOverall&&(view==='yield'||view==='defects'||view==='3d');
   const[range,setRange]=useState<TrendSelection>(liveDefects?'5m':'all');
   const[customAmount,setCustomAmount]=useState('15');
   const[customUnit,setCustomUnit]=useState<'minutes'|'hours'>('minutes');
@@ -83,6 +84,7 @@ export function TrendLineWorkspace({results,capacity=16,running=false,liveResult
     window.addEventListener('keydown',key);return()=>{document.body.style.overflow=previous;window.removeEventListener('keydown',key);window.requestAnimationFrame(()=>previousFocus?.focus())};
   },[expanded,modal]);
   const latestBackendTime=useMemo(()=>results.reduce((latest,result)=>{const time=Date.parse(result.created_at);return Number.isFinite(time)?Math.max(latest,time):latest},0),[results]);
+  const earliestBackendTime=useMemo(()=>results.reduce((earliest,result)=>{const time=Date.parse(result.created_at);return Number.isFinite(time)?Math.min(earliest,time):earliest},Infinity),[results]);
   useEffect(()=>{const difference=latestBackendTime-Date.now();if(difference>clockOffset)setClockOffset(difference)},[latestBackendTime,clockOffset]);
   useEffect(()=>{
     const previous=previousLiveResultAt.current;previousLiveResultAt.current=liveResultAt;
@@ -97,7 +99,13 @@ export function TrendLineWorkspace({results,capacity=16,running=false,liveResult
   // Inspect immediately on a new stream result; do not wait for the clock tick.
   // All-history aggregation stays cached while only the display clock advances.
   const model=useMemo(()=>buildInspectionTrends(results,liveDefects?'all':range as TrendRange,aggregationClock,capacity,liveDefects&&!isOverall?liveDurationMs:undefined),[results,range,aggregationClock,capacity,liveDefects,liveDurationMs,isOverall]);
-  const liveModel=useMemo(()=>liveDefects?buildLiveDefectTrends(results,liveDurationMs,aggregationClock):null,[results,liveDurationMs,aggregationClock,liveDefects]);
+  // Both UI modes share the same running class counts. The selected period
+  // controls the time axis, never the retained-history cumulative baseline.
+  const classDurationMs=!liveDefects&&range==='all'
+    ?clampLiveDefectDuration(Math.max(300000,allResultsClock-earliestBackendTime+1000))
+    :liveDurationMs;
+  const liveClock=isOverall?aggregationClock:now===null?0:Math.max(now+clockOffset,latestBackendTime);
+  const liveModel=useMemo(()=>buildLiveDefectTrends(results,classDurationMs,liveClock),[results,classDurationMs,liveClock]);
   const overallDefects=liveModel?.series.reduce((sum,item)=>sum+item.overallTotal,0)||0;
   const colors:StatusColors={ok:legend?.statuses.find(item=>item.key==='OK')?.color||DEFAULT_COLORS.ok,nok:legend?.statuses.find(item=>item.key==='NOK')?.color||DEFAULT_COLORS.nok,warn:legend?.statuses.find(item=>item.key==='WARN')?.color||DEFAULT_COLORS.warn};
   const latestBucket=model.buckets.findLast(bucket=>bucket.total>0);
@@ -106,24 +114,21 @@ export function TrendLineWorkspace({results,capacity=16,running=false,liveResult
   const width=size.width,height=size.height;
   const left=42,right=Math.max(85,width-(view==='live'?42:16)),top=height<100?8:16,bottom=Math.max(22,height-22),chartHeight=bottom-top;
   const x=(time:number)=>left+(time-model.start)/Math.max(1,model.end-model.start)*(right-left);
-  const percentY=(value:number)=>bottom-value/100*chartHeight;
   const timingMax=Math.max(1,...model.buckets.map(bucket=>bucket.p95InferenceMs??0))*1.12;
   const timingY=(value:number)=>bottom-value/timingMax*chartHeight;
   const bucketX=(bucket:TrendBucket)=>(x(bucket.time)+x(bucket.end))/2;
-  const maxCount=Math.max(1,...model.buckets.map(bucket=>bucket.total));
-  const countAxisMax=Math.max(1,Math.ceil(maxCount/.56));
   function chooseView(next:TrendView){setView(next);setReadout(null)}
   function tabKey(event:KeyboardEvent<HTMLButtonElement>,index:number){
     const next=event.key==='ArrowRight'?(index+1)%VIEWS.length:event.key==='ArrowLeft'?(index+VIEWS.length-1)%VIEWS.length:event.key==='Home'?0:event.key==='End'?VIEWS.length-1:-1;
     if(next<0)return;event.preventDefault();chooseView(VIEWS[next].key);tabs.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
   }
   function chartKey(event:KeyboardEvent<SVGSVGElement>){
-    if(view!=='live'&&view!=='timing')return;const last=model.buckets.length-1,index=hover??Math.max(0,model.buckets.findLastIndex(bucket=>bucket.total>0));
+    if(view!=='timing')return;const last=model.buckets.length-1,index=hover??Math.max(0,model.buckets.findLastIndex(bucket=>bucket.total>0));
     const next=event.key==='ArrowLeft'?Math.max(0,index-1):event.key==='ArrowRight'?Math.min(last,index+1):event.key==='Home'?0:event.key==='End'?last:-1;
     if(next>=0){event.preventDefault();setHover(next)}
   }
   function inspectPoint(event:PointerEvent<SVGSVGElement>){
-    if(view!=='live'&&view!=='timing')return;
+    if(view!=='timing')return;
     const rect=event.currentTarget.getBoundingClientRect(),localX=(event.clientX-rect.left)*width/Math.max(1,rect.width);
     let index=0,distance=Infinity;
     model.buckets.forEach((bucket,i)=>{const d=Math.abs(bucketX(bucket)-localX);if(d<distance){distance=d;index=i}});
@@ -134,15 +139,9 @@ export function TrendLineWorkspace({results,capacity=16,running=false,liveResult
   </g>;
   const empty=(message:string)=><g className="trendSvgEmpty"><text x={width/2} y={height/2} textAnchor="middle">{message}</text><text x={width/2} y={height/2+19} textAnchor="middle" className="trendSvgMuted">New inspection results appear here automatically</text></g>;
 
-  const chart=view==='live'||view==='timing'?<>
-    {grid(view==='timing')}
-    {model.total===0?empty('Waiting for inspection results'):view==='live'?<>
-      <g className="trendBucketBars">{model.buckets.map(bucket=>{let previous=0;const barWidth=Math.max(1,(x(bucket.end)-x(bucket.time))*.65);return <g key={bucket.time}>{(['ok','nok','warn'] as const).map(status=>{const barHeight=bucket[status]/countAxisMax*chartHeight;const y=bottom-previous-barHeight;previous+=barHeight;return <rect key={status} x={bucketX(bucket)-barWidth/2} y={y} width={barWidth} height={barHeight} fill={colors[status]} opacity=".34"><title>{dateLabel(bucket.time)} · {status.toUpperCase()} {bucket[status]}</title></rect>})}</g>})}</g>
-      <path d={linePath(model.buckets.filter(bucket=>bucket.yield!==null).map(bucket=>({x:bucketX(bucket),y:percentY(bucket.yield!)})))} className="trendBridgeLine"><title>Dashed connections bridge intervals without yield measurements</title></path>
-      <path d={linePath(model.buckets.map(bucket=>({x:bucketX(bucket),y:bucket.yield===null?null:percentY(bucket.yield)})))} className="trendMainLine"/>
-      {model.buckets.filter(bucket=>bucket.yield!==null).map(bucket=><circle key={bucket.time} cx={bucketX(bucket)} cy={percentY(bucket.yield!)} r="3" className="trendMainPoint"><title>{bucketReadout(bucket).items.join(' · ')}</title></circle>)}
-      <text x={width-3} y={top+4} textAnchor="end" className="trendSvgMuted">{countAxisMax}</text><text x={width-3} y={bottom+3} textAnchor="end" className="trendSvgMuted">0</text>
-    </>:<>
+  const chart=view==='timing'?<>
+    {grid(true)}
+    {model.total===0?empty('Waiting for inspection results'):<>
       <path d={linePath(model.buckets.filter(bucket=>bucket.p95InferenceMs!==null).map(bucket=>({x:bucketX(bucket),y:timingY(bucket.p95InferenceMs!)})))} className="trendP95Bridge"><title>Dashed connections bridge intervals without timing measurements</title></path>
       <path d={linePath(model.buckets.filter(bucket=>bucket.avgInferenceMs!==null).map(bucket=>({x:bucketX(bucket),y:timingY(bucket.avgInferenceMs!)})))} className="trendBridgeLine"><title>Dashed connections bridge intervals without timing measurements</title></path>
       <path d={linePath(model.buckets.map(bucket=>({x:bucketX(bucket),y:bucket.p95InferenceMs===null?null:timingY(bucket.p95InferenceMs)})))} className="trendP95Line"/>
@@ -150,8 +149,8 @@ export function TrendLineWorkspace({results,capacity=16,running=false,liveResult
       {model.buckets.filter(bucket=>bucket.avgInferenceMs!==null).map(bucket=><circle key={bucket.time} cx={bucketX(bucket)} cy={timingY(bucket.avgInferenceMs!)} r="3" className="trendMainPoint"><title>{dateLabel(bucket.time)} · {milliseconds(bucket.avgInferenceMs)}</title></circle>)}
       {model.avgInferenceMs===null&&empty('Inference timing has not been reported')}
     </>}
-    {hover!==null&&activeBucket&&<g className="trendCursor"><line x1={bucketX(activeBucket)} x2={bucketX(activeBucket)} y1={top} y2={bottom}/>{activeBucket.yield!==null&&view==='live'&&<circle cx={bucketX(activeBucket)} cy={percentY(activeBucket.yield)} r="5"/>}</g>}
-  </>:<TrayChart model={model} size={size} colors={colors} angle={angle} trayLabels={trayLabels} onReadout={setReadout}/>;
+    {hover!==null&&activeBucket&&<g className="trendCursor"><line x1={bucketX(activeBucket)} x2={bucketX(activeBucket)} y1={top} y2={bottom}/></g>}
+  </>:null;
 
   const content=<section className={`trendLineWorkspace ${expanded?'isExpanded':''} ${liveDefects?'hasLiveDefects':''} ${isOverall?'isOverall':''}`} data-scope={scope} data-view={view} data-count={model.total} data-lens-count={model.total} data-empty={model.total===0} aria-label="Live inspection analytics">
     {liveDefects&&<div className="trendScopeHeader"><div><small>INSPECTION INTELLIGENCE</small><strong>{isOverall?'The complete picture':'Every defect. In real time.'}</strong></div><div className="trendScopeSwitch" role="group" aria-label="Trend display mode"><button aria-pressed={!isOverall} onClick={()=>setScope('live')}><Activity/>Live trend</button><button aria-pressed={isOverall} onClick={()=>setScope('overall')}><BarChart3/>Overall</button></div></div>}
@@ -164,40 +163,25 @@ export function TrendLineWorkspace({results,capacity=16,running=false,liveResult
       {!modal&&<button ref={expandButton} className="trendExpand" aria-label={expanded?'Minimize Trend Line':'Expand Trend Line'} title={expanded?'Minimize':'Expand charts'} onClick={()=>setExpanded(value=>!value)}>{expanded?<Minimize2/>:<Maximize2/>}</button>}
     </div>
     {!isRichAnalysis&&<div className="trendMetricStrip">
-      {liveDefects&&!isOverall&&view==='live'&&liveModel?<>
-      <div title="Every actual reported defect occurrence within the selected period, including repeated defects on one lens"><small>Total defects in period</small><strong data-trend-metric="defects">{liveModel.totalDefects.toLocaleString()}</strong><em>All classes combined</em></div>
-      <div><small>Defect classes detected</small><strong data-trend-metric="classes">{liveModel.series.filter(item=>item.total>0).length}</strong><em>See individual totals below</em></div>
-      <div><small>Lenses inspected</small><strong data-trend-metric="total">{liveModel.inspected.toLocaleString()}</strong><em><i style={{background:colors.nok}}/>{model.nok} NOK · {model.ok} OK</em></div>
+      {!isOverall&&view==='live'?<>
+      <div title="Running count of actual reported defect occurrences across retained inspection history, including repeated defects on one lens"><small>Running defect total</small><strong data-trend-metric="defects">{overallDefects.toLocaleString()}</strong><em>Continues across time windows</em></div>
+      <div><small>Defect classes detected</small><strong data-trend-metric="classes">{liveModel.series.filter(item=>item.overallTotal>0).length}</strong><em>Retained inspection history</em></div>
+      <div><small>Lenses in visible period</small><strong data-trend-metric="total">{liveModel.inspected.toLocaleString()}</strong><em>{liveModel.totalDefects} new defects in view</em></div>
       </>:<>
       <div><small>Inspected</small><strong data-trend-metric="total">{model.total.toLocaleString()}</strong><em><i style={{background:colors.ok}}/>{model.ok} OK</em></div>
       <div title="Yield excludes reported no-lens/no-test-job results. Outcome counts include every inspected result."><small>{isOverall?'Overall yield':'Window yield'}</small><strong data-trend-metric="yield">{percentage(model.yield)}</strong><em><i style={{background:colors.nok}}/>{model.nok} NOK</em></div>
       <div title="One backend-measured four-camera inference call per lens"><small>{isOverall?'Total defects':'Avg. inference'}</small><strong data-trend-metric={isOverall?'defects':'avg'}>{isOverall?overallDefects.toLocaleString():milliseconds(model.avgInferenceMs)}</strong><em><i style={{background:colors.warn}}/>{model.warn} warning</em></div>
       </>}
     </div>}
-    {!isOverall&&!isRichAnalysis&&!(liveDefects&&view==='live')&&<div className="trendChartHeading"><span>{view==='live'?<><i className="trendLegendLine"/>Yield % <i className="trendLegendBars" style={{background:colors.ok}}/>Lenses / interval</>:view==='timing'?<><i className="trendLegendLine"/>Average ms <i className="trendLegendP95"/>P95 ms</>:view==='yield'?'Inspection outcomes · selected time window':view==='defects'?'Most frequent defects · affected lenses':'Latest trays · measured inspection outcomes'}</span>{view==='3d'?<label className="trendRotation">Rotation<input aria-label="3D chart rotation" type="range" min="15" max="65" value={angle} onChange={event=>setAngle(Number(event.target.value))}/><output>{angle}°</output></label>:<small>{liveDefects?`${liveDurationMs/60000<60?`${Number((liveDurationMs/60000).toFixed(2))} min`:`${Number((liveDurationMs/3600000).toFixed(2))} h`} · live window`:range==='all'?'All loaded results':`${RANGES.find(item=>item[0]===range)?.[1]} window`}</small>}</div>}
+    {!isOverall&&(view==='timing'||view==='3d')&&<div className="trendChartHeading"><span>{view==='timing'?<><i className="trendLegendLine"/>Average ms <i className="trendLegendP95"/>P95 ms</>:'Defect occurrences by tray and class'}</span>{view==='3d'?<label className="trendRotation">Rotation<input aria-label="3D chart rotation" type="range" min="15" max="65" value={angle} onChange={event=>setAngle(Number(event.target.value))}/><output>{angle}°</output></label>:<small>{liveDefects?`${liveDurationMs/60000<60?`${Number((liveDurationMs/60000).toFixed(2))} min`:`${Number((liveDurationMs/3600000).toFixed(2))} h`} · live window`:range==='all'?'All loaded results':`${RANGES.find(item=>item[0]===range)?.[1]} window`}</small>}</div>}
     <div id={panelId} role={isOverall?'region':'tabpanel'} aria-label={isOverall?'Overall defect analysis':undefined} aria-labelledby={isOverall?undefined:`${panelId}-${view}`} className="trendPlot" ref={plot}>
-      {isOverall&&liveModel?<OverallDefectTrend model={liveModel} legend={legend}/>:view==='yield'?<YieldQualityAnalysis model={model} legend={legend}/>:view==='defects'?<DefectAnalysis model={model} legend={legend}/>:view==='live'&&liveModel?<LiveDefectTrend model={liveModel} legend={legend}/>:<><svg viewBox={`0 0 ${width} ${height}`} role="img" tabIndex={view==='live'||view==='timing'?0:undefined} aria-label={{live:'Live inspection trend',yield:'Inspection quality distribution',defects:'Defect frequency','3d':'3D tray inspection chart',timing:'Inference timing trend'}[view]} onKeyDown={chartKey} onPointerDown={inspectPoint} onPointerMove={inspectPoint} onPointerLeave={event=>{if(event.pointerType!=='touch'){setHover(null);setReadout(null)}}}>
+      {isOverall&&liveModel?<OverallDefectTrend model={liveModel} legend={legend}/>:view==='yield'?<YieldQualityAnalysis model={model} legend={legend}/>:view==='defects'?<DefectAnalysis model={model} legend={legend}/>:view==='live'?<LiveDefectTrend model={liveModel} legend={legend}/>:view==='3d'?<TrayDefectChart model={model} legend={legend} angle={angle} trayLabels={trayLabels}/>:<><svg viewBox={`0 0 ${width} ${height}`} role="img" tabIndex={0} aria-label="Inference timing trend" onKeyDown={chartKey} onPointerDown={inspectPoint} onPointerMove={inspectPoint} onPointerLeave={event=>{if(event.pointerType!=='touch'){setHover(null);setReadout(null)}}}>
         {chart}
       </svg>
       {selected&&(hover!==null||readout!==null)&&<div className="trendReadout" role="status"><b>{selected.title}</b>{selected.items.map(item=><span key={item}>{item}</span>)}</div>}</>}
     </div>
-    <footer className="trendLineFooter">{isOverall?<><span>All loaded inspection results</span><span>{overallDefects} defects · {liveModel?.series.filter(item=>item.overallTotal>0).length||0} types</span></>:<><span title={model.lastResultAt===null?'No results in this range':dateLabel(model.lastResultAt)}>{view==='live'&&liveModel?'Each point shows an interval count, not a running total':model.lastResultAt===null?'Waiting for measured results':`Last result ${timeLabel(model.lastResultAt,true)}`}</span><span>{view==='live'&&liveModel?`${liveModel.totalDefects} defects · ${liveModel.series.filter(item=>item.total>0).length} classes`:view==='3d'?'OK · NOK · Warning':view==='defects'?`${model.defects.length} types · ${model.total} lenses`:view==='timing'?`P95 ${milliseconds(model.p95InferenceMs)}`:`${model.total} inspected · ${model.trays.length} WT`}</span></>}</footer>
+    <footer className="trendLineFooter">{isOverall?<><span>All loaded inspection results</span><span>{overallDefects} defects · {liveModel?.series.filter(item=>item.overallTotal>0).length||0} types</span></>:<><span title={model.lastResultAt===null?'No results in this range':dateLabel(model.lastResultAt)}>{view==='live'&&liveModel?'Cumulative counts · idle periods hold the last total':model.lastResultAt===null?'Waiting for measured results':`Last result ${timeLabel(model.lastResultAt,true)}`}</span><span>{view==='live'&&liveModel?`${overallDefects} running defects · ${liveModel.series.filter(item=>item.overallTotal>0).length} classes`:view==='3d'?`${model.defects.length} defect classes · ${model.trays.length} WT`:view==='defects'?`${model.defects.length} types · ${model.total} lenses`:view==='timing'?`P95 ${milliseconds(model.p95InferenceMs)}`:`${model.total} inspected · ${model.trays.length} WT`}</span></>}</footer>
   </section>;
   if(expanded&&typeof document!=='undefined')return <>{!modal&&<div className="trendExpandedPlaceholder"><TrendingUp/><span>Trend Line is expanded</span><button onClick={closeExplorer}>Return to workspace</button></div>}{createPortal(<div className="trendExplorerBackdrop" onPointerDown={event=>{if(event.target===event.currentTarget)closeExplorer()}}><section className="trendExplorerWindow" ref={dialog} role="dialog" aria-modal="true" aria-label="Expanded Trend Line"><header><span><Activity/><b>Trend Line</b><small>{liveDefects?'Live defect monitor':'Live inspection analytics'}</small></span><button ref={closeButton} aria-label="Close Trend Line" onClick={closeExplorer}><X/></button></header>{content}</section></div>,document.body)}</>;
   return content;
-}
-
-function TrayChart({model,size,colors,angle,trayLabels,onReadout}:{model:InspectionTrends;size:Size;colors:StatusColors;angle:number;trayLabels?:ReadonlyMap<string,number>;onReadout:(value:Readout|null)=>void}){
-  const trays=model.trays.slice(-Math.max(1,Math.min(10,Math.floor((size.width-48)/43)))),max=Math.max(1,...trays.map(tray=>Math.max(tray.total,tray.capacity)));
-  const left=32,right=size.width-17,base=size.height-23,plotHeight=Math.max(4,base-23),step=(right-left)/Math.max(1,trays.length),barWidth=Math.min(42,step*.58),depth=Math.min(14,step*.2,plotHeight*.3),dx=depth*Math.cos(angle*Math.PI/180),dy=-depth*Math.sin(angle*Math.PI/180);
-  return <g><g className="trendSvgGrid">{[0,.5,1].map(fraction=><g key={fraction}><line x1={left} x2={right} y1={base-fraction*plotHeight} y2={base-fraction*plotHeight}/><text x={left-6} y={base-fraction*plotHeight+3} textAnchor="end">{Math.round(max*fraction)}</text></g>)}</g>
-    {trays.length===0?<text x={size.width/2} y={size.height/2} textAnchor="middle" className="trendSvgMuted">Waiting for an inspected tray</text>:trays.map((tray,index)=>{let stacked=0;const xx=left+(index+.5)*step-barWidth/2;
-      const wt=trayLabels?.get(tray.key)??tray.wt;
-      const details={title:`WT ${wt} · ${dateLabel(tray.time)}`,items:[`${tray.total} / ${tray.capacity} inspected · ${tray.complete?'Complete':'Partial tray in this window'}`,`${tray.ok} OK · ${tray.nok} NOK · ${tray.warn} warning`,`Yield ${percentage(tray.yield)} · ${milliseconds(tray.avgInferenceMs)}`]};
-      return <g key={tray.key} data-trend-tray={tray.key} data-total={tray.total} tabIndex={0} role="img" aria-label={`WT ${wt}, ${tray.total} inspected, ${tray.ok} OK, ${tray.nok} NOK, ${tray.warn} warning`} onPointerEnter={()=>onReadout(details)} onFocus={()=>onReadout(details)} onBlur={()=>onReadout(null)}><title>{details.title} · {details.items.join(' · ')}</title>
-        {(['ok','nok','warn'] as const).map(status=>{const hh=tray[status]/max*plotHeight,yy=base-stacked-hh;stacked+=hh;if(!hh)return null;return <g key={status} data-status={status} data-count={tray[status]} fill={colors[status]}><rect x={xx} y={yy} width={barWidth} height={hh} opacity=".9"/><path d={`M${xx+barWidth},${yy} l${dx},${dy} v${hh} l${-dx},${-dy} Z`} opacity=".55"/><path d={`M${xx},${yy} l${dx},${dy} h${barWidth} l${-dx},${-dy} Z`} opacity=".7"/></g>})}
-        <text x={xx+barWidth/2+dx/2} y={base-stacked+dy-5} textAnchor="middle" className="trendSvgText">{tray.total}</text><text x={xx+barWidth/2} y={size.height-7} textAnchor="middle" className="trendSvgMuted">WT {wt}</text>
-      </g>;
-    })}
-  </g>;
 }

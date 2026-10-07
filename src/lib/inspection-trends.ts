@@ -58,12 +58,13 @@ export interface LiveDefectTrendSeries {
   /** Trimmed/case-insensitive identity, independent of legend configuration. */
   key: string;
   name: string;
-  /** Actual defect instances, not affected lenses or a status count. */
+  /** Actual defect instances in the visible window, not affected lenses. */
   total: number;
   /** One count per matching interval in LiveDefectTrends.buckets. */
   counts: number[];
   /** Running total including retained inspections before the visible window. */
   cumulativeCounts: number[];
+  /** Actual instances across the retained, latest-per-sample inspection history. */
   overallTotal: number;
 }
 
@@ -271,7 +272,8 @@ export function buildInspectionTrends(
 /**
  * Classic live defect lines use a moving time domain but stationary epoch bins.
  * Advancing the clock must move a point left, not reassign old events to new
- * intervals. Gaps are genuine zero counts, including the in-progress bin.
+ * intervals. Raw interval gaps are zero; cumulative totals carry history forward
+ * through idle bins and beyond the sliding window's opening boundary.
  * Every HALCON defect name is represented; there is no top-N truncation.
  */
 export function buildLiveDefectTrends(

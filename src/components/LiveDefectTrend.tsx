@@ -82,12 +82,14 @@ export function LiveDefectTrend({ model, legend }: Props) {
   const styles = useMemo(() => new Map(model.series.map(series => [series.key, seriesStyle(series, legend)])), [model.series, legend]);
   const codes = useMemo(() => defectClassCodes(model.series.map(series=>series.name)), [model.series]);
   const visible = model.series.filter(series => !hidden.has(series.key));
-  const maxCount = visible.reduce((max, series) => series.counts.reduce((largest,count)=>Math.max(largest,count),max), 1);
+  const maxCount = visible.reduce((max, series) => series.cumulativeCounts.reduce((largest,count)=>Math.max(largest,count),max), 1);
   const scale = countScale(maxCount, height < 150 ? 2 : 4);
   const y = (count: number) => bottom - count / scale.max * chartHeight;
   const selectedIndex = hoverTime === null ? -1 : model.buckets.findIndex(bucket => bucket.time === hoverTime);
   const selectedBucket = model.buckets[selectedIndex];
   const intervalTotal = model.series.reduce((sum, series) => sum + (series.counts[selectedIndex] || 0), 0);
+  const cumulativeTotal = model.series.reduce((sum, series) => sum + (series.cumulativeCounts[selectedIndex] || 0), 0);
+  const overallTotal = model.series.reduce((sum, series) => sum + series.overallTotal, 0);
   const legendColumns = model.series.length > 10 ? 2 : 1;
   const legendLayout = {'--legend-columns':legendColumns,'--legend-rows':Math.ceil(model.series.length / legendColumns) + 1,'--compact-legend-rows':Math.ceil(model.series.length / 2) + 1} as CSSProperties;
 
@@ -163,36 +165,36 @@ export function LiveDefectTrend({ model, legend }: Props) {
     .filter(time => time <= model.end);
 
   function path(series: LiveDefectTrendSeries): string {
-    const points = smoothTrendPath(model.buckets.map((bucket, index) => ({x:x(bucket.time), y:y(series.counts[index] || 0)})));
+    const points = smoothTrendPath(model.buckets.map((bucket, index) => ({x:x(bucket.time), y:y(series.cumulativeCounts[index] || 0)})));
     const last = model.buckets.at(-1);
     // The current bin is a partial measurement, not a future forecast. Its
     // constant tail is clipped at LIVE so it reaches the right edge while the
     // epoch-aligned points continue moving left between display-clock ticks.
-    return last ? `${points} L${x(last.end).toFixed(2)},${y(series.counts.at(-1) || 0).toFixed(2)}` : points;
+    return last ? `${points} L${x(last.end).toFixed(2)},${y(series.cumulativeCounts.at(-1) || 0).toFixed(2)}` : points;
   }
 
   return <div className="classicDefectTrend" data-window-start={model.start} data-window-end={model.end}
-    data-count={model.totalDefects} data-inspected={model.inspected}>
-    <div className="liveDefectWindowSummary" data-total={model.totalDefects}>
-      <div><strong>Defects by class</strong><span>{timeLabel(model.start, duration < 3_600_000)} — {timeLabel(model.end, duration < 3_600_000)}</span></div>
-      <small>Class totals for the selected {intervalLabel(duration)} period</small>
+    data-count={overallTotal} data-window-count={model.totalDefects} data-count-mode="cumulative" data-inspected={model.inspected}>
+    <div className="liveDefectWindowSummary" data-total={overallTotal} data-window-total={model.totalDefects}>
+      <div><strong>Cumulative defects by class</strong><span>{timeLabel(model.start, duration < 3_600_000)} — {timeLabel(model.end, duration < 3_600_000)}</span></div>
+      <small>Running history totals · +{model.totalDefects.toLocaleString()} in visible period</small>
     </div>
     <div className="liveDefectBody" onPointerLeave={event=>{if(event.pointerType!=='touch')setHoverTime(null)}}>
-    <aside className={`liveDefectSidebar ${legendColumns>1?'isDense':''}`} aria-label="Live defect class totals">
-    <div className="trendClassSideHeading"><strong>Defect classes</strong><small>Selected period totals</small></div>
+    <aside className={`liveDefectSidebar ${legendColumns>1?'isDense':''}`} aria-label="Cumulative defect class totals">
+    <div className="trendClassSideHeading"><strong>Defect classes</strong><small>Running history totals</small></div>
     <div className="liveDefectLegend" aria-label="Defect lines" style={legendLayout}>
       {model.series.length > 0 && <button className="liveDefectLegendAll" onClick={() => setHidden(new Set())}
         title="Show every defect line" disabled={hidden.size === 0}>All types</button>}
       {model.series.map(series => {
         const style = styles.get(series.key)!;
         return <button key={series.key} className={`liveDefectLegendItem ${hidden.has(series.key) ? 'isHidden' : ''}`}
-          data-class-total={series.total} data-defect-key={series.key} data-defect-name={series.name} data-defect-code={codes.get(series.name)}
-          aria-label={`${series.name}: ${series.total} defects in the selected period`}
-          aria-pressed={!hidden.has(series.key)} title={`${series.name}: ${series.total} defects in the visible window. Click to ${hidden.has(series.key) ? 'show' : 'hide'} line.`}
+          data-class-total={series.overallTotal} data-window-total={series.total} data-defect-key={series.key} data-defect-name={series.name} data-defect-code={codes.get(series.name)}
+          aria-label={`${series.name}: ${series.overallTotal} cumulative defects, ${series.total} in the visible period`}
+          aria-pressed={!hidden.has(series.key)} title={`${series.name}: ${series.overallTotal} cumulative defects from retained history; +${series.total} in the visible period. Click to ${hidden.has(series.key) ? 'show' : 'hide'} line.`}
           onClick={() => toggleSeries(series.key)} style={{ '--defect-line': style.color } as CSSProperties}>
           <svg viewBox="0 0 21 6" aria-hidden="true"><path d="M1 3H20" stroke={style.color} strokeDasharray={style.dash}/></svg>
-          <span className="trendClassName"><span className="trendClassFullName">{series.name}</span><span className="trendClassInitial">{codes.get(series.name)}</span></span><b>{series.total.toLocaleString()}</b><small>{model.totalDefects ? `${(series.total / model.totalDefects * 100).toFixed(1)}%` : '0%'}</small>
-          {selectedBucket&&<em className="liveDefectClassInterval">{series.counts[selectedIndex]||0} in interval</em>}
+          <span className="trendClassName"><span className="trendClassFullName">{series.name}</span><span className="trendClassInitial">{codes.get(series.name)}</span></span><b>{series.overallTotal.toLocaleString()}</b><small>{overallTotal ? `${(series.overallTotal / overallTotal * 100).toFixed(1)}%` : '0%'}</small>
+          {selectedBucket&&<em className="liveDefectClassInterval">{series.cumulativeCounts[selectedIndex]||0} at time · +{series.counts[selectedIndex]||0} interval</em>}
         </button>;
       })}
     </div>
@@ -202,7 +204,7 @@ export function LiveDefectTrend({ model, legend }: Props) {
         tabIndex={0} onKeyDown={keyboard} onPointerDown={inspect} onPointerMove={inspect}
         onFocus={() => { if (hoverTime === null) setHoverTime(model.buckets.at(-1)?.time ?? null); }}
         onBlur={() => setHoverTime(null)}>
-        <title>HALCON defect counts per time interval, not cumulative totals. Newest time is on the right. Use arrow keys to inspect intervals.</title>
+        <title>Cumulative HALCON defect occurrences from retained inspection history. Counts hold steady between detections, including when old detections leave the visible window. Newest time is on the right. Use arrow keys to inspect totals and interval additions.</title>
         <defs><clipPath id={plotId}><rect x={left} y={top - 4} width={chartWidth} height={chartHeight + 8}/></clipPath>
           <clipPath id={`${plotId}-time`}><rect x={left} y={top} width={chartWidth} height={height - top}/></clipPath></defs>
         <g className="liveDefectGrid">
@@ -213,36 +215,37 @@ export function LiveDefectTrend({ model, legend }: Props) {
           {timeTicks.map(time => <g key={time}><line x1={x(time)} x2={x(time)} y1={top} y2={bottom}/>
             <text x={x(time)} y={height - 8} textAnchor="middle">{timeLabel(time, duration < 3_600_000)}</text></g>)}
         </g></g>
-        <text className="liveDefectAxisTitle" x={left} y={12}>Defect count per {intervalLabel(model.bucketMs)}</text>
+        <text className="liveDefectAxisTitle" x={left} y={12}>Cumulative defect count</text>
         <g clipPath={`url(#${plotId})`}><g ref={seriesGroup}>
-          {visible.filter(series => series.total > 0).map(series => {
+          {visible.filter(series => series.overallTotal > 0).map(series => {
             const style = styles.get(series.key)!;
             return <g key={series.key}>
               <path d={path(series)} className="liveDefectSeriesHalo" stroke={style.color} aria-hidden="true"/>
-              <path data-defect-series={series.key} data-defect-name={series.name} data-overall-count={series.overallTotal} d={path(series)} className="liveDefectSeries"
-                stroke={style.color}><title>{series.name} · {series.total} defects in this window</title></path>
+              <path data-defect-series={series.key} data-defect-name={series.name} data-overall-count={series.overallTotal} data-count-mode="cumulative" data-latest-y={y(series.overallTotal)} d={path(series)} className="liveDefectSeries"
+                stroke={style.color}><title>{series.name} · {series.overallTotal} cumulative defects · +{series.total} in the visible period</title></path>
               {model.buckets.map((bucket, index) => series.counts[index] > 0 && <circle key={bucket.time}
                 data-defect-point={series.key} data-time={bucket.time} data-count={series.counts[index]} data-cumulative-count={series.cumulativeCounts[index]}
-                cx={x(bucket.time)} cy={y(series.counts[index])} r={width > 800 ? 3 : 2.5} fill={style.color}
-                className="liveDefectPoint"><title>{series.name} · {timeLabel(Math.max(bucket.time, model.start))} · {series.counts[index]} in interval</title></circle>)}
+                cx={x(bucket.time)} cy={y(series.cumulativeCounts[index])} r={width > 800 ? 3 : 2.5} fill={style.color}
+                className="liveDefectPoint"><title>{series.name} · {timeLabel(Math.max(bucket.time, model.start))} · {series.cumulativeCounts[index]} cumulative · +{series.counts[index]} in interval</title></circle>)}
             </g>;
           })}
           {selectedBucket && <g className="liveDefectCrosshair"><line x1={x(selectedBucket.time)} x2={x(selectedBucket.time)} y1={top} y2={bottom}/>
-            {visible.map(series => <circle key={series.key} cx={x(selectedBucket.time)} cy={y(series.counts[selectedIndex] || 0)} r="4"
+            {visible.filter(series => series.overallTotal > 0).map(series => <circle key={series.key} cx={x(selectedBucket.time)} cy={y(series.cumulativeCounts[selectedIndex] || 0)} r="4"
               fill="var(--surface-elevated)" stroke={styles.get(series.key)!.color}/>)}</g>}
         </g></g>
         <g className="liveDefectNow"><line x1={right} x2={right} y1={top} y2={bottom}/>
           <rect x={right - 17} y={0} width="34" height="17" rx="4"/><text x={right} y={12} textAnchor="middle">LIVE</text>
         </g>
-        {model.totalDefects === 0 && <g className="liveDefectEmpty"><text x={(left + right) / 2} y={(top + bottom) / 2} textAnchor="middle">
+        {overallTotal === 0 && <g className="liveDefectEmpty"><text x={(left + right) / 2} y={(top + bottom) / 2} textAnchor="middle">
           {model.inspected ? 'No defects reported in this live window' : 'Waiting for live inspection results'}</text></g>}
-        {model.series.length > 0 && visible.length === 0 && <g className="liveDefectEmpty"><text x={(left + right) / 2} y={(top + bottom) / 2} textAnchor="middle">Select a defect type above to show its line</text></g>}
+        {model.series.length > 0 && visible.length === 0 && <g className="liveDefectEmpty"><text x={(left + right) / 2} y={(top + bottom) / 2} textAnchor="middle">Select a defect class to show its line</text></g>}
       </svg>
       {selectedBucket && <div className="liveDefectReadout" role="status" aria-live="polite" aria-atomic="true">
         <b>{timeLabel(Math.max(selectedBucket.time, model.start))} — {timeLabel(Math.min(selectedBucket.end, model.end))}</b>
-        <div className="liveDefectIntervalTotal" data-interval-total={intervalTotal}><span>Defects in this interval</span><strong>{intervalTotal}</strong></div>
+        <div className="liveDefectCumulativeTotal" data-cumulative-total={cumulativeTotal}><span>Cumulative defects</span><strong>{cumulativeTotal}</strong></div>
+        <div className="liveDefectIntervalTotal" data-interval-total={intervalTotal}><span>Added in this interval</span><strong>+{intervalTotal}</strong></div>
         <small>{intervalLabel(model.bucketMs)} intervals · all classes counted</small>
-        <small>Individual interval counts appear beside each class.</small>
+        <small>Running totals include detections before this visible period.</small>
       </div>}
     </div>
     </div>

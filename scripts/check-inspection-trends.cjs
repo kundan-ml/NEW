@@ -137,7 +137,8 @@ const initialIndex = live.buckets.findIndex(bucket => bucket.time <= existingEve
 const movedIndex = moved.buckets.findIndex(bucket => bucket.time <= existingEventTime && bucket.end > existingEventTime);
 assert.equal(moved.buckets[movedIndex].time, live.buckets[initialIndex].time, 'Moving clock never relocates historical events into newly anchored bins');
 assert.equal(moved.series.find(item => item.key === 'surface imperfection').counts[movedIndex], 2);
-assert.equal(moved.series.find(item => item.key === 'surface imperfection').counts.at(-1), 0, 'Idle periods are zero-filled, not carried-forward counts');
+assert.equal(moved.series.find(item => item.key === 'surface imperfection').counts.at(-1), 0, 'Raw idle intervals report zero new defects');
+assert.equal(moved.series.find(item => item.key === 'surface imperfection').cumulativeCounts.at(-1), 2, 'Plotted running count holds steady through idle intervals');
 
 const normalized = buildLiveDefectTrends([
   result('repeated type', 5, 'NOK', { defects: [
@@ -226,6 +227,42 @@ for (const series of live.series) {
 assert.equal(normalized.series[0].overallTotal, 3, 'Repeated instances count in the overall total');
 assert.equal(reinspection.series.find(item=>item.key==='retired defect').overallTotal, 0, 'Superseded results never inflate the running baseline');
 assert.equal(boundaryLive.series[0].overallTotal, 3, 'Left-of-window history contributes to cumulative baseline, not window counts');
+assert.equal(boundaryLive.series[0].cumulativeCounts[0], 2, 'First partial interval includes retained opening history plus its visible detection');
+assert.equal(boundaryLive.series[0].cumulativeCounts.at(-1), 3, 'Newest cumulative value includes the current, incomplete interval');
+
+const cumulativeHistory = [
+  result('old baseline', 3_600, 'NOK', { defects: [surface, surface, { name: 'Bubble' }] }),
+  result('recent addition', 10, 'NOK', { defects: [surface, { name: 'Bubble' }, { name: 'Bubble' }] }),
+];
+const initialRunning = buildLiveDefectTrends(cumulativeHistory, 60_000, now);
+const historicSurface = initialRunning.series.find(series => series.key === 'surface imperfection');
+assert.equal(initialRunning.totalDefects, 3, 'Period additions do not include the opening historical baseline');
+assert.equal(historicSurface.cumulativeCounts[0], 2, 'Visible running line opens at the retained class baseline');
+assert.equal(historicSurface.cumulativeCounts.at(-1), 3, 'Actual repeated instances increase the running total');
+const afterAllExpire = buildLiveDefectTrends(cumulativeHistory, 60_000, now + 300_000);
+assert.equal(afterAllExpire.totalDefects, 0);
+assert.equal(afterAllExpire.inspected, 0);
+for (const series of afterAllExpire.series) {
+  assert.equal(series.overallTotal, 3, 'Every historical class retains its accumulated total after all events leave the window');
+  assert(series.counts.every(count => count === 0), 'An expired period has no invented interval additions');
+  assert(series.cumulativeCounts.every(count => count === 3), 'Historical cumulative lines remain flat, never reset to zero');
+}
+const resumedClock = now + 300_001;
+const resumedRunning = buildLiveDefectTrends([...cumulativeHistory,
+  result('live continuation', 0, 'NOK', {
+    created_at: new Date(resumedClock).toISOString(),
+    defects: [surface, surface, { name: 'Bubble' }],
+  }),
+], 60_000, resumedClock);
+assert.equal(resumedRunning.series.find(series => series.key === 'surface imperfection').overallTotal, 5, 'New repeated detections add onto, not replace, the historic running total');
+assert.equal(resumedRunning.series.find(series => series.key === 'bubble').overallTotal, 4);
+assert.equal(resumedRunning.series.find(series => series.key === 'surface imperfection').cumulativeCounts[0], 3);
+assert.equal(resumedRunning.series.find(series => series.key === 'surface imperfection').cumulativeCounts.at(-1), 5);
+assert.equal(resumedRunning.totalDefects, 3, 'Raw period additions remain separately available for contextual readouts');
+for (const duration of [60_000, 300_000, 3_600_000, 86_400_000]) {
+  const changedWindow = buildLiveDefectTrends(cumulativeHistory, duration, now);
+  assert(changedWindow.series.every(series => series.overallTotal === 3 && series.cumulativeCounts.at(-1) === 3), 'Changing the visible period never resets any class running total');
+}
 const niceIntervals = [
   [60_000, 2_000],
   [61_000, 3_000],
@@ -275,4 +312,4 @@ assert.equal(customStats.buckets.reduce((sum, bucket) => sum + bucket.total, 0),
 assert(customStats.buckets.length >= 120 && customStats.buckets.length <= 182);
 assert.equal(buildInspectionTrends(source, '5m', now, 4, 30_000).start, now - 60_000, 'Custom secondary views use the same duration bounds');
 assert.equal(buildInspectionTrends(source, 'all', now).total, 6, 'Optional custom duration does not change existing Modern/all-history semantics');
-console.log('Inspection trends checks passed: existing chart aggregation and Classic live defect lines, readable whole intervals, continuously sliding domains, stationary epoch bins, all reported types, actual occurrence counts, latest sample dedup, exact partial boundaries, custom windows, and zero-filled idle periods.');
+console.log('Inspection trends checks passed: existing chart aggregation, cumulative defect lines with retained opening history, no reset in idle or expired windows, new repeated detections add onto historic class totals, readable whole intervals, stationary epoch bins, all reported types, latest sample dedup, exact partial boundaries, custom windows, and separate raw interval additions.');

@@ -192,7 +192,7 @@ async function touchClick(viewer,selector){
   }
   assert.equal(await classic.evaluate(`Number(document.querySelector('.classicDefectTrend').dataset.count)`),8,'Chart total counts eight actual defect occurrences');
   const summary=await classic.evaluate(`(()=>{const root=document.querySelector('.trendExplorerWindow'),summary=root.querySelector('.liveDefectWindowSummary');return {total:Number(summary?.dataset.total),period:summary?.textContent,metrics:Object.fromEntries(Array.from(root.querySelectorAll('[data-trend-metric]')).map(metric=>[metric.dataset.trendMetric,metric.textContent.trim()])),classes:Array.from(root.querySelectorAll('.liveDefectLegendItem')).map(button=>({key:button.dataset.defectKey,name:button.dataset.defectName,count:Number(button.dataset.classTotal),text:button.textContent}))};})()`);
-  assert.equal(summary.total,8,'Readable period summary counts every defect in the selected time window');
+  assert.equal(summary.total,8,'Readable running summary counts every retained defect occurrence');
   assert((summary.period?.match(/\d{1,2}:\d{2}/g)||[]).length>=2,'Period summary shows both visible start and end times');
   assert.equal(summary.metrics.defects,'8','Live summary emphasizes actual defect occurrences, not inference timing');
   assert.equal(summary.metrics.classes,'5','Live summary identifies five observed defect classes');
@@ -200,17 +200,21 @@ async function touchClick(viewer,selector){
   for(const [name,count] of [['Bubble',3],['NonCircular',1],['Surface Imperfection',1],['Edge defect',2],['Particle Inclusion',1]]){
     const item=summary.classes.find(item=>item.name===name);
     assert(item?.key,`${name}: class summary has a stable defect identity`);
-    assert.equal(item.count,count,`${name}: class summary displays the exact selected-period total`);
-    assert(item.text.includes('%'),`${name}: class summary also displays its share of period defects`);
+    assert.equal(item.count,count,`${name}: class summary displays the exact cumulative total`);
+    assert(item.text.includes('%'),`${name}: class summary also displays its share of retained defects`);
   }
   for(const path of paths){
     assert(path.d.startsWith('M')&&path.d.includes(' C'),`${path.name}: adjacent measured points connect with smooth cubic curves`);
     assert(!/NaN|Infinity|undefined/.test(path.d),`${path.name}: smooth path has finite coordinates`);
   }
-  assert(await classic.evaluate(`document.querySelector('.liveDefectAxisTitle')?.textContent.includes('10 sec')`),'Five-minute live graph uses readable ten-second count intervals');
+  assert(await classic.evaluate(`document.querySelector('.liveDefectAxisTitle')?.textContent.includes('Cumulative')`),'Y axis explicitly identifies cumulative, not interval, counts');
+  assert(await classic.evaluate(`document.querySelector('.classicDefectTrend')?.dataset.countMode==='cumulative'`),'Live plot advertises its cumulative counting contract');
+  assert(await classic.evaluate(`(()=>{const root=document.querySelector('.classicDefectTrend');return Array.from(root.querySelectorAll('[data-defect-series]')).every(path=>{const points=Array.from(root.querySelectorAll('[data-defect-point]')).filter(point=>point.dataset.defectPoint===path.dataset.defectSeries).sort((a,b)=>Number(a.dataset.time)-Number(b.dataset.time));return points.every((point,index)=>!index||Number(point.dataset.cumulativeCount)>=Number(points[index-1].dataset.cumulativeCount));});})()`),'Every class plotted marker uses a nondecreasing running count');
   const interval=await classic.evaluate(`(()=>{const root=document.querySelector('.classicDefectTrend'),svg=root.querySelector('svg[aria-label="Live defect count over time"]'),point=Array.from(root.querySelectorAll('[data-defect-point]')).find(point=>point.dataset.defectPoint==='bubble'),time=point.dataset.time,rect=point.getBoundingClientRect(),total=Array.from(root.querySelectorAll('[data-defect-point]')).filter(point=>point.dataset.time===time).reduce((sum,point)=>sum+Number(point.dataset.count),0);svg.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,clientX:rect.left+rect.width/2,clientY:rect.top+rect.height/2,pointerType:'mouse'}));return {time,total};})()`);
   await waitFor(classic,`!!document.querySelector('.liveDefectIntervalTotal')`,'Inspecting a measured interval reveals a clear interval total');
   assert.equal(await classic.evaluate(`Number(document.querySelector('.liveDefectIntervalTotal').dataset.intervalTotal)`),interval.total,'Interval tooltip total equals the sum of actual class occurrences at that time');
+  assert(await classic.evaluate(`Number(document.querySelector('.liveDefectCumulativeTotal').dataset.cumulativeTotal)>=Number(document.querySelector('.liveDefectIntervalTotal').dataset.intervalTotal)`),'Readout distinguishes cumulative history from new interval additions');
+  assert(await classic.evaluate(`document.querySelector('.liveDefectReadout').textContent.includes('10 sec')`),'Raw contextual additions retain readable ten-second intervals');
   await classic.evaluate(`Array.from(document.querySelectorAll('.liveDefectLegendItem')).find(button=>button.dataset.defectName==='Bubble').click()`);
   await waitFor(classic,`!Array.from(document.querySelectorAll('[data-defect-series]')).some(line=>line.dataset.defectName==='Bubble')`,'Legend can hide one defect line');
   assert.equal(await classic.evaluate(`Number(document.querySelector('.liveDefectWindowSummary').dataset.total)`),8,'Hiding a class line never changes the selected-period total');
@@ -221,6 +225,7 @@ async function touchClick(viewer,selector){
   await pause(1350);
   const moved=await classic.evaluate(`(()=>{const point=Array.from(document.querySelectorAll('.classicDefectTrend [data-defect-point]')).find(point=>point.dataset.defectPoint===${JSON.stringify(anchor.key)}&&point.dataset.time===${JSON.stringify(anchor.time)});return {x:Number(point?.getAttribute('cx')),end:Number(document.querySelector('.classicDefectTrend').dataset.windowEnd)};})()`);
   assert(moved.end>anchor.end+500,'Live right edge advances while no frames arrive');assert(moved.x<anchor.x-.1,'Existing time point moves from right to left during idle monitoring');
+  assert.equal(await classic.evaluate(`Number(document.querySelector('.classicDefectTrend').dataset.count)`),8,'An idle clock tick never resets the running defect total');
   for(const [value,duration] of [['30m',1800000],['1h',3600000],['4h',14400000]]){await range(classic,value);assert.equal(await windowDuration(classic),duration,`${value}: exact selected visible time span`);}
   await range(classic,'custom');await field(classic,'Custom trend duration','2');await field(classic,'Trend duration unit','minutes',true);assert.equal(await windowDuration(classic),120000,'Custom two-minute rolling window');
   await field(classic,'Trend duration unit','hours',true);await field(classic,'Custom trend duration','3');assert.equal(await windowDuration(classic),10800000,'Custom three-hour rolling window');
@@ -242,7 +247,7 @@ async function touchClick(viewer,selector){
   await classic.evaluate(`window.__trendBroadcast(${JSON.stringify({type:'result',stream_id:snapshot.stream_id,sequence:2,current_job_id:snapshot.current_job_id,job:snapshot.job,result:newResult})})`);
   await waitFor(classic,`Array.from(document.querySelectorAll('[data-defect-series]')).some(line=>line.dataset.defectName==='Custom HALCON defect')`,'Unknown newly reported defect gets its own live line');
   await waitFor(classic,`document.querySelector('.classicDefectTrend').dataset.inspected==='6'`,'Live frame updates popup without refresh');
-  assert.equal(await classic.evaluate(`Number(document.querySelector('.classicDefectTrend').dataset.count)`),9,'Live occurrence total updates on one new defect');
+  assert.equal(await classic.evaluate(`Number(document.querySelector('.classicDefectTrend').dataset.count)`),9,'New live occurrence adds onto existing cumulative history');
   await close(classic);await open(classic);assert.equal(await windowDuration(classic),300000,'User time range persists when popup reopens');
   await classic.evaluate(`document.querySelector('.trendScopeSwitch button:nth-child(2)').click()`);
   await waitFor(classic,`!!document.querySelector('.overallDefectTrend')`,'Overall categorical chart opens');
@@ -258,10 +263,19 @@ async function touchClick(viewer,selector){
   await waitFor(classic,`!!document.querySelector('.classicDefectTrend')`,'Live time-based chart returns');
   assert.equal(await windowDuration(classic),300000,'Switching scope retains live window');
   await range(classic,'custom');await field(classic,'Trend duration unit','minutes',true);await field(classic,'Custom trend duration','1');
-  assert(await classic.evaluate(`Number(document.querySelector('.classicDefectTrend').dataset.count)<9`),'Live excludes results outside the selected minute');
-  const shortWindow=await classic.evaluate(`(()=>{const root=document.querySelector('.classicDefectTrend');return {total:Number(root.dataset.count),summary:Number(root.querySelector('.liveDefectWindowSummary').dataset.total),classTotal:Array.from(root.querySelectorAll('.liveDefectLegendItem')).reduce((sum,button)=>sum+Number(button.dataset.classTotal),0)};})()`);
-  assert.equal(shortWindow.summary,shortWindow.total,'Changing the time period updates its visible defect total');
-  assert.equal(shortWindow.classTotal,shortWindow.total,'Changing the time period updates every class summary consistently');
+  assert(await classic.evaluate(`Number(document.querySelector('.classicDefectTrend').dataset.windowCount)<9`),'Raw additions exclude results outside the selected minute');
+  const shortWindow=await classic.evaluate(`(()=>{const root=document.querySelector('.classicDefectTrend');return {total:Number(root.dataset.count),window:Number(root.dataset.windowCount),summary:Number(root.querySelector('.liveDefectWindowSummary').dataset.total),classTotal:Array.from(root.querySelectorAll('.liveDefectLegendItem')).reduce((sum,button)=>sum+Number(button.dataset.classTotal),0),windowClassTotal:Array.from(root.querySelectorAll('.liveDefectLegendItem')).reduce((sum,button)=>sum+Number(button.dataset.windowTotal),0)};})()`);
+  assert.equal(shortWindow.total,9,'Shortening the visible axis keeps all accumulated history');
+  assert.equal(shortWindow.summary,shortWindow.total,'Running summary does not reset when the selected time period changes');
+  assert.equal(shortWindow.classTotal,shortWindow.total,'Every class summary keeps its consistent cumulative total');
+  assert.equal(shortWindow.windowClassTotal,shortWindow.window,'Raw period additions stay separately available');
+  assert(await classic.evaluate(`(()=>{const root=document.querySelector('.classicDefectTrend'),button=Array.from(root.querySelectorAll('.liveDefectLegendItem')).find(button=>button.dataset.defectName==='Bubble'),line=Array.from(root.querySelectorAll('[data-defect-series]')).find(line=>line.dataset.defectName==='Bubble');if(!button||!line||Number(button.dataset.windowTotal)!==0||Number(button.dataset.classTotal)!==3)return false;const ys=Array.from(line.getAttribute('d').matchAll(/-?\\d+(?:\\.\\d+)?,-?\\d+(?:\\.\\d+)?/g),match=>Number(match[0].split(',')[1]));return ys.length>2&&ys.every(y=>Math.abs(y-Number(line.dataset.latestY))<.02);})()`),'Dormant historical Bubble line remains visible and flat at three, not zero');
+  await classic.evaluate(`(()=>{const native=Date.now;window.__trendRestoreClock=()=>{Date.now=native;};Date.now=()=>native()+600000;})()`);
+  await waitFor(classic,`document.querySelector('.classicDefectTrend')?.dataset.windowCount==='0'`,'Advancing the display clock expires all raw interval detections');
+  assert.equal(await classic.evaluate(`Number(document.querySelector('.classicDefectTrend').dataset.count)`),9,'Running totals remain nine after every event rolls out of the visible window');
+  assert(await classic.evaluate(`(()=>{const root=document.querySelector('.classicDefectTrend');return root.querySelectorAll('[data-defect-series]').length===6&&!root.querySelector('.liveDefectEmpty')&&Array.from(root.querySelectorAll('[data-defect-series]')).every(line=>{const ys=Array.from(line.getAttribute('d').matchAll(/-?\\d+(?:\\.\\d+)?,-?\\d+(?:\\.\\d+)?/g),match=>Number(match[0].split(',')[1]));return ys.every(y=>Math.abs(y-Number(line.dataset.latestY))<.02);});})()`),'All historical class lines stay level without an incorrect empty-state overlay');
+  await classic.evaluate(`window.__trendRestoreClock()`);
+  await waitFor(classic,`Number(document.querySelector('.classicDefectTrend')?.dataset.windowEnd)<${Date.now()+60000}`,'Restoring the real display clock preserves test isolation');
   await classic.evaluate(`document.querySelector('.trendScopeSwitch button:nth-child(2)').click()`);
   await waitFor(classic,`!!document.querySelector('.overallDefectTrend')`,'Overall opens from a short live window');
   assert.equal(await classic.evaluate(`Number(document.querySelector('.overallDefectTrend').dataset.total)`),9,'Overall includes defects outside the live window');
@@ -284,10 +298,11 @@ async function touchClick(viewer,selector){
   assert(!await modern.evaluate(`!!document.querySelector('.sharedClassicHeader [aria-label="Open Trend Line"]')`),'Classic navigation action does not leak into Modern header');
   await modern.evaluate(`Array.from(document.querySelectorAll('.referenceTrendPanel button')).find(button=>button.textContent.trim()==='Trend Line').click()`);
   await waitFor(modern,`!!document.querySelector('.trendLineWorkspace')`,'Modern existing trend tab remains available');
-  assert(!await modern.evaluate(`!!document.querySelector('.classicDefectTrend')`),'Modern live analytics is not replaced by Classic defect chart');
+  await waitFor(modern,`!!document.querySelector('.classicDefectTrend')`,'Modern live analytics shares the same class-based cumulative chart');
+  assert.equal(await modern.evaluate(`Number(document.querySelector('.classicDefectTrend').dataset.count)`),23,'Modern cumulative chart counts every retained instance too');
   const empty=await makeViewer(true,true);await open(empty);await safety(empty,'Classic empty');assert.equal(await empty.evaluate(`Number(document.querySelector('.classicDefectTrend').dataset.count)`),0,'Empty history has zero measured defects');
   for(const viewer of viewers){assert.deepEqual(viewer.errors,[],'No browser runtime or fixture interception errors');assert.deepEqual(viewer.mutations,[],'Read-only trend viewing sends no backend/config mutations');}
-  console.log(JSON.stringify({passed:['Header Help → Trendline → Exit','Real popup open/close/Escape/backdrop and focus restoration','Readable period totals, class counts and shares','Interval totals remain correct when class lines are hidden','Smooth finite cubic curves and readable ten-second bins','Continuously moving right-to-left time axis','Preset minutes/hours and custom duration','Separate actual occurrence lines for all defect types','Unknown live defect type automatically appears','Four desktop/tablet sizes and touch inspection','Modern view unchanged','Empty state and persisted duration'],apiMutations:0,browserErrors:0},null,2));
+  console.log(JSON.stringify({passed:['Header Help → Trendline → Exit','Real popup open/close/Escape/backdrop and focus restoration','Cumulative class totals and history-based shares','Separate raw interval totals remain correct when class lines are hidden','Smooth nondecreasing cumulative curves and readable intervals','Historical class lines stay flat when events roll out of the visible window','No reset during idle intervals or time-window changes','New live detection adds onto retained totals','Continuously moving right-to-left time axis','Preset minutes/hours and custom duration','All reported classes including unknown live defects','Four desktop/tablet sizes and touch inspection','Modern shares the cumulative per-class chart','Empty state and persisted duration'],apiMutations:0,browserErrors:0},null,2));
 })().catch(error=>{console.error(error.stack||error);process.exitCode=1;}).finally(async()=>{
   for(const viewer of viewers)viewer.cdp.close();
   if(browser){try{await browser.send('Browser.close');}catch{}browser.close();}
