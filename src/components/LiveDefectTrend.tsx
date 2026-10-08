@@ -15,6 +15,7 @@ import type { StatusSymbolLegend } from '@/types';
 import type { LiveDefectTrends, LiveDefectTrendSeries } from '@/lib/inspection-trends';
 import {smoothTrendPath} from '@/lib/trend-curve';
 import {defectClassCodes} from '@/lib/defect-class-labels';
+import {layoutTrendTipLabels} from '@/lib/trend-tip-labels';
 import './live-defect-trend.css';
 
 type Props = { model: LiveDefectTrends; legend?: StatusSymbolLegend | null };
@@ -74,18 +75,25 @@ export function LiveDefectTrend({ model, legend }: Props) {
   const duration = Math.max(1, model.end - model.start);
   const { width, height } = size;
   const left = width < 350 ? 32 : 43;
-  const right = Math.max(left + 24, width - 43);
   const top = height < 100 ? 19 : 25;
   const bottom = Math.max(top + 5, height - 25);
-  const chartWidth = right - left;
   const chartHeight = bottom - top;
-  const x = (time: number) => left + (time - model.start) / duration * chartWidth;
   const styles = useMemo(() => new Map(model.series.map(series => [series.key, seriesStyle(series, legend)])), [model.series, legend]);
   const codes = useMemo(() => defectClassCodes(model.series.map(series=>series.name)), [model.series]);
   const visible = model.series.filter(series => !hidden.has(series.key));
   const maxCount = visible.reduce((max, series) => series.cumulativeCounts.reduce((largest,count)=>Math.max(largest,count),max), 1);
   const scale = countScale(maxCount, height < 150 ? 2 : 4);
   const y = (count: number) => bottom - count / scale.max * chartHeight;
+  const plotted = visible.filter(series => series.overallTotal > 0);
+  const tips = layoutTrendTipLabels(plotted.map(series => ({
+    key: series.key, y: y(series.cumulativeCounts.at(-1) ?? series.overallTotal),
+  })), top, bottom);
+  const tipSeries = new Map(plotted.map(series => [series.key, series]));
+  const tipColumns = Math.max(1, ...tips.map(tip => tip.column + 1));
+  const tipColumnWidth = Math.max(18, ...plotted.map(series => (codes.get(series.name)?.length || 1) * 7)) + 12;
+  const right = Math.max(left + 24, width - Math.max(43, tipColumns * tipColumnWidth + 12));
+  const chartWidth = right - left;
+  const x = (time: number) => left + (time - model.start) / duration * chartWidth;
   const selectedIndex = hoverTime === null ? -1 : model.buckets.findIndex(bucket => bucket.time === hoverTime);
   const selectedBucket = model.buckets[selectedIndex];
   const intervalTotal = model.series.reduce((sum, series) => sum + (series.counts[selectedIndex] || 0), 0);
@@ -218,7 +226,7 @@ export function LiveDefectTrend({ model, legend }: Props) {
         </g></g>
         <text className="liveDefectAxisTitle" x={left} y={12}>Cumulative defect count</text>
         <g clipPath={`url(#${plotId})`}><g ref={seriesGroup}>
-          {visible.filter(series => series.overallTotal > 0).map(series => {
+          {plotted.map(series => {
             const style = styles.get(series.key)!;
             return <g key={series.key}>
               <path d={path(series)} className="liveDefectSeriesHalo" stroke={style.color} aria-hidden="true"/>
@@ -231,17 +239,43 @@ export function LiveDefectTrend({ model, legend }: Props) {
             </g>;
           })}
           {selectedBucket && <g className="liveDefectCrosshair"><line x1={x(selectedBucket.time)} x2={x(selectedBucket.time)} y1={top} y2={bottom}/>
-            {visible.filter(series => series.overallTotal > 0).map(series => <circle key={series.key} cx={x(selectedBucket.time)} cy={y(series.cumulativeCounts[selectedIndex] || 0)} r="4"
+            {plotted.map(series => <circle key={series.key} cx={x(selectedBucket.time)} cy={y(series.cumulativeCounts[selectedIndex] || 0)} r="4"
               fill="var(--surface-elevated)" stroke={styles.get(series.key)!.color}/>)}</g>}
         </g></g>
         <g className="liveDefectNow"><line x1={right} x2={right} y1={top} y2={bottom}/>
           <rect x={right - 17} y={0} width="34" height="17" rx="4"/><text x={right} y={12} textAnchor="middle">LIVE</text>
         </g>
+        {/* Fixed to the LIVE edge, outside the scrolling/clipped time series.
+            Leaders preserve the true tip when equal counts need spaced labels. */}
+        <g className="liveDefectTips">
+          <g aria-hidden="true">
+            {tips.map(tip => {
+              const color = styles.get(tip.key)!.color;
+              const labelX = right + 12 + tip.column * tipColumnWidth;
+              return <g key={tip.key}>
+                <path className="liveDefectTipLeader" d={`M${right},${tip.tipY} L${labelX - 8},${tip.tipY} L${labelX - 3},${tip.labelY}`} stroke={color}/>
+                <circle cx={right} cy={tip.tipY} r="2.5" fill={color}/>
+              </g>;
+            })}
+          </g>
+          {tips.map(tip => {
+            const series = tipSeries.get(tip.key)!;
+            const color = styles.get(tip.key)!.color;
+            const labelX = right + 12 + tip.column * tipColumnWidth;
+            return <g key={tip.key} data-defect-tip={tip.key} data-defect-name={series.name}
+              data-defect-code={codes.get(series.name)} data-tip-y={tip.tipY} data-tip-x={right}
+              data-label-column={tip.column} role="img" aria-label={`${series.name}: ${series.overallTotal} cumulative defects`}>
+              <title>{series.name} · {series.overallTotal} cumulative defects</title>
+              <text className="liveDefectTipText" x={labelX} y={tip.labelY} dy=".35em" fill={color}>{codes.get(series.name)}</text>
+            </g>;
+          })}
+        </g>
         {overallTotal === 0 && <g className="liveDefectEmpty"><text x={(left + right) / 2} y={(top + bottom) / 2} textAnchor="middle">
           {model.inspected ? 'No defects reported in this live window' : 'Waiting for live inspection results'}</text></g>}
         {model.series.length > 0 && visible.length === 0 && <g className="liveDefectEmpty"><text x={(left + right) / 2} y={(top + bottom) / 2} textAnchor="middle">Select a defect class to show its line</text></g>}
       </svg>
-      {selectedBucket && <div className="liveDefectReadout" role="status" aria-live="polite" aria-atomic="true">
+      {selectedBucket && <div className="liveDefectReadout" role="status" aria-live="polite" aria-atomic="true"
+        style={{right:width - right + 8,maxWidth:Math.max(60,right - 12)}}>
         <b>{timeLabel(Math.max(selectedBucket.time, model.start))} — {timeLabel(Math.min(selectedBucket.end, model.end))}</b>
         <div className="liveDefectCumulativeTotal" data-cumulative-total={cumulativeTotal}><span>Cumulative defects</span><strong>{cumulativeTotal}</strong></div>
         <div className="liveDefectIntervalTotal" data-interval-total={intervalTotal}><span>Added in this interval</span><strong>+{intervalTotal}</strong></div>

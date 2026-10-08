@@ -17,6 +17,8 @@
 .liveDefectSeries{fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
 .liveDefectSeriesHalo{fill:none;stroke-width:7;stroke-linecap:round;stroke-linejoin:round;opacity:.09;vector-effect:non-scaling-stroke}
 .liveDefectPoint{stroke:var(--surface);stroke-width:1.1;vector-effect:non-scaling-stroke}
+.liveDefectTipLeader{fill:none;stroke-width:.9;stroke-linecap:round;opacity:.6;vector-effect:non-scaling-stroke;pointer-events:none}
+.liveDefectTipText{font:650 10px var(--font-ui,system-ui);stroke:var(--surface);stroke-width:2.5;stroke-linejoin:round;paint-order:stroke fill}
 .liveDefectCrosshair>line{stroke:var(--text-secondary);stroke-width:1;stroke-dasharray:3 4}.liveDefectCrosshair circle{stroke-width:1.8}
 .liveDefectNow>line{stroke:var(--primary);stroke-width:1;stroke-dasharray:2 4;opacity:.55}.liveDefectNow>rect{fill:color-mix(in srgb,var(--primary) 18%,var(--surface-elevated));stroke:color-mix(in srgb,var(--primary) 46%,var(--border));stroke-width:.6}.liveDefectNow>text{fill:var(--text-primary);font:650 9px var(--font-ui,system-ui);letter-spacing:.5px}
 .liveDefectEmpty text{fill:var(--text-secondary);font:11px var(--font-ui,system-ui)}

@@ -81,7 +81,7 @@ async function fulfill(viewer,event) {
   if(route==='/api/image'){
     contentType='image/svg+xml';
     body='<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480"><rect width="640" height="480" fill="#050505"/><circle cx="320" cy="240" r="190" fill="#777"/></svg>';
-  }else if(route==='/api/ui-config/access')body={canCustomize:false};
+  }else if(route==='/api/ui-config/access')body={canCustomize:false,loggedIn:true,role:'Operator'};
   else if(route==='/api/ui-config')body={manualSkeleton:viewer.classic,theme:'graphite'};
   else if(route.endsWith('/system/info'))body={app:'Trend fixture',version:'3',mode:'AUTO',bridge:'fixture',
     settings:{station_name:'Station 1',installation_name:'Fixture',line_name:'Fixture',station_index:1,wt_capacity:16,role:'Operator',channel_labels:{h:'Telecentric',d:'Dark Field',n:'Diffuse',p:'Phase Contrast'},image_format:'BMP'},
@@ -141,6 +141,7 @@ async function makeViewer(classic=true,empty=false) {
   else await waitFor(viewer,`document.body.innerText.includes('qa-fixture')`,'empty dashboard hydration');
   await viewer.evaluate(`(()=>{const prefs=JSON.parse(localStorage.getItem('lens-ui-prefs-v13')||'{}');prefs.manualSkeleton=${classic};prefs.theme='graphite';window.dispatchEvent(new StorageEvent('storage',{key:'lens-ui-prefs-v13',newValue:JSON.stringify(prefs)}));})()`);
   await waitFor(viewer,`document.documentElement.dataset.workspace===${JSON.stringify(classic?'manual':'modern')}`,'fixture layout');
+  await waitFor(viewer,`document.documentElement.dataset.loggedIn==='true'`,'logged-in fixture access');
   return viewer;
 }
 async function resize(viewer,width,height){await viewer.cdp.send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});await pause(160);}
@@ -154,6 +155,29 @@ async function safety(viewer,label){
   const state=await viewer.evaluate(`(()=>{const dialog=document.querySelector('.trendExplorerWindow'),root=document.querySelector('.classicDefectTrend'),svg=root?.querySelector('svg[aria-label="Live defect count over time"]'),box=dialog?.getBoundingClientRect();return {exists:!!svg,nan:/NaN|Infinity|undefined/.test(root?.innerHTML||''),overflow:document.documentElement.scrollWidth>innerWidth+1,rootOverflow:root&&root.scrollWidth>root.clientWidth+1,fit:box&&box.left>=-1&&box.top>=-1&&box.right<=innerWidth+1&&box.bottom<=innerHeight+1,chartHeight:svg?.getBoundingClientRect().height,modal:dialog?.getAttribute('aria-modal')};})()`);
   assert(state.exists,`${label}: live defect chart exists`);assert(!state.nan,`${label}: finite chart coordinates`);assert(!state.overflow,`${label}: no page horizontal overflow`);assert(!state.rootOverflow,`${label}: no chart horizontal overflow`);assert(state.fit,`${label}: popup fits viewport`);assert(state.chartHeight>100,`${label}: usable plot height`);assert.equal(state.modal,'true',`${label}: accessible modal`);
   await sidePanelSafety(viewer,'live',label);
+  await tipSafety(viewer,label);
+}
+async function tipSafety(viewer,label){
+  const state=await viewer.evaluate(`(()=>{
+    const root=document.querySelector('.classicDefectTrend'),svg=root?.querySelector('svg[aria-label="Live defect count over time"]'),box=svg?.getBoundingClientRect();
+    const lines=Array.from(root?.querySelectorAll('[data-defect-series]')||[]),classes=Array.from(root?.querySelectorAll('.liveDefectLegendItem')||[]);
+    const labels=Array.from(root?.querySelectorAll('[data-defect-tip]')||[]).map(tip=>{
+      const text=tip.querySelector('text'),rect=text.getBoundingClientRect(),line=lines.find(line=>line.dataset.defectSeries===tip.dataset.defectTip),entry=classes.find(entry=>entry.dataset.defectKey===tip.dataset.defectTip);
+      return {key:tip.dataset.defectTip,code:text.textContent,expected:entry?.dataset.defectCode,color:text.getAttribute('fill'),lineColor:line?.getAttribute('stroke'),tipY:Number(tip.dataset.tipY),expectedY:Number(line?.dataset.latestY),x:Number(text.getAttribute('x')),fixed:!tip.closest('[clip-path]')&&!tip.parentElement.hasAttribute('transform'),fullName:tip.querySelector('title')?.textContent.includes(tip.dataset.defectName)&&tip.getAttribute('aria-label')?.includes(tip.dataset.defectName),rect:{left:rect.left,top:rect.top,right:rect.right,bottom:rect.bottom}};
+    });
+    const overlaps=[];for(let i=0;i<labels.length;i++)for(let j=i+1;j<labels.length;j++){const a=labels[i].rect,b=labels[j].rect;if(Math.min(a.right,b.right)>Math.max(a.left,b.left)+.5&&Math.min(a.bottom,b.bottom)>Math.max(a.top,b.top)+.5)overlaps.push([labels[i].key,labels[j].key]);}
+    return {count:lines.length,labels,overlaps,fit:labels.every(item=>box&&item.rect.left>=box.left&&item.rect.top>=box.top&&item.rect.right<=box.right+1&&item.rect.bottom<=box.bottom+1)};
+  })()`);
+  assert.equal(state.labels.length,state.count,`${label}: each visible defect line has initials at its tip`);
+  assert(state.fit,`${label}: tip initials fit without clipping`);
+  assert.deepEqual(state.overlaps,[],`${label}: tip initials never overlap`);
+  for(const tip of state.labels){
+    assert.equal(tip.code,tip.expected,`${label}: initials match the class list`);
+    assert.equal(tip.color,tip.lineColor,`${label}: initials use their line color`);
+    assert(Math.abs(tip.tipY-tip.expectedY)<.001,`${label}: label leader preserves the actual count endpoint`);
+    assert(tip.fixed&&tip.fullName,`${label}: fixed live-edge labels retain full-name tooltips`);
+  }
+  return state.labels;
 }
 async function sidePanelSafety(viewer,mode,label){
   const state=await viewer.evaluate(`(()=>{const side=document.querySelector(${JSON.stringify(mode==='live'?'.liveDefectSidebar':'.overallTrendSidebar')}),list=side?.querySelector(${JSON.stringify(mode==='live'?'.liveDefectLegend':'.overallTrendClasses')}),chart=document.querySelector(${JSON.stringify(mode==='live'?'.liveDefectChartFrame':'.overallTrendChart')}),box=side?.getBoundingClientRect(),plot=chart?.getBoundingClientRect();return {right:box&&plot&&box.left>=plot.right-1,noScroll:list&&list.scrollHeight<=list.clientHeight+1&&list.scrollWidth<=list.clientWidth+1,allFit:box&&Array.from(list?.querySelectorAll('button')||[]).every(button=>{const r=button.getBoundingClientRect();return r.height>0&&r.top>=box.top-1&&r.bottom<=box.bottom+1}),count:list?.querySelectorAll('button').length};})()`);
@@ -191,6 +215,7 @@ async function touchClick(viewer,selector){
     const item=paths.find(path=>path.name===name);assert.equal(await occurrences(classic,item.key),count,`${name}: true reported occurrence count rather than affected-lens binary count`);
   }
   assert.equal(await classic.evaluate(`Number(document.querySelector('.classicDefectTrend').dataset.count)`),8,'Chart total counts eight actual defect occurrences');
+  const initialTips=await tipSafety(classic,'Initial defect lines');
   const summary=await classic.evaluate(`(()=>{const root=document.querySelector('.trendExplorerWindow'),summary=root.querySelector('.liveDefectWindowSummary');return {total:Number(summary?.dataset.total),period:summary?.textContent,metrics:Object.fromEntries(Array.from(root.querySelectorAll('[data-trend-metric]')).map(metric=>[metric.dataset.trendMetric,metric.textContent.trim()])),classes:Array.from(root.querySelectorAll('.liveDefectLegendItem')).map(button=>({key:button.dataset.defectKey,name:button.dataset.defectName,count:Number(button.dataset.classTotal),text:button.textContent}))};})()`);
   assert.equal(summary.total,8,'Readable running summary counts every retained defect occurrence');
   assert((summary.period?.match(/\d{1,2}:\d{2}/g)||[]).length>=2,'Period summary shows both visible start and end times');
@@ -217,6 +242,7 @@ async function touchClick(viewer,selector){
   assert(await classic.evaluate(`document.querySelector('.liveDefectReadout').textContent.includes('10 sec')`),'Raw contextual additions retain readable ten-second intervals');
   await classic.evaluate(`Array.from(document.querySelectorAll('.liveDefectLegendItem')).find(button=>button.dataset.defectName==='Bubble').click()`);
   await waitFor(classic,`!Array.from(document.querySelectorAll('[data-defect-series]')).some(line=>line.dataset.defectName==='Bubble')`,'Legend can hide one defect line');
+  assert(!await classic.evaluate(`Array.from(document.querySelectorAll('[data-defect-tip]')).some(tip=>tip.dataset.defectName==='Bubble')`),'Hiding a line also hides its tip initials');
   assert.equal(await classic.evaluate(`Number(document.querySelector('.liveDefectWindowSummary').dataset.total)`),8,'Hiding a class line never changes the selected-period total');
   assert.equal(await classic.evaluate(`Number(document.querySelector('.liveDefectIntervalTotal').dataset.intervalTotal)`),interval.total,'Hiding a class line never silently reduces the interval total');
   await click(classic,'.liveDefectLegendAll');
@@ -226,11 +252,35 @@ async function touchClick(viewer,selector){
   const moved=await classic.evaluate(`(()=>{const point=Array.from(document.querySelectorAll('.classicDefectTrend [data-defect-point]')).find(point=>point.dataset.defectPoint===${JSON.stringify(anchor.key)}&&point.dataset.time===${JSON.stringify(anchor.time)});return {x:Number(point?.getAttribute('cx')),end:Number(document.querySelector('.classicDefectTrend').dataset.windowEnd)};})()`);
   assert(moved.end>anchor.end+500,'Live right edge advances while no frames arrive');assert(moved.x<anchor.x-.1,'Existing time point moves from right to left during idle monitoring');
   assert.equal(await classic.evaluate(`Number(document.querySelector('.classicDefectTrend').dataset.count)`),8,'An idle clock tick never resets the running defect total');
+  assert.deepEqual((await tipSafety(classic,'Idle live-edge labels')).map(tip=>[tip.key,tip.x,tip.tipY]),initialTips.map(tip=>[tip.key,tip.x,tip.tipY]),'Tip initials stay anchored while the time axis scrolls');
   for(const [value,duration] of [['30m',1800000],['1h',3600000],['4h',14400000]]){await range(classic,value);assert.equal(await windowDuration(classic),duration,`${value}: exact selected visible time span`);}
   await range(classic,'custom');await field(classic,'Custom trend duration','2');await field(classic,'Trend duration unit','minutes',true);assert.equal(await windowDuration(classic),120000,'Custom two-minute rolling window');
   await field(classic,'Trend duration unit','hours',true);await field(classic,'Custom trend duration','3');assert.equal(await windowDuration(classic),10800000,'Custom three-hour rolling window');
   await range(classic,'5m');
   for(const dimensions of [[1920,1080],[1366,768],[1024,768],[768,1024]]){await resize(classic,...dimensions);await safety(classic,`Classic ${dimensions}`);if(dimensions[0]<=1024)assert(await classic.evaluate(`Array.from(document.querySelectorAll('.liveDefectLegendItem')).every(button=>getComputedStyle(button.querySelector('.trendClassInitial')).display!=='none'&&button.title.includes(button.dataset.defectName)&&button.getAttribute('aria-label').includes(button.dataset.defectName))`),'Narrow screens show compact initials while keeping accessible full names');await screenshot(classic,`classic-defect-trend-${dimensions[0]}-qa.png`);}
+  // Focused visual regression for endpoint labels, independent of unrelated
+  // popup lifecycle tests (including development Strict Mode focus replay).
+  if(process.env.TREND_TIP_QA_ONLY==='1'){
+    const crowded={...result(6,'NOK',Date.now()),defects:Array.from({length:15},(_,index)=>({name:`Additional HALCON defect class ${index+1}`,confidence:1,severity:'major',channel:'h',bbox_xywh_norm:[.1,.1,.05,.05]}))};
+    snapshot={...snapshot,sequence:2,job:{...snapshot.job,completed:6,current_sample_id:'trend-7'},results:[...snapshot.results,crowded]};
+    await classic.evaluate(`window.__trendBroadcast(${JSON.stringify({type:'result',stream_id:snapshot.stream_id,sequence:2,current_job_id:snapshot.current_job_id,job:snapshot.job,result:crowded})})`);
+    await waitFor(classic,`document.querySelectorAll('[data-defect-tip]').length===20`,'All twenty class endpoints update with a new result');
+    for(const dimensions of [[1920,1080],[1366,768],[1024,768],[768,1024]]){
+      await resize(classic,...dimensions);await safety(classic,`Classic twenty tips ${dimensions}`);
+      await screenshot(classic,`classic-trend-tips-20-${dimensions[0]}-qa.png`);
+    }
+    const modern=await makeViewer(false);
+    await click(modern,'[aria-label="Open Trend Line"]');
+    await waitFor(modern,`document.querySelectorAll('.trendExplorerWindow [data-defect-tip]').length===20`,'Modern shares all twenty class endpoint labels');
+    for(const dimensions of [[1920,1080],[1366,768],[1024,768],[768,1024]]){
+      await resize(modern,...dimensions);await safety(modern,`Modern twenty tips ${dimensions}`);
+    }
+    await screenshot(modern,'modern-trend-tips-20-qa.png');
+    const empty=await makeViewer(true,true);await open(empty);await safety(empty,'No results, no tip labels');
+    for(const viewer of viewers){assert.deepEqual(viewer.errors,[]);assert.deepEqual(viewer.mutations,[]);}
+    console.log(JSON.stringify({passed:['Color-matched class initials at each live line tip','Full-name tooltips and unchanged count endpoints','Labels hide/restore with their series','Fixed labels during right-to-left scrolling','New result updates all twenty labels','Classic and Modern at four desktop/tablet sizes','Crowded equal-count labels fit without overlap or clipping','Empty state'],apiMutations:0,browserErrors:0},null,2));
+    return;
+  }
   await resize(classic,1366,768);
   await close(classic);assert.equal(await classic.evaluate(`document.activeElement.getAttribute('aria-label')`),'Open Trend Line','Focus returns to header opener');
   await open(classic);await classic.cdp.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});await classic.cdp.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
@@ -284,7 +334,7 @@ async function touchClick(viewer,selector){
   snapshot={...snapshot,sequence:3,job:{...snapshot.job,completed:7,current_sample_id:'trend-8'},results:[...snapshot.results,manyResult]};
   await classic.evaluate(`window.__trendBroadcast(${JSON.stringify({type:'result',stream_id:snapshot.stream_id,sequence:3,current_job_id:snapshot.current_job_id,job:snapshot.job,result:manyResult})})`);
   await waitFor(classic,`document.querySelectorAll('.liveDefectLegendItem').length===20`,'Every reported class appears in the fitted side panel');
-  for(const dimensions of [[1366,768],[768,1024]]){await resize(classic,...dimensions);await sidePanelSafety(classic,'live',`Live twenty classes ${dimensions}`);}
+  for(const dimensions of [[1366,768],[768,1024]]){await resize(classic,...dimensions);await sidePanelSafety(classic,'live',`Live twenty classes ${dimensions}`);await tipSafety(classic,`Live twenty classes ${dimensions}`);}
   await screenshot(classic,'classic-live-sidebar-many-qa.png');
   const liveCodes=await classic.evaluate(`Object.fromEntries(Array.from(document.querySelectorAll('.liveDefectLegendItem')).map(button=>[button.dataset.defectName,button.dataset.defectCode]))`);
   assert.equal(new Set(Object.values(liveCodes)).size,20,'Each crowded-list defect has its own initials');
@@ -300,6 +350,7 @@ async function touchClick(viewer,selector){
   await waitFor(modern,`!!document.querySelector('.trendLineWorkspace')`,'Modern existing trend tab remains available');
   await waitFor(modern,`!!document.querySelector('.classicDefectTrend')`,'Modern live analytics shares the same class-based cumulative chart');
   assert.equal(await modern.evaluate(`Number(document.querySelector('.classicDefectTrend').dataset.count)`),23,'Modern cumulative chart counts every retained instance too');
+  await tipSafety(modern,'Modern defect lines');
   const empty=await makeViewer(true,true);await open(empty);await safety(empty,'Classic empty');assert.equal(await empty.evaluate(`Number(document.querySelector('.classicDefectTrend').dataset.count)`),0,'Empty history has zero measured defects');
   for(const viewer of viewers){assert.deepEqual(viewer.errors,[],'No browser runtime or fixture interception errors');assert.deepEqual(viewer.mutations,[],'Read-only trend viewing sends no backend/config mutations');}
   console.log(JSON.stringify({passed:['Header Help → Trendline → Exit','Real popup open/close/Escape/backdrop and focus restoration','Cumulative class totals and history-based shares','Separate raw interval totals remain correct when class lines are hidden','Smooth nondecreasing cumulative curves and readable intervals','Historical class lines stay flat when events roll out of the visible window','No reset during idle intervals or time-window changes','New live detection adds onto retained totals','Continuously moving right-to-left time axis','Preset minutes/hours and custom duration','All reported classes including unknown live defects','Four desktop/tablet sizes and touch inspection','Modern shares the cumulative per-class chart','Empty state and persisted duration'],apiMutations:0,browserErrors:0},null,2));
