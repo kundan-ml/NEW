@@ -17,7 +17,7 @@ const profile = fs.mkdtempSync(path.join(temporaryRoot, 'shared-inspection-qa-')
 const channels = ['h', 'd', 'n', 'p'];
 const makeSamples = (dataset, count) => Array.from({ length: count }, (_, i) => ({
   id: `${dataset}-${i + 1}`, position: i % 16 + 1, wt_index: Math.floor(i / 16) + 1,
-  category: 'Inspection', base_name: `${dataset}_Position${i % 16 + 1}`, metadata: {},
+  category: 'Inspection', base_name: process.env.CANVAS_POPUP_QA_ONLY==='1'&&dataset==='live'&&i===4?'B03671_2024-12-05-215350_CV.4114_R_05_Position5_00000000000000000000000010000000':`${dataset}_Position${i % 16 + 1}`, metadata: {},
   images: Object.fromEntries(channels.map(channel => [channel, {
     channel, filename: `${dataset}_Position${i % 16 + 1}.${channel}.bmp`,
     relative_path: `${dataset}-${i + 1}.${channel}.bmp`, absolute_path: `/fixture/${dataset}-${i + 1}.${channel}.bmp`,
@@ -25,11 +25,13 @@ const makeSamples = (dataset, count) => Array.from({ length: count }, (_, i) => 
 }));
 const sampleRows = { old: makeSamples('old', 16), live: makeSamples('live', 32), 'setup-preview':makeSamples('setup-preview',1) };
 const fixtureDefect={name:'Surface Imperfection',confidence:1,channel:'h',severity:'major',bbox_xywh_norm:[.65,.3,.12,.1]};
+const canvasPopupDefects=Array.from({length:13},(_,index)=>({...fixtureDefect,name:index===0?fixtureDefect.name:`Additional inspection defect ${index+1}`,bbox_xywh_norm:[.2+(index%4)*.16,.18+Math.floor(index/4)*.14,.1,.08]}));
+const sampleDefects=()=>process.env.CANVAS_POPUP_QA_ONLY==='1'?canvasPopupDefects:[fixtureDefect];
 const result = (dataset, index, run = 'a') => ({
   dataset_id: dataset, sample_id: `${dataset}-${index}`, position: (index - 1) % 16 + 1,
   wt_index: Math.floor((index - 1) / 16) + 1, category: 'Inspection',
-  status: index % 3 ? 'OK' : 'NOK', defects: index===5?[fixtureDefect]:[],
-  channels: channels.map(channel => ({ channel, image_path: '/fixture/image.bmp', status: index % 3 ? 'OK' : 'NOK', defects: index===5&&channel==='h'?[fixtureDefect]:[], measurements: {}, engine: 'dsm-bv-4cam-halcon-26.05', elapsed_ms: 12.345 })),
+  status: index % 3 ? 'OK' : 'NOK', defects: index===5?sampleDefects():[],
+  channels: channels.map(channel => ({ channel, image_path: '/fixture/image.bmp', status: index % 3 ? 'OK' : 'NOK', defects: index===5&&channel==='h'?sampleDefects():[], measurements: {}, engine: 'dsm-bv-4cam-halcon-26.05', elapsed_ms: 12.345 })),
   created_at: `2026-10-05T${run === 'a' ? '08' : '09'}:00:${String(index).padStart(2, '0')}Z`,
 });
 const datasets = ['old', 'live'].map((id, index) => ({
@@ -50,6 +52,9 @@ const setupFixtureWrites=[];
 let manualInspectionFixtures=false;
 const manualFixtureWrites=[];
 let imageFilterSettings={positions:Array.from({length:16},(_,index)=>index+1),result_types:['OK','NOK','WARN'],error_classes:[],apply_to_display:false};
+let imageFilterFixtures=false;
+const imageFilterWrites=[];
+let filterStorageRuntime={active:false,saved_lenses:0,saved_images:0,event_count:0,position_counts:{},error_counts:{},reason:'Storage idle',schedule_key:''};
 const reports = [];
 const viewers = [];
 let chrome;
@@ -118,9 +123,11 @@ async function fixtureRequest(viewer, event) {
     body = structuredClone(snapshot);
     if (delayedLive && !delayedLive.used) { delayedLive.used = true; body = delayedLive.value; await pause(delayedLive.delay); }
   } else if (route.endsWith('/system/info')) body = { app: 'Lens Inspection', version: '3', mode: viewer.forceMode||machineMode, bridge: 'HALCON fixture', settings: { station_name: 'Station 1', line_name: 'Fixture', installation_name: 'Fixture', station_index: 1, wt_capacity: 16, role: viewer.classic ? 'Administrator' : 'Operator', channel_labels: { h: 'Telecentric', d: 'Dark Field', n: 'Diffuse', p: 'Phase Contrast' }, image_format: 'BMP' }, session: { username: viewer.classic ? 'admin-fixture' : 'operator-fixture', role: viewer.classic ? 'Administrator' : 'Operator', logged_in: true } };
-  else if (route.endsWith('/storage/state')) body = { active: false, saved_lenses: 0, saved_images: 0, event_count: 0, position_counts: {}, error_counts: {}, reason: 'Fixture' };
+  else if(imageFilterFixtures&&route.endsWith('/storage/start')){filterStorageRuntime={...filterStorageRuntime,active:!imageFilterSettings.recurring.enabled,schedule_key:imageFilterSettings.recurring.enabled?'armed-fixture':'',reason:imageFilterSettings.recurring.enabled?'waiting for scheduled storage':'manual'};body=filterStorageRuntime;}
+  else if(imageFilterFixtures&&route.endsWith('/storage/stop')){filterStorageRuntime={...filterStorageRuntime,active:false,schedule_key:'',reason:'manual stop'};imageFilterSettings={...imageFilterSettings,recurring:{...imageFilterSettings.recurring,enabled:false},storage_information:''};body=filterStorageRuntime;}
+  else if (route.endsWith('/storage/state')) body = imageFilterFixtures?filterStorageRuntime:{ active: false, saved_lenses: 0, saved_images: 0, event_count: 0, position_counts: {}, error_counts: {}, reason: 'Fixture' };
   else if (route.endsWith('/config/status-symbol-legend')) body = { statuses: [], defects: [] };
-  else if (route.endsWith('/config/image-filters')) body = imageFilterSettings;
+  else if (route.endsWith('/config/image-filters')) {if(imageFilterFixtures&&method==='PUT')imageFilterSettings=JSON.parse(event.request.postData);body=imageFilterSettings;}
   else if (route.endsWith('/datasets')) body = datasets;
   else if (/\/datasets\/[^/]+\/samples$/.test(route)) { const id = route.split('/').at(-2); body = { total: sampleRows[id].length, items: sampleRows[id] }; }
   else if (/\/results\/[^/]+$/.test(route)) { const id = route.split('/').at(-1); body = { items: id === 'old' ? Array.from({ length: 16 }, (_, i) => result('old', i + 1)) : snapshot.job?.dataset_id === id ? snapshot.results : [] }; }
@@ -131,6 +138,7 @@ async function fixtureRequest(viewer, event) {
   if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
     if(setupPreviewFixtures && (route.includes('/datasets/uploads')||route.endsWith('/setup/focus-check')||route.endsWith('/registration/run')||route.endsWith('/system/mode')||route.includes('/inspect/setup-preview/sample/')))setupFixtureWrites.push({route,method});
     else if(manualInspectionFixtures&&route.endsWith('/inspect/old/sample/old-1')&&method==='POST')manualFixtureWrites.push({route,method});
+    else if(imageFilterFixtures&&(route.endsWith('/config/image-filters')||route.endsWith('/storage/start')||route.endsWith('/storage/stop')))imageFilterWrites.push({route,method});
     else viewer.mutations.push({ route, method });
   }
   await viewer.cdp.send('Fetch.fulfillRequest', { requestId: event.requestId, responseCode: 200,
@@ -270,6 +278,34 @@ async function checkBvCanvasContainment(viewer,dimensions){
   assert(layout.closeVisible,`BV close button must be visible and hit-testable at ${dimensions}`);
 }
 
+async function checkCanvasPopupLayout(viewer,dimensions){
+  const layout=await viewer.evaluate(`(()=>{
+    const popup=document.querySelector('.canvasPopupWindow'),area=popup.querySelector('.canvasPopupImageArea'),stage=popup.querySelector('.canvasPopupStage'),host=popup.querySelector('.canvasPopupHost');
+    const box=element=>{const r=element.getBoundingClientRect();return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height};};
+    const bounds=box(popup),stageBox=box(stage),hostBox=box(host),areaBox=box(area);
+    const visible=element=>{const r=element.getBoundingClientRect();return r.width>0&&r.height>0&&r.top>=bounds.top-1&&r.bottom<=bounds.bottom+1&&r.left>=bounds.left-1&&r.right<=bounds.right+1;};
+    const scroll=Array.from(popup.querySelectorAll('.canvasPopupBody,.canvasPopupSidebar,.canvasPopupIdentity,.canvasPopupFacts,.canvasPopupDefectSection,.canvasPopupImageArea,.canvasPopupStage')).map(element=>({class:element.className,width:element.clientWidth,height:element.clientHeight,scrollWidth:element.scrollWidth,scrollHeight:element.scrollHeight}));
+    const close=popup.querySelector('.canvasPopupHeader button'),r=close.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);
+    return {bounds,areaBox,stageBox,hostBox,scroll,tools:box(host.querySelector('.canvasTools')),ratio:Number(popup.style.getPropertyValue('--canvas-popup-ratio')),background:getComputedStyle(area).backgroundColor,backgroundImage:getComputedStyle(area).backgroundImage,viewport:{width:innerWidth,height:innerHeight},facts:popup.querySelector('.canvasPopupFacts').textContent,identity:popup.querySelector('.canvasPopupIdentity').textContent,identityTitle:popup.querySelector('.canvasPopupIdentity>div:last-child strong').title,factsVisible:Array.from(popup.querySelectorAll('.canvasPopupFacts>div,.canvasPopupIdentity>div')).every(visible),channelsVisible:Array.from(popup.querySelectorAll('.canvasPopupChannels button')).every(visible),closeVisible:visible(close)&&(hit===close||close.contains(hit)),draw:window.__qaDrawCalls.at(-1)};
+  })()`);
+  const label=`${viewer.classic?'Classic':'Modern'} ${dimensions.join('×')}`;
+  assert(layout.bounds.left>=0&&layout.bounds.top>=0&&layout.bounds.right<=layout.viewport.width+1&&layout.bounds.bottom<=layout.viewport.height+1,`Expanded viewer fits viewport at ${label}: ${JSON.stringify(layout.bounds)}`);
+  for(const region of layout.scroll){
+    assert(region.width>0&&region.height>0,`${region.class} must have real space at ${label}`);
+    assert(region.scrollWidth<=region.width+1&&region.scrollHeight<=region.height+1,`No scrollbar or clipped overflowing contents in ${region.class} at ${label}: ${JSON.stringify(region)}`);
+  }
+  assert(layout.facts.includes('Inference time')&&layout.facts.replace(/\s+/g,'').includes('Position5'),`Complete lens facts at ${label}`);
+  assert(layout.identity.includes('live inspection')&&layout.identityTitle===sampleRows.live[4].base_name,`Full long lens identity remains available at ${label}`);
+  assert(layout.factsVisible&&layout.channelsVisible&&layout.closeVisible,`Facts, illumination controls and Close remain visible at ${label}`);
+  assert((layout.tools.width<=400&&layout.tools.height<=72)||(layout.tools.width<=72&&layout.tools.height<=400),`Image toolbar is compact instead of obscuring the preview at ${label}: ${JSON.stringify(layout.tools)}`);
+  assert(Math.abs(layout.stageBox.width-layout.hostBox.width)<=1&&Math.abs(layout.stageBox.height-layout.hostBox.height)<=1,`Canvas fills its stage without outer host panels at ${label}`);
+  assert(Math.abs(layout.stageBox.width/layout.stageBox.height-layout.ratio)<.02,`Canvas stage preserves its configured image aspect ratio at ${label}`);
+  const hasHorizontalGutters=layout.areaBox.width-layout.stageBox.width>4;
+  assert(!hasHorizontalGutters||layout.background!=='rgb(0, 0, 0)'||layout.backgroundImage!=='none',`Outer unused area is not rendered as black side panels at ${label}`);
+  assert(layout.draw&&Math.abs(layout.draw.width/layout.draw.height-4/3)<.001,`Inspection image retains its 4:3 aspect ratio at ${label}`);
+  return {mode:viewer.classic?'Classic':'Modern',viewport:dimensions.join('×'),popup:layout.bounds,stage:layout.stageBox};
+}
+
 (async () => {
   chrome = spawn(process.env.CHROME_BIN || '/usr/bin/google-chrome', ['--headless', '--no-sandbox', '--disable-gpu', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, 'about:blank'], { env: { ...process.env, TMPDIR: '/tmp' }, stdio: 'ignore' });
   let version;
@@ -293,6 +329,177 @@ async function checkBvCanvasContainment(viewer,dimensions){
   for(const viewer of viewers)await checkPinchDoesNotSelect(viewer);
   reports.push({case:'two-touch pinch with stationary finger over defect does not select on final release'});
   reports.push({ case: 'independent profiles late join + backend-authoritative mode', classic: await inspect(classic), modern: await inspect(modern) });
+  await classic.evaluate(`Array.from(document.querySelectorAll('.inspectionLogTabs button')).find(button=>button.textContent.trim()==='Trend statistics').click()`);
+  for(const viewer of viewers){
+    assert(await viewer.evaluate(`!document.querySelector('.productionTrend select')`),'Dashboard trend has no time filter');
+    assert(await viewer.evaluate(`!Array.from(document.querySelectorAll('.inspectionLogTabs button,.trendOuterTabs button')).some(button=>button.textContent.trim()==='Trend Line')`),'Bottom workspace does not contain Trend Line');
+    assert(await viewer.evaluate(`!!document.querySelector('.dashboardYieldDefects')`),'Dashboard uses the filled yield diagram');
+    assert(await viewer.evaluate(`(()=>{const gauge=document.querySelector('.dashboardYield'),label=gauge.querySelector(':scope > span'),style=getComputedStyle(label),r=gauge.getBoundingClientRect();return style.backgroundColor==='rgba(0, 0, 0, 0)'&&style.borderTopWidth==='0px'&&Math.abs(r.width-r.height)<1})()`),'Yield is circular, with no rectangular label background covering its ring');
+  }
+  await openWt(classic);
+  reports.push({case:'Bottom Trend Line removed in both layouts; refreshed yield gauge and no time filter'});
+  if(process.env.CANVAS_POPUP_QA_ONLY==='1'){
+    const popupReports=[];
+    const screenshotDirectory=process.env.CANVAS_POPUP_SCREENSHOT_DIR;
+    if(screenshotDirectory)fs.mkdirSync(screenshotDirectory,{recursive:true});
+    for(const viewer of [classic,modern]){
+      const beforeOpenZoom=await viewer.evaluate(`parseInt(document.querySelector('.canvasHost .canvasZoomControl output').textContent,10)`);
+      await viewer.evaluate(`document.querySelector('button[aria-label="Open expanded viewer"]').click()`);
+      await waitFor(viewer,`!!document.querySelector('.canvasPopupSidebar')`,'canvas information sidebar');
+      await pause(300);
+      assert(Math.abs(await viewer.evaluate(`parseInt(document.querySelector('.canvasPopupHost .canvasZoomControl output').textContent,10)`)-beforeOpenZoom)<=1,'Opening expanded viewer preserves image zoom');
+      for(const dimensions of [[1920,1080],[1366,768],[1280,720],[1024,768]]){
+        await viewer.cdp.send('Emulation.setDeviceMetricsOverride',{width:dimensions[0],height:dimensions[1],deviceScaleFactor:1,mobile:false});
+        await pause(350);
+        if(screenshotDirectory){const shot=await viewer.cdp.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(screenshotDirectory,`canvas-popup-${viewer.classic?'classic':'modern'}-${dimensions.join('x')}.png`),Buffer.from(shot.data,'base64'));}
+        popupReports.push(await checkCanvasPopupLayout(viewer,dimensions));
+        const seenDefects=new Set();
+        for(let page=0;page<20;page++){
+          for(const index of await viewer.evaluate(`Array.from(document.querySelectorAll('.canvasPopupDefectSection button[data-defect-index]')).map(button=>Number(button.dataset.defectIndex))`))seenDefects.add(index);
+          const nextAvailable=await viewer.evaluate(`(()=>{const next=document.querySelector('button[aria-label="Next defect page"]');return !!next&&!next.disabled})()`);
+          if(!nextAvailable)break;
+          await viewer.evaluate(`document.querySelector('button[aria-label="Next defect page"]').click()`);
+          await pause(50);
+        }
+        assert.equal(seenDefects.size,canvasPopupDefects.length,`All ${canvasPopupDefects.length} defects remain accessible without scrolling at ${dimensions}`);
+        await checkCanvasPopupLayout(viewer,dimensions);
+        for(let page=0;page<20;page++){
+          const previousAvailable=await viewer.evaluate(`(()=>{const previous=document.querySelector('button[aria-label="Previous defect page"]');return !!previous&&!previous.disabled})()`);
+          if(!previousAvailable)break;
+          await viewer.evaluate(`document.querySelector('button[aria-label="Previous defect page"]').click()`);
+          await pause(30);
+        }
+        await viewer.evaluate(`document.querySelector('.canvasPopupHost [aria-label="Fit image"]').click()`);
+        await pause(150);
+        assert(await viewer.evaluate(`(()=>{const host=document.querySelector('.canvasPopupHost').getBoundingClientRect(),draw=window.__qaDrawCalls.at(-1);return draw.x>=-1&&draw.y>=-1&&draw.x+draw.width<=host.width+1&&draw.y+draw.height<=host.height+1})()`),'Fit keeps the complete image visible without cropping');
+        if(screenshotDirectory){const shot=await viewer.cdp.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(screenshotDirectory,`canvas-popup-${viewer.classic?'classic':'modern'}-${dimensions.join('x')}.png`),Buffer.from(shot.data,'base64'));}
+      }
+      const initialZoom=await viewer.evaluate(`parseInt(document.querySelector('.canvasPopupHost .canvasZoomControl output').textContent,10)`);
+      await viewer.evaluate(`document.querySelector('.canvasPopupHost [aria-label="Zoom in"]').click()`);
+      await pause(150);
+      const zoomed=await viewer.evaluate(`parseInt(document.querySelector('.canvasPopupHost .canvasZoomControl output').textContent,10)`);
+      assert(zoomed>initialZoom,'Expanded image zoom controls still work');
+      await viewer.evaluate(`document.querySelector('.canvasPopupHost [aria-label="Zoom out"]').click()`);
+      await pause(150);
+      assert(await viewer.evaluate(`parseInt(document.querySelector('.canvasPopupHost .canvasZoomControl output').textContent,10)`)<zoomed,'Expanded image can zoom back out');
+      const dragPoint=await viewer.evaluate(`(()=>{const r=document.querySelector('.canvasPopupHost').getBoundingClientRect();return {x:r.left+r.width*.45,y:r.top+r.height*.4,draw:window.__qaDrawCalls.at(-1)}})()`);
+      await viewer.cdp.send('Input.dispatchMouseEvent',{type:'mousePressed',x:dragPoint.x,y:dragPoint.y,button:'left',clickCount:1});
+      await viewer.cdp.send('Input.dispatchMouseEvent',{type:'mouseMoved',x:dragPoint.x+35,y:dragPoint.y+20,button:'left',buttons:1});
+      await viewer.cdp.send('Input.dispatchMouseEvent',{type:'mouseReleased',x:dragPoint.x+35,y:dragPoint.y+20,button:'left',clickCount:1});
+      await pause(150);
+      assert(await viewer.evaluate(`(()=>{const draw=window.__qaDrawCalls.at(-1);return Math.abs(draw.x-${dragPoint.draw.x})>1||Math.abs(draw.y-${dragPoint.draw.y})>1})()`),'Expanded image retains drag-to-pan behavior');
+      await viewer.evaluate(`document.querySelector('.canvasPopupDefectSection button[data-defect-index]').click()`);
+      await waitFor(viewer,`!!document.querySelector('.canvasPopupDefectSection button[data-defect-index][aria-pressed="true"]')`,'sidebar defect selection');
+      assert(await viewer.evaluate(`!document.querySelector('.canvasPopupHost [aria-label="Focus selected defect"]').disabled`),'Selected defect can be focused in the viewer');
+      await viewer.evaluate(`document.querySelector('.canvasPopupDefectSection button[data-defect-index][aria-pressed="true"]').click()`);
+      await waitFor(viewer,`!document.querySelector('.canvasPopupDefectSection button[data-defect-index][aria-pressed="true"]')`,'sidebar defect selection clears');
+      await viewer.evaluate(`document.querySelector('.canvasPopupOverlayToggle').click()`);
+      assert(await viewer.evaluate(`document.querySelector('.canvasPopupOverlayToggle').getAttribute('aria-pressed')==='false'`),'Defect overlays can be hidden');
+      await viewer.evaluate(`document.querySelector('.canvasPopupOverlayToggle').click()`);
+      await viewer.evaluate(`document.querySelector('.canvasPopupChannels button:not(.canvasPopupOverlayToggle):not([aria-pressed="true"])').click()`);
+      await waitFor(viewer,`!!document.querySelector('.canvasPopupChannels button:not(.canvasPopupOverlayToggle)[aria-pressed="true"]')`,'popup illumination switching');
+      await viewer.evaluate(`document.querySelector('.canvasPopupHeader button').click()`);
+      await waitFor(viewer,`!document.querySelector('.canvasPopupWindow')`,'canvas popup closes');
+      await viewer.cdp.send('Emulation.setDeviceMetricsOverride',{width:1920,height:1080,deviceScaleFactor:1,mobile:false});
+      await viewer.evaluate(`document.querySelector('button[aria-label="Open expanded viewer"]').click()`);
+      await waitFor(viewer,`!!document.querySelector('.canvasPopupWindow')`,'popup reopens');
+      await viewer.cdp.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+      await viewer.cdp.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+      await waitFor(viewer,`!document.querySelector('.canvasPopupWindow')`,'Escape closes popup');
+    }
+    assert.deepEqual(classic.errors,[]);assert.deepEqual(modern.errors,[]);
+    assert.deepEqual(classic.mutations,[]);assert.deepEqual(modern.mutations,[]);
+    console.log(JSON.stringify({passed:['Classic and Modern no-scroll canvas/sidebar at four screen sizes','Complete lens information and usable controls','Image aspect ratio and Fit','Zoom/pan','Sidebar defect selection','Illumination/overlay switching','Close and Escape restore dashboard'],layouts:popupReports,browserErrors:0,realMutations:0},null,2));return;
+  }
+  if(process.env.TREND_GALLERY_QA_ONLY==='1'){
+    await classic.evaluate(`document.querySelector('button[aria-label="Open Trend Line"]').click()`);
+    await waitFor(classic,`!!document.querySelector('.trendViewTabs')`,'trend popup');
+    await classic.evaluate(`Array.from(document.querySelectorAll('.trendViewTabs button')).find(button=>button.textContent==='Defects').click()`);
+    await classic.evaluate(`(()=>{const select=document.querySelector('select[aria-label="Trend time range"]');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(select,'all');select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await waitFor(classic,`!!document.querySelector('.defectClassButton')`,'defect classes');
+    await classic.evaluate(`document.querySelector('.defectClassButton').click()`);
+    await waitFor(classic,`document.querySelectorAll('.defectGalleryPreview img').length>=4`,'all illuminations');
+    assert(await classic.evaluate(`!document.querySelector('.defectGalleryOverlay')`),'Raw default has no annotations');
+    await classic.evaluate(`Array.from(document.querySelectorAll('.defectGalleryMode button')).find(button=>button.textContent==='Defects').click()`);
+    await waitFor(classic,`document.querySelectorAll('.defectGalleryOverlay rect').length===document.querySelectorAll('.defectGalleryPreview img').length`,'all illumination boxes');
+    assert(await classic.evaluate(`document.querySelectorAll('.defectGalleryOverlay text').length===document.querySelectorAll('.defectGalleryPreview img').length`),'Every illumination has defect labels');
+    await classic.evaluate(`Array.from(document.querySelectorAll('.defectGalleryMode button')).find(button=>button.textContent==='Raw').click()`);
+    assert(await classic.evaluate(`!document.querySelector('.defectGalleryOverlay')`),'Raw toggle removes overlays');
+    assert.deepEqual(classic.errors,[]);assert.deepEqual(classic.mutations,[]);
+    console.log(JSON.stringify({passed:['Raw default','All four illumination overlays and labels','Raw toggle restores originals'],browserErrors:0,realMutations:0},null,2));return;
+  }
+  if(process.env.IMAGE_FILTER_QA_ONLY==='1'){
+    imageFilterFixtures=true;
+    imageFilterSettings={...imageFilterSettings,storage_path:'optimization',storage_mode:'total',image_count:2,storage_information:'',recurring:{enabled:false,start_date:'',start_time:'09:00',interval_enabled:false,interval_minutes:30,pattern:'daily',every_n:1,weekdays:[0,1,2,3,4],end_mode:'never',end_date:'',end_after_events:2}};
+    const click=async(selector,text)=>classic.evaluate(`Array.from(document.querySelectorAll(${JSON.stringify(selector)})).find(button=>button.textContent.includes(${JSON.stringify(text)})).click()`);
+    const input=async(selector,value)=>classic.evaluate(`(()=>{const element=document.querySelector(${JSON.stringify(selector)});Object.getOwnPropertyDescriptor(element instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,'value').set.call(element,${JSON.stringify(value)});element.dispatchEvent(new Event('input',{bubbles:true}));element.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await click('button','Image Filter');
+    await waitFor(classic,`document.querySelectorAll('.positionFilterGrid button').length===16`,'WT positions load');
+    await click('.filterSectionTitle button','Deactivate all');
+    await classic.evaluate(`document.querySelectorAll('.positionFilterGrid button')[1].click()`);
+    await click('.filterActionBar button','Save');
+    await waitFor(classic,`document.querySelector('.filterActionBar')?.textContent.includes('configuration saved')`,'save selected WT position');
+    assert.deepEqual(imageFilterSettings.positions,[2]);
+    await click('.filterStepBar button','Storage mode');
+    await click('.storageModeGrid button','Per position');
+    await classic.evaluate(`document.querySelector('button[title="Browse folders on the backend PC"]').click()`);
+    await waitFor(classic,`!!document.querySelector('.filterPickerDialog .filterFolderList button')`,'destination popup');
+    assert(await classic.evaluate(`document.querySelector('.filterPickerDialog').getAttribute('role')==='dialog'`));
+    await pause(250);
+    assert(await classic.evaluate(`(()=>{const r=document.querySelector('.filterPickerDialog').getBoundingClientRect();return r.height===560&&r.width===640&&r.bottom<=innerHeight&&r.right<=innerWidth})()`),'Folder picker has stable dimensions and fits the viewport');
+    await click('.filterPickerDialog button','Use this folder');
+    await input('.storageFields textarea','Image filter QA');
+    await click('.filterActionBar .filterPrimary','Start storage');
+    await waitFor(classic,`document.querySelector('.filterActionBar .filterPrimary')?.textContent.includes('Stop storage')`,'storage starts');
+    assert.equal(imageFilterSettings.storage_mode,'per-position');assert.equal(imageFilterSettings.storage_path,'/fixture/images');
+    assert(await classic.evaluate(`document.querySelector('.storageFields input[readonly]').value==='8 maximum (4 channels)'`),'Per-position estimate respects selected positions and four camera images');
+    await click('.filterActionBar .filterPrimary','Stop storage');
+    await waitFor(classic,`document.querySelector('.filterActionBar .filterPrimary')?.textContent.includes('Start storage')`,'storage stops');
+    await input('.storageFields textarea','Schedule QA');
+    await click('.filterStepBar button','Schedule');
+    await classic.evaluate(`document.querySelector('.scheduleMaster input[type=checkbox]').click()`);
+    await classic.evaluate(`document.querySelector('.scheduleCards .filterDateTrigger').click()`);
+    await pause(250);
+    const calendarHeight=await classic.evaluate(`document.querySelector('.filterPickerDialog').getBoundingClientRect().height`);
+    await input('.filterCalendar input[aria-label=Year]','2099');
+    await classic.evaluate(`(()=>{const select=document.querySelector('.filterCalendar select');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(select,'0');select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await classic.evaluate(`document.querySelector('.filterCalendar button[aria-label="2099-01-01"]').click()`);
+    assert(Math.abs(await classic.evaluate(`document.querySelector('.filterPickerDialog').getBoundingClientRect().height`)-calendarHeight)<1,'Calendar dimensions do not change between months');
+    await click('.filterPickerDialog button','Apply date');
+    await classic.evaluate(`document.querySelectorAll('.scheduleCards .filterDateTrigger')[1].click()`);
+    await waitFor(classic,`!!document.querySelector('.filterTimePicker')`,'time picker');
+    await click('.filterPickerDialog button','Apply time');
+    await click('.filterActionBar button','Save');
+    await waitFor(classic,`document.querySelector('.filterActionBar')?.textContent.includes('configuration saved')`,'schedule saves');
+    assert.equal(filterStorageRuntime.schedule_key,'','Saving must not arm automation');
+    await click('.filterActionBar .filterPrimary','Arm schedule');
+    await waitFor(classic,`document.querySelector('.filterActionBar')?.textContent.includes('Scheduled storage armed')`,'automation arms');
+    assert.equal(filterStorageRuntime.active,false);assert.equal(filterStorageRuntime.schedule_key,'armed-fixture');
+    await click('.filterActionBar button','Close');
+    await click('button','Dataset');
+    await waitFor(classic,`!!document.querySelector('.uploadModalWindow')`,'dataset popup');
+    await click('.uploadModalWindow button','Browse server');
+    await waitFor(classic,`!!document.querySelector('.filterFolderList button')`,'shared dataset folder picker');
+    await click('.filterPickerDialog button','Use this folder');
+    assert(await classic.evaluate(`document.querySelector('.uploadModalWindow .modalInline input').value==='/fixture/images'`),'Upload dataset receives selected backend path without loading it prematurely');
+    assert(await classic.evaluate(`!document.querySelector('.filterPickerDialog')`),'Folder picker closes after selection');
+    assert.deepEqual(classic.errors,[]);assert.deepEqual(classic.mutations,[]);
+    console.log(JSON.stringify({passed:['WT position selection and persistence','backend destination browser','per-position counting estimate','manual start/stop','save versus arm schedule'],fixtureWrites:imageFilterWrites.length,browserErrors:0,realMutations:0},null,2));
+    return;
+  }
+  if(process.env.DASHBOARD_YIELD_QA_IMAGE){
+    await classic.evaluate(`Array.from(document.querySelectorAll('.inspectionLogTabs button')).find(button=>button.textContent.trim()==='Trend statistics').click()`);
+    await pause(100);
+    const bounds=await classic.evaluate(`(()=>{const r=document.querySelector('.dashboardYield').getBoundingClientRect();return {x:r.x-10,y:r.y-10,width:r.width+20,height:r.height+20,scale:3}})()`);
+    const capture=await classic.cdp.send('Page.captureScreenshot',{format:'png',clip:bounds});
+    fs.writeFileSync(process.env.DASHBOARD_YIELD_QA_IMAGE,Buffer.from(capture.data,'base64'));
+    await openWt(classic);
+  }
+  if(process.env.DASHBOARD_STATS_QA_ONLY==='1'){
+    for(const viewer of viewers){assert.deepEqual(viewer.errors,[]);assert.deepEqual(viewer.mutations,[]);}
+    console.log(JSON.stringify({passed:reports,browserErrors:0,apiMutations:0},null,2));
+    return;
+  }
   delayedThumbnail='live-8';
   await advance(8);await pause(150);
   for(const viewer of viewers){
@@ -311,7 +518,8 @@ async function checkBvCanvasContainment(viewer,dimensions){
   await classic.evaluate(`Array.from(document.querySelectorAll('button')).find(button=>button.textContent.trim()==='Dataset').click()`);
   await waitFor(classic,`!!document.querySelector('.uploadSourceSelector')`,'dataset source selector');
   await classic.evaluate(`Array.from(document.querySelectorAll('.uploadModalWindow button')).find(button=>button.textContent.includes('Browse server')).click()`);
-  await waitFor(classic,`document.querySelector('.serverFolderBrowser')?.textContent.includes('Inspection set')`,'backend folder browser');
+  await waitFor(classic,`document.querySelector('.filterFolderList')?.textContent.includes('Inspection set')`,'backend folder popup');
+  await classic.evaluate(`document.querySelector('.filterPickerDialog button[aria-label="Close picker"]').click()`);
   assert(await classic.evaluate(`(()=>{const element=document.querySelector('.uploadModalWindow'),r=element.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight&&getComputedStyle(document.querySelector('.uploadSourceSelector')).display==='grid'})()`),'Dataset popup and source options fit the viewport');
   if(process.env.UPLOAD_QA_SCREENSHOT){const capture=await classic.cdp.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(process.env.UPLOAD_QA_SCREENSHOT,Buffer.from(capture.data,'base64'));}
   await classic.evaluate(`document.querySelector('.uploadModalWindow .modalClose').click()`);

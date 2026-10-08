@@ -59,7 +59,8 @@ import { LensViewer } from "./LensViewer";
 import { StatusMatrix, type GlobalHistoryEntry } from "./StatusMatrix";
 import { TopBar } from "./TopBar";
 import { TrendChart } from "./TrendChart";
-import { TrendLineWorkspace, type TrendView } from "./TrendLineWorkspace";
+import { DashboardYield } from "./DashboardYield";
+import { TrendLineWorkspace } from "./TrendLineWorkspace";
 import { useUI } from "./UIProvider";
 import { useSharedInspection } from "./useSharedInspection";
 import {displayFilterFrom,matchesDisplayFilter,type DisplayFilter} from '@/lib/inspection-display';
@@ -67,7 +68,7 @@ import {calculateInspectionYield} from '@/lib/inspection-yield';
 import './inspection-manual.css';
 
 type WorkspaceTab = "quality" | "activity" | "control";
-type InspectionBottomTab = "messages" | "wt" | "trend" | "trend-line";
+type InspectionBottomTab = "messages" | "wt" | "trend";
 type WtViewMode = "images" | "names";
 type BottomWidthKey = "trendWidth" | "logsWidth" | "actionsWidth";
 
@@ -158,8 +159,6 @@ export function InspectionDashboard({
   const [customDefectIcons, setCustomDefectIcons] = useState<Set<string>>(new Set());
   const [inspectionBottomTab, setInspectionBottomTab] =
     useState<InspectionBottomTab>("messages");
-  const [modernTrendTab,setModernTrendTab]=useState<'statistics'|'line'>('statistics');
-  const [trendInitialView,setTrendInitialView]=useState<TrendView|undefined>();
   const [trendPopupOpen,setTrendPopupOpen]=useState(false);
   const [wtViewMode, setWtViewMode] = useState<WtViewMode>("images");
   const [selectedGlobalWt, setSelectedGlobalWt] = useState<number | null>(null);
@@ -197,7 +196,7 @@ export function InspectionDashboard({
     if (query.has("login") || query.has("dataset") || query.has("trendline"))
       window.history.replaceState({}, "", window.location.pathname);
   }, [authReady,loggedIn]);
-  useEffect(()=>{if(!loggedIn){setLoader(false);setTrendPopupOpen(false);setInspectionBottomTab(current=>current==='trend-line'?'messages':current);setModernTrendTab('statistics');}},[loggedIn]);
+  useEffect(()=>{if(!loggedIn){setLoader(false);setTrendPopupOpen(false);}},[loggedIn]);
   useEffect(() => {
     // Credentials are never carried into a freshly opened authentication
     // dialog. This also replaces values restored by password managers.
@@ -620,6 +619,20 @@ export function InspectionDashboard({
       curingTray: trayMatch ? `CT.${trayMatch[1]}` : sample?.metadata.tail_code || "—",
     };
   }, [activeGlobalWt, channel, sample]);
+  const canvasPopupDetails=()=>({status:currentResult?.status||'WAITING',rows:[
+    {label:'Dataset',value:dataset?.name},
+    {label:'Lens ID',value:sample?.metadata.code||sample?.base_name},
+    {label:'CT No.',value:inspectionIdentifiers.ctNumber},
+    {label:'Shuttle Nr.',value:inspectionIdentifiers.shuttleNumber},
+    {label:'Curing Tray Nr.',value:inspectionIdentifiers.curingTray},
+    {label:'Position',value:sample?`${sample.position} / ${wtCapacity}`:'—'},
+    {label:'Image channel',value:channelLabels[channel]||channel},
+    {label:'Inference time',value:currentInferenceTime},
+    {label:'Width Px',value:currentDimension('width_px')},
+    {label:'Height Px',value:currentDimension('height_px')},
+    {label:'Camera Count',value:currentMeasurements?.camera_count},
+    {label:'Inspected',value:currentResult?new Date(currentResult.created_at).toLocaleString():'—'},
+  ]});
   const sharedNewest=sharedInspection?.results.at(-1);
   const liveTrayEntry=globalHistory.find(entry=>entry.datasetId===job?.dataset_id&&entry.sample.id===sharedNewest?.sample_id)
     ||globalHistory.find(entry=>entry.datasetId===job?.dataset_id);
@@ -1393,6 +1406,7 @@ export function InspectionDashboard({
             </button>
 
             <LensViewer
+              popupDetails={canvasPopupDetails()}
               workstation
               datasetId={datasetId}
               sample={sample}
@@ -1553,7 +1567,6 @@ export function InspectionDashboard({
                 >
                   Trend statistics
                 </button>
-                <button disabled={!loggedIn} className={inspectionBottomTab === "trend-line" ? "active" : ""} onClick={() => setInspectionBottomTab("trend-line")}>Trend Line</button>
                 <span />
                 {inspectionBottomTab === "wt" && (
                   <div className="inspectionWtTabMeta">
@@ -1698,13 +1711,10 @@ export function InspectionDashboard({
                     <TrendChart results={yieldResults} capacity={wtCapacity} />
                   </div>
                   <div className="inspectionTrendStats yieldOnly">
-                    <div className="inspectionYieldRing" style={{"--yield":`${displayYield*3.6}deg`} as React.CSSProperties}>
-                      <span><b>{displayYield.toFixed(1)}%</b><small>Yield</small></span>
-                    </div>
+                    <DashboardYield value={displayYield}/>
                   </div>
                 </div>
               )}
-              {inspectionBottomTab === "trend-line" && <TrendLineWorkspace history={globalHistory} liveDefects results={yieldResults} capacity={wtCapacity} legend={statusLegend} trayLabels={trendTrayLabels} liveResultAt={sharedInspection?.results.at(-1)?.created_at} running={job?.status==='running'||job?.status==='queued'}/>}
             </section>
           </div>
         </div>
@@ -1813,6 +1823,7 @@ export function InspectionDashboard({
         onOperationMode={() => changeOperationMode()}
         onRefresh={refreshSystem}
         onUpload={() => loggedIn&&setLoader(true)}
+        onTrendLine={() => {if(loggedIn)setTrendPopupOpen(true)}}
         onLayout={() => window.dispatchEvent(new Event("lens-open-customizer"))}
         stats={
           prefs.showKpis
@@ -1951,6 +1962,7 @@ export function InspectionDashboard({
             </button>
           )}
           <LensViewer
+            popupDetails={canvasPopupDetails()}
             workstation
             datasetId={datasetId}
             sample={sample}
@@ -2159,43 +2171,28 @@ export function InspectionDashboard({
           </button>
         )}
         {showWorkspace && (
-          <section className={`oakBottomWorkspace referenceBottomWorkspace ${bottomLayoutEditing ? "bottomAdjustable" : ""} ${modernTrendTab==='line'?'hasTrendLine':''}`}>
+          <section className={`oakBottomWorkspace referenceBottomWorkspace ${bottomLayoutEditing ? "bottomAdjustable" : ""}`}>
             {prefs.showTrend && (
-              <div className={`referenceBottomPanel referenceTrendPanel ${modernTrendTab==='line'?'hasTrendLine':''}`} aria-label="Yield and trend" style={{flexGrow:prefs.trendWidth}}>
+              <div className="referenceBottomPanel referenceTrendPanel" aria-label="Yield and trend" style={{flexGrow:prefs.trendWidth}}>
                 <div className="referencePanelTabs trendOuterTabs" aria-label="Trend views">
-                  <button className={modernTrendTab==='statistics'?'active':''} onClick={()=>setModernTrendTab('statistics')}>Yield Trend</button>
-                  <button disabled={!loggedIn} className={modernTrendTab==='line'?'active':''} onClick={()=>{setModernTrendTab('line');setTrendInitialView(undefined)}}>Trend Line</button>
-                  <button disabled={!loggedIn} className="trendShortcut" onClick={()=>{setModernTrendTab('line');setTrendInitialView('defects')}}>Defect Types</button>
-                  <button disabled={!loggedIn} className="trendShortcut" onClick={()=>{setModernTrendTab('line');setTrendInitialView('3d')}}>3D Trays</button>
+                  <span className="dashboardTrendTitle">Trend statistics</span>
                 </div>
-                {modernTrendTab==='line'?<TrendLineWorkspace history={globalHistory} results={yieldResults} capacity={wtCapacity} legend={statusLegend} trayLabels={trendTrayLabels} initialView={trendInitialView} liveResultAt={sharedInspection?.results.at(-1)?.created_at} running={job?.status==='running'||job?.status==='queued'}/>:<div className="referenceTrendBody">
+                <div className="referenceTrendBody">
                   <TrendChart results={yieldResults} capacity={wtCapacity} />
                   <div className="referenceTrendKpis">
-                    <div className="miniYieldRing">
-                      <i
-                        style={
-                          {
-                            "--yield": `${displayYield * 3.6}deg`,
-                          } as React.CSSProperties
-                        }
-                      />
-                      <span>
-                        <b>{displayYield.toFixed(1)}%</b>
-                        <small>WT Yield</small>
-                      </span>
-                    </div>
+                    <DashboardYield value={displayYield}/>
                     <div>
                       <b className="dangerText">{displayNok.toFixed(1)}%</b>
-                      <small>NOK Rate (Today)</small>
+                      <small>NOK rate</small>
                     </div>
                     <div>
                       <b>
-                        {samples.length.toLocaleString()}
+                        {yieldResults.length.toLocaleString()}
                       </b>
-                      <small>Total Lenses (Today)</small>
+                      <small>Inspected lenses</small>
                     </div>
                   </div>
-                </div>}
+                </div>
               </div>
             )}
             {bottomLayoutEditing && prefs.showTrend && (prefs.showLogs || prefs.showActions) && (
@@ -2355,6 +2352,7 @@ export function InspectionDashboard({
           {toast}
         </button>
       )}
+      {trendPopupOpen&&<TrendLineWorkspace history={globalHistory} modal liveDefects initialView="live" onClose={()=>setTrendPopupOpen(false)} results={yieldResults} capacity={wtCapacity} legend={statusLegend} trayLabels={trendTrayLabels} liveResultAt={sharedInspection?.results.at(-1)?.created_at} running={job?.status==='running'||job?.status==='queued'}/>}
       <DatasetLoader
         open={loader}
         onClose={() => setLoader(false)}

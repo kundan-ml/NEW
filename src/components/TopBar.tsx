@@ -1,7 +1,7 @@
 'use client';
 
 import {useEffect,useMemo,useState} from 'react';
-import {Activity,BookOpen,ChevronDown,CircleUserRound,Database,FolderUp,LogIn,Palette,RefreshCw,Settings2,ShieldCheck} from 'lucide-react';
+import {Activity,ChartNoAxesCombined,BookOpen,ChevronDown,CircleUserRound,Database,FolderUp,LogIn,Palette,RefreshCw,Settings2,ShieldCheck} from 'lucide-react';
 import {api} from '@/lib/api';
 import type {SystemInfo} from '@/types';
 import {openManual} from '@/lib/open-manual';
@@ -9,9 +9,9 @@ import {useUI} from './UIProvider';
 import {ViewerThemeButton} from './ViewerThemeButton';
 
 type DashboardStats={yieldPct:number;total:number;nokRate:number;evaluated:number};
-type Props={info:SystemInfo|null;onRefresh:()=>void;stats?:DashboardStats;workstation?:boolean;demo?:boolean;onUpload?:()=>void;onLayout?:()=>void;operationMode?:'AUTO'|'MANUAL';onOperationMode?:()=>void;modeBusy?:boolean;canChangeMode?:boolean};
+type Props={info:SystemInfo|null;onRefresh:()=>void;stats?:DashboardStats;workstation?:boolean;demo?:boolean;onUpload?:()=>void;onTrendLine?:()=>void;onLayout?:()=>void;operationMode?:'AUTO'|'MANUAL';onOperationMode?:()=>void;modeBusy?:boolean;canChangeMode?:boolean};
 
-export function TopBar({info,onRefresh,stats,workstation=false,demo=false,onUpload,onLayout,operationMode,onOperationMode,modeBusy=false,canChangeMode}:Props){
+export function TopBar({info,onRefresh,stats,workstation=false,demo=false,onUpload,onTrendLine,onLayout,operationMode,onOperationMode,modeBusy=false,canChangeMode}:Props){
   const{canCustomize,loggedIn}=useUI();
   const[now,setNow]=useState(new Date());
   const[busy,setBusy]=useState(false);
@@ -33,7 +33,7 @@ export function TopBar({info,onRefresh,stats,workstation=false,demo=false,onUplo
 
   if(workstation){
     return <header className="oakMachineHeader referenceMachineHeader">
-      <div className="referenceTitle emageHeaderTitle"><img src="/brand/emage-mark.png" alt="Emage Group"/><span><b>DSM BV 4Cam Inspection System</b><small>Emage Group · Optical Quality Inspection</small></span><div className="referenceTitleActions"><button disabled={!loggedIn} onClick={onUpload} title="Upload image folder"><FolderUp/></button>{canCustomize?<button onClick={onLayout} title="Adjust dashboard layout"><Settings2/></button>:<ViewerThemeButton/>}<button disabled={!loggedIn} onClick={()=>void openManual().catch(error=>setNotice(error.message))} title="Open English manual" aria-label="Open English manual"><BookOpen/></button></div></div>
+      <div className="referenceTitle emageHeaderTitle"><img src="/brand/emage-mark.png" alt="Emage Group"/><span><b>DSM BV 4Cam Inspection System</b><small>Emage Group · Optical Quality Inspection</small></span><div className="referenceTitleActions">{onTrendLine&&<button disabled={!loggedIn} onClick={onTrendLine} title="Open Trend Line" aria-label="Open Trend Line"><ChartNoAxesCombined/></button>}<button disabled={!loggedIn} onClick={onUpload} title="Upload image folder"><FolderUp/></button>{canCustomize?<button onClick={onLayout} title="Adjust dashboard layout"><Settings2/></button>:<ViewerThemeButton/>}<button disabled={!loggedIn} onClick={()=>void openManual().catch(error=>setNotice(error.message))} title="Open English manual" aria-label="Open English manual"><BookOpen/></button></div></div>
       <div className="referenceContextCard"><small>Line</small><b>{info?.settings.line_name||'—'}</b></div>
       <div className="referenceContextCard"><small>Station {info?.settings.station_index??'—'}</small><b>{info?.settings.station_name||'—'}</b></div>
       <button className={`oakMode referenceMode ${mode.toLowerCase()}`} onClick={toggle} disabled={busy||modeBusy||!modeAllowed}><Activity/><span><b>{mode}</b><small>{mode==='AUTO'?'Automatic Operation':'Manual Operation'}</small></span></button>

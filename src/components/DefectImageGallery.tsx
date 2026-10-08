@@ -2,11 +2,11 @@
 
 import {useEffect, useMemo, useRef, useState, type CSSProperties} from 'react';
 import {createPortal} from 'react-dom';
-import {ChevronLeft, ChevronRight, X} from 'lucide-react';
+import {ChevronLeft, ChevronRight, Image as ImageIcon,ScanLine,X} from 'lucide-react';
 import {api, previewUrl, sampleThumbnailUrl} from '@/lib/api';
 import {formatInferenceMs, inferenceElapsedMs} from '@/lib/inference-timing';
-import {selectDefectImages, type DefectImageMatch} from '@/lib/defect-image-gallery';
-import type {InspectionResult, Sample, StatusSymbolLegend} from '@/types';
+import {galleryOverlayDefects,selectDefectImages, type DefectImageMatch} from '@/lib/defect-image-gallery';
+import type {Defect,InspectionResult, Sample, StatusSymbolLegend} from '@/types';
 import type {GlobalHistoryEntry} from './StatusMatrix';
 import {seriesStyle} from './LiveDefectTrend';
 import './defect-image-gallery.css';
@@ -30,6 +30,7 @@ export function DefectImageGallery({name, results, history, trayLabels, legend, 
   const [channelNames, setChannelNames] = useState(CHANNELS);
   const [page, setPage] = useState(0);
   const [metadataError, setMetadataError] = useState(false);
+  const [showDefects,setShowDefects]=useState(false);
   const requested = useRef(new Set<string>());
   const mounted = useRef(true);
   const dialog = useRef<HTMLElement>(null), close = useRef<HTMLButtonElement>(null);
@@ -85,13 +86,13 @@ export function DefectImageGallery({name, results, history, trayLabels, legend, 
   if (typeof document === 'undefined') return null;
   return createPortal(<div className="defectGalleryBackdrop" onPointerDown={event => {if (event.target === event.currentTarget) onClose();}}>
     <section className="defectGallery" ref={dialog} role="dialog" aria-modal="true" aria-label={`${name} inspection images`} style={{'--gallery-accent': color} as CSSProperties}>
-      <header><div><small>DEFECT IMAGES</small><h2>{name}</h2><span>{matches.length} lenses · {imageCount} images · {matches.reduce((sum, match) => sum + match.defects.length, 0)} occurrences in available history</span></div><button ref={close} type="button" aria-label="Close defect images" onClick={onClose}><X size={19}/></button></header>
+      <header><div className="defectGalleryHeading"><i className="defectGalleryHeadingIcon"><ScanLine size={24}/></i><div><small>CLASS INSPECTION</small><h2>{name}</h2><div className="defectGalleryCounts"><span>{matches.length} lenses</span><span>{imageCount} images</span><span>{matches.reduce((sum, match) => sum + match.defects.length, 0)} occurrences</span></div></div></div><div className="defectGalleryActions"><div className="defectGalleryMode" role="group" aria-label="Image display mode"><button type="button" aria-pressed={!showDefects} onClick={()=>setShowDefects(false)}><ImageIcon size={16}/>Raw</button><button type="button" aria-pressed={showDefects} onClick={()=>setShowDefects(true)}><ScanLine size={16}/>Defects</button></div><button ref={close} type="button" aria-label="Close defect images" onClick={onClose}><X size={19}/></button></div></header>
       <div className="defectGalleryBody">
         {metadataError && <p className="defectGalleryNotice">Some image names could not be loaded. Available inspection IDs and results are shown.</p>}
         {!matches.length && <p className="defectGalleryEmpty">No matching inspected images in the available history.</p>}
-        <div className="defectGalleryGrid">{matches.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE).map(match => <DefectImageCard key={match.key} match={match} sample={sampleFor(match)} datasetName={datasetNames[match.result.dataset_id] || match.result.dataset_id} wt={trayLabels?.get(JSON.stringify([match.result.dataset_id, match.result.wt_index])) ?? match.result.wt_index} channelNames={channelNames}/>)}</div>
+        <div className="defectGalleryGrid">{matches.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE).map(match => <DefectImageCard key={match.key} match={match} sample={sampleFor(match)} datasetName={datasetNames[match.result.dataset_id] || match.result.dataset_id} wt={trayLabels?.get(JSON.stringify([match.result.dataset_id, match.result.wt_index])) ?? match.result.wt_index} channelNames={channelNames} showDefects={showDefects}/>)}</div>
       </div>
-      <footer><span>All available illuminations · original inspection output</span><div><button type="button" aria-label="Previous image page" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}><ChevronLeft size={17}/></button><span>{currentPage + 1} / {pages}</span><button type="button" aria-label="Next image page" disabled={currentPage + 1 >= pages} onClick={() => setPage(currentPage + 1)}><ChevronRight size={17}/></button></div></footer>
+      <footer><span>{showDefects?"Selected class only · overlaid on every illumination":"All available illuminations · raw images"}</span><div><button type="button" aria-label="Previous image page" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}><ChevronLeft size={17}/></button><span>{currentPage + 1} / {pages}</span><button type="button" aria-label="Next image page" disabled={currentPage + 1 >= pages} onClick={() => setPage(currentPage + 1)}><ChevronRight size={17}/></button></div></footer>
     </section>
   </div>, document.body);
 }
@@ -101,7 +102,33 @@ function channelsFor(match: DefectImageMatch, sample?: Sample): string[] {
   return [...available].sort((a, b) => ['h','d','n','p'].indexOf(a) - ['h','d','n','p'].indexOf(b));
 }
 
-function DefectImageCard({match, sample, datasetName, wt, channelNames}: {match: DefectImageMatch; sample?: Sample; datasetName: string; wt: number; channelNames: Record<string, string>}) {
+function GalleryPreview({src,alt,defects,showDefects}:{src:string;alt:string;defects:Defect[];showDefects:boolean}){
+  const[size,setSize]=useState<{width:number;height:number}|null>(null);
+  const image=useRef<HTMLImageElement>(null);
+  const readSize=()=>{const element=image.current;if(element?.naturalWidth&&element.naturalHeight)setSize({width:element.naturalWidth,height:element.naturalHeight})};
+  useEffect(()=>{setSize(null);readSize()},[src]);
+  const valid=defects.filter(defect=>defect.bbox_xywh_norm?.length===4&&defect.bbox_xywh_norm.every(Number.isFinite)&&defect.bbox_xywh_norm[2]>0&&defect.bbox_xywh_norm[3]>0||defect.polygon_norm&&defect.polygon_norm.length>=3&&defect.polygon_norm.every(point=>point.length===2&&point.every(Number.isFinite)));
+  return <div className="defectGalleryPreview"><img ref={image} src={src} alt={alt} loading="lazy" onLoad={readSize}/>
+    {showDefects&&size&&<svg className="defectGalleryOverlay" viewBox={`0 0 ${size.width} ${size.height}`} preserveAspectRatio="xMidYMid meet" aria-label="Defect bounding boxes and labels">
+      {valid.map((defect,index)=>{
+        const clamp=(value:number)=>Math.min(1,Math.max(0,value));
+        const box=defect.bbox_xywh_norm;
+        const polygon=defect.polygon_norm?.filter(point=>point.length===2&&point.every(Number.isFinite));
+        const x=clamp(box?.[0]??polygon?.[0]?.[0]??0)*size.width,y=clamp(box?.[1]??polygon?.[0]?.[1]??0)*size.height;
+        const color=defect.overlay_color||'#ff5252';
+        const fontSize=Math.max(12,size.width/32);
+        return <g key={index} data-gallery-defect={defect.name} stroke={color} fill="none"><title>{defect.name} · detected in {defect.channel||'unspecified channel'}</title>
+          {box&&box.length===4&&box.every(Number.isFinite)&&box[2]>0&&box[3]>0&&<rect x={x} y={y} width={Math.max(0,clamp(box[0]+box[2])*size.width-x)} height={Math.max(0,clamp(box[1]+box[3])*size.height-y)} vectorEffect="non-scaling-stroke" strokeWidth={1.5}/>}
+          {polygon&&polygon.length>=3&&<polygon points={polygon.map(point=>`${clamp(point[0])*size.width},${clamp(point[1])*size.height}`).join(' ')} vectorEffect="non-scaling-stroke" strokeWidth={1.5}/>}
+          <text x={Math.min(x,size.width*.7)} y={Math.max(fontSize,y-5)} fontSize={fontSize} fill={color} stroke="none">{defect.name}</text>
+        </g>;
+      })}
+    </svg>}
+    {showDefects&&size&&valid.length===0&&<small className="defectGalleryNoGeometry">No defect geometry provided</small>}
+  </div>;
+}
+
+function DefectImageCard({match, sample, datasetName, wt, channelNames,showDefects}: {match: DefectImageMatch; sample?: Sample; datasetName: string; wt: number; channelNames: Record<string, string>;showDefects:boolean}) {
   const result = match.result;
   const name = sample?.base_name || result.sample_id;
   const position = name.match(/Position(\d+)/i)?.[1] || String(result.position);
@@ -112,7 +139,7 @@ function DefectImageCard({match, sample, datasetName, wt, channelNames}: {match:
       const output = result.channels.find(item => item.channel === channel);
       const filename = sample?.images[channel]?.filename || output?.image_path.split(/[\\/]/).at(-1) || channel;
       const url = sample?.images[channel]?.relative_path.startsWith('demo:') ? sample.images[channel].relative_path : previewUrl(result.dataset_id, result.sample_id, channel);
-      return <figure key={channel}><a href={url} target="_blank" rel="noreferrer" title={`Open original ${filename}`}><img src={sample ? sampleThumbnailUrl(result.dataset_id, sample, channel) : `${url}&thumbnail=1`} alt={`${name} · ${channelNames[channel] || channel}`} loading="lazy"/></a><figcaption><b>{channelNames[channel] || channel}</b><span title={filename}>{filename}</span><em>{output?.status || '—'} · {output?.elapsed_ms === undefined ? '—' : formatInferenceMs(output.elapsed_ms)}</em></figcaption></figure>;
+      return <figure key={channel}><a href={url} target="_blank" rel="noreferrer" title={`Open original ${filename}`}><GalleryPreview src={sample ? sampleThumbnailUrl(result.dataset_id, sample, channel) : `${url}&thumbnail=1`} alt={`${name} · ${channelNames[channel] || channel}`} defects={galleryOverlayDefects(result,match.defects[0]?.name)} showDefects={showDefects}/></a><figcaption><b>{channelNames[channel] || channel}</b><span title={filename}>{filename}</span><em>{output?.status || '—'} · {output?.elapsed_ms === undefined ? '—' : formatInferenceMs(output.elapsed_ms)}</em></figcaption></figure>;
     })}</div>
     <dl className="defectImageFacts"><dt>Dataset</dt><dd>{datasetName}</dd><dt>Lens ID</dt><dd>{name}</dd><dt>CT No.</dt><dd>CV-{wt}</dd><dt>Shuttle Nr.</dt><dd>{position}</dd><dt>Curing Tray</dt><dd>{curingTray ? `CT.${curingTray}` : '—'}</dd><dt>Position</dt><dd>{result.position}</dd><dt>Inspected</dt><dd>{new Date(result.created_at).toLocaleString()}</dd><dt>Inference time</dt><dd>{formatInferenceMs(inferenceElapsedMs(result))}</dd></dl>
     <details><summary>Inspection details · {match.defects.length} matching occurrences</summary>

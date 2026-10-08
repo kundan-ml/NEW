@@ -2,8 +2,9 @@
 
 import {useEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
-import {FolderInput,FolderUp,Loader2,X,Folder,ArrowUp} from 'lucide-react';
+import {FolderInput,FolderUp,Loader2,X,Folder} from 'lucide-react';
 import {api} from '@/lib/api';
+import {BackendFolderPicker} from './FilterPickerDialog';
 
 export function DatasetLoader({open,onClose,onLoaded}:{open:boolean;onClose:()=>void;onLoaded:(id:string)=>void}){
   const[path,setPath]=useState('');
@@ -15,6 +16,7 @@ export function DatasetLoader({open,onClose,onLoaded}:{open:boolean;onClose:()=>
   const[folders,setFolders]=useState<Awaited<ReturnType<typeof api.localFolders>>|null>(null);
   const[browsing,setBrowsing]=useState(false);
   const[folderBusy,setFolderBusy]=useState(false);
+  const[folderError,setFolderError]=useState('');
   const inputRef=useRef<HTMLInputElement>(null);
 
   useEffect(()=>{
@@ -27,9 +29,9 @@ export function DatasetLoader({open,onClose,onLoaded}:{open:boolean;onClose:()=>
   if(!open||typeof document==='undefined')return null;
 
   async function browse(folder?:string){
-    setFolderBusy(true);setErr('');
-    try{const listing=await api.localFolders(folder);setFolders(listing);setPath(listing.path);setBrowsing(true);}
-    catch(error){setErr(error instanceof Error?error.message:'Cannot browse the backend folder. You can enter its path directly.');}
+    setBrowsing(true);setFolderBusy(true);setFolderError('');
+    try{const listing=await api.localFolders(folder);setFolders(listing);}
+    catch(error){setFolderError(error instanceof Error?error.message:'Cannot browse the backend folder. You can enter its path directly.');}
     finally{setFolderBusy(false);}
   }
 
@@ -86,7 +88,7 @@ export function DatasetLoader({open,onClose,onLoaded}:{open:boolean;onClose:()=>
               <button onClick={loadPath} disabled={busy||!path.trim()}>{busy?<Loader2 className="spin"/>:<FolderInput/>}Read directly</button>
             </div>
           </label>
-          {browsing&&folders&&<div className="serverFolderBrowser" aria-label="Backend folders"><div><b>{folders.path}</b>{folders.parent&&<button type="button" onClick={()=>void browse(folders.parent!)} disabled={folderBusy}><ArrowUp size={14}/>Parent</button>}</div>{folders.folders.map(folder=><button type="button" key={folder.path} disabled={folderBusy} onClick={()=>void browse(folder.path)}><Folder size={14}/>{folder.name}</button>)}{!folders.folders.length&&<small>No subfolders. Select Read directly to load this folder.</small>}{folders.truncated&&<small>Showing the first 500 folders. Enter a path to navigate directly.</small>}</div>}
+          {browsing&&<BackendFolderPicker title="Choose an image folder" folders={folders} busy={folderBusy} error={folderError} onNavigate={folder=>void browse(folder)} onSelect={folder=>{setPath(folder);setBrowsing(false)}} onClose={()=>setBrowsing(false)}/>}
           <small>Original files remain in this folder. No upload or image copy is performed.</small>
         </div>}
         {source==='upload'&&<>

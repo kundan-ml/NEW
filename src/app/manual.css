@@ -1517,7 +1517,31 @@
 }
 
 .scheduleMaster {
-  padding-block: 15px
+  padding: 16px 18px;
+  flex-shrink: 0;
+  background: linear-gradient(115deg, color-mix(in srgb, var(--accent) 7%, var(--surface)), var(--surface));
+}
+.scheduleOverviewHead {display:flex;align-items:center;gap:16px}
+.scheduleOverviewTitle {display:flex;align-items:center;gap:12px;flex:1;min-width:0}
+.scheduleOverviewTitle>svg {width:36px;height:36px;padding:8px;border-radius:10px;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);flex-shrink:0}
+.scheduleOverviewTitle small {font-size:9px;letter-spacing:.13em;color:var(--text-muted)}
+.scheduleOverviewTitle h2 {font-size:17px;margin:3px 0 0;color:var(--text-primary)}
+.scheduleState {display:flex;align-items:center;gap:7px;font-size:11px;color:var(--text-secondary);padding:7px 10px;border-radius:20px;background:var(--surface-hover)}
+.scheduleState i {width:6px;height:6px;border-radius:50%;background:var(--text-muted)}
+.scheduleState.armed i {background:var(--success)}
+.scheduleMaster .compactSwitch {font-size:11px;gap:8px}
+.scheduleOverviewMetrics {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)}
+.scheduleOverviewMetrics>div {min-width:0;display:flex;flex-direction:column;gap:5px}
+.scheduleOverviewMetrics small {font-size:9px;letter-spacing:.1em;color:var(--text-muted)}
+.scheduleOverviewMetrics b {font-size:12px;font-weight:550;color:var(--text-primary);overflow-wrap:anywhere}
+.scheduleOverviewMetrics em {font-size:11px;color:var(--text-secondary);font-style:normal;font-weight:400}
+.scheduleOverviewHint {display:flex;align-items:center;gap:7px;margin-top:14px;color:var(--text-muted);font-size:10px}
+.scheduleOverviewHint svg {color:var(--accent);flex-shrink:0}
+.scheduleOverviewHint strong {margin-left:auto;font-size:10px;font-weight:500;color:var(--accent);text-align:right}
+@media(max-width:800px) {
+  .scheduleOverviewMetrics {grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .scheduleOverviewHead {gap:8px;flex-wrap:wrap}
+  .scheduleOverviewHint {flex-wrap:wrap}
 }
 
 .compactSwitch {
@@ -2828,7 +2852,82 @@ html[data-workspace="manual"] .filterWorkspace>* {
 }
 
 .imageFilterModal .filterActionBar>div small {
-  display: none
+  display: block;
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: var(--text-primary)
+}
+
+/* Shared portal pickers stay above the Image Filter dialog and inherit tokens. */
+.filterPickerBackdrop {
+  position: fixed; inset: 0; z-index: 100000;
+  display: grid; place-items: center; padding: 20px;
+  background: rgb(0 0 0 / .58); backdrop-filter: blur(9px);
+}
+.filterPickerDialog {
+  width: min(640px, 100%); height: min(560px, calc(100dvh - 40px));
+  max-height: calc(100dvh - 40px);
+  display: flex; flex-direction: column; overflow: hidden;
+  color: var(--text-primary); background: var(--surface-elevated, var(--surface));
+  border: 1px solid var(--border-strong, var(--border)); border-radius: 22px;
+  box-shadow: 0 32px 96px rgb(0 0 0 / .4), inset 0 1px 0 rgb(255 255 255 / .06);
+  animation: filterPickerEnter 180ms ease-out;
+}
+.filterPicker-date {width:min(460px,100%); height:min(620px,calc(100dvh - 40px))}
+.filterPicker-time {width:min(460px,100%); height:min(370px,calc(100dvh - 40px))}
+.filterPickerDialog header {display:flex; align-items:flex-start; gap:14px; padding:22px; border-bottom:1px solid var(--border); flex-shrink:0; background:linear-gradient(120deg,color-mix(in srgb,var(--accent) 9%,transparent),transparent)}
+.filterPickerBadge {display:grid;place-items:center;width:44px;height:44px;flex-shrink:0;border-radius:14px;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 20%,transparent)}
+.filterPickerDialog header>span {flex:1; min-width:0}
+.filterPickerDialog header small {font-size:10px; letter-spacing:.16em; color:var(--accent)}
+.filterPickerDialog h2 {font-size:21px; margin:6px 0; font-weight:650}
+.filterPickerDialog p {font-size:12px; line-height:1.5; color:var(--text-secondary); margin:0}
+.filterPickerDialog button,.filterDateTrigger {
+  color:var(--text-primary); background:var(--surface-hover, var(--surface));
+  border:1px solid var(--border); border-radius:10px; min-height:42px;
+  padding:10px 14px; cursor:pointer; transition:background 160ms, border-color 160ms;
+}
+.filterPickerDialog button:hover:not(:disabled),.filterDateTrigger:hover:not(:disabled) {border-color:var(--accent); background:var(--surface-hover)}
+.filterPickerDialog button:focus-visible,.filterDateTrigger:focus-visible {outline:2px solid var(--accent); outline-offset:3px}
+.filterPickerDialog button:disabled {opacity:.45; cursor:not-allowed}
+.filterPickerDialog footer {display:flex; align-items:center; gap:10px; padding:18px 22px; border-top:1px solid var(--border);flex-shrink:0;margin-top:auto}
+.filterPickerDialog footer>span {flex:1; font-size:12px; color:var(--text-secondary)}
+.filterPickerDialog .filterPickerConfirm,.filterCalendarGrid button.selected {
+  background:var(--primary); color:var(--on-primary, #fff); border-color:var(--primary);
+}
+.filterFolderPath {display:flex; align-items:center; gap:10px; padding:16px 22px; background:var(--background-secondary);flex-shrink:0}
+.filterFolderPath code {flex:1; min-width:0; white-space:nowrap;overflow:auto; font-size:12px}
+.filterFolderPath>svg {flex-shrink:0; color:var(--accent)}
+.filterFolderList {overflow:auto; min-height:0; flex:1; padding:12px 22px; display:flex; flex-direction:column; gap:6px; scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
+.filterFolderList>button {display:flex; align-items:center; gap:12px; text-align:left; flex-shrink:0; background:transparent}
+.filterFolderList>button>span {flex:1; overflow-wrap:anywhere}
+.filterFolderList>button>svg:first-child {color:var(--accent)}
+.filterFolderList>p {padding:22px 0; display:flex; align-items:center; gap:10px}
+.filterDateTrigger {display:flex; align-items:center; gap:10px; width:100%; text-align:left; font-size:13px}
+.filterDateTrigger span {flex:1}
+.filterDateTrigger svg {color:var(--accent); flex-shrink:0}
+.filterCalendar {padding:18px 22px; overflow:auto;min-height:0;flex:1}
+.filterCalendar nav {display:flex; align-items:center; justify-content:space-between; margin-bottom:16px}
+.filterCalendar nav select,.filterCalendar nav input {min-width:0; padding:10px 6px; border:1px solid var(--border); border-radius:8px; color:var(--text-primary); background:var(--surface); font-size:13px}
+.filterCalendar nav input {width:76px}
+.filterCalendarGrid {display:grid; grid-template-columns:repeat(7,minmax(0,1fr));grid-template-rows:30px repeat(6,42px); gap:4px; text-align:center}
+.filterCalendarGrid small {padding:8px 0; color:var(--text-muted); font-size:11px}
+.filterCalendarGrid button {padding:8px 0; background:transparent; border-color:transparent;border-radius:12px;font-weight:550}
+.filterPickerToday {margin-top:16px}
+.filterTimePicker {display:flex; align-items:center; justify-content:center; gap:20px; padding:24px;flex:1;min-height:0;overflow:auto}
+.filterTimePicker label {display:flex; flex-direction:column; gap:10px; font-size:12px; color:var(--text-secondary)}
+.filterTimePicker select {font-size:28px; padding:14px; min-width:110px; color:var(--text-primary); background:var(--surface); border:1px solid var(--border); border-radius:12px}
+@keyframes filterPickerEnter {from {opacity:0; transform:translateY(8px) scale(.98)} to {opacity:1; transform:none}}
+@media(prefers-reduced-motion:reduce) {.filterPickerDialog {animation:none}}
+@media(max-width:480px) {
+  .filterPickerBackdrop {padding:12px}
+  .filterPickerDialog {max-height:calc(100dvh - 24px)}
+  .filterPickerDialog header,.filterPickerDialog footer {padding:16px;gap:8px}
+  .filterPickerBadge {display:none}
+  .filterPickerDialog h2 {font-size:18px}
+  .filterFolderPath {padding:12px;gap:6px}
+  .filterPickerDialog footer button {padding:10px}
 }
 
 .imageFilterModal .filterActionBar {

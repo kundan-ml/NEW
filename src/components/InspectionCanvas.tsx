@@ -1,15 +1,17 @@
 'use client';
 
-import {useCallback,useEffect,useLayoutEffect,useRef,useState} from 'react';
+import {useCallback,useEffect,useLayoutEffect,useRef,useState,type ReactNode} from 'react';
 import {createPortal} from 'react-dom';
 import {Crosshair,Focus,Maximize2,Minimize2,Minus,MousePointer2,Plus,RotateCcw,ScanSearch} from 'lucide-react';
 import type {Defect} from '@/types';
 import {constrainImagePan} from '@/lib/image-pan';
 import {fetchPreviewBlob,decodedPreview} from '@/lib/preview-cache';
 import {defectBounds,defectPolygon,hitTestDefects} from '@/lib/inspection-display';
+import {CanvasPopupDetailsPanel} from './CanvasPopupDetailsPanel';
 
 type Probe={x:number;y:number;gray:number|null};
-type Props={imageUrl:string;thumbnailUrl?:string;live?:boolean;onDimensions?:(width:number,height:number)=>void;defects:Defect[];selectedDefect?:number;showDefects?:boolean;showCrosshair?:boolean;showProbe?:boolean;onProbe?:(p:Probe)=>void;onSelectDefect?:(index:number)=>void;bottomLensOffset?:{x:number;y:number}};
+export type CanvasPopupDetails={status?:string;rows:{label:string;value:string|number|null|undefined}[]};
+type Props={popupDetails?:CanvasPopupDetails;popupControls?:ReactNode;imageUrl:string;thumbnailUrl?:string;live?:boolean;onDimensions?:(width:number,height:number)=>void;defects:Defect[];selectedDefect?:number;showDefects?:boolean;showCrosshair?:boolean;showProbe?:boolean;onProbe?:(p:Probe)=>void;onSelectDefect?:(index:number)=>void;bottomLensOffset?:{x:number;y:number}};
 type View={scale:number;x:number;y:number};
 type SavedView={scale:number;centerX:number;centerY:number;imageWidth?:number};
 
@@ -19,7 +21,7 @@ function readSavedView(imageUrl:string):SavedView|null{
  try{const views=JSON.parse(localStorage.getItem(VIEW_STORAGE_KEY)||'{}');const saved=views[imageUrl];return saved&&Number.isFinite(saved.scale)&&Number.isFinite(saved.centerX)&&Number.isFinite(saved.centerY)?saved:null}catch{return null}
 }
 
-export function InspectionCanvas({imageUrl,thumbnailUrl,live=false,onDimensions,defects,selectedDefect=-1,showDefects=true,showCrosshair=true,showProbe=true,onProbe,onSelectDefect,bottomLensOffset}:Props){
+export function InspectionCanvas({imageUrl,thumbnailUrl,live=false,onDimensions,defects,selectedDefect=-1,showDefects=true,showCrosshair=true,showProbe=true,onProbe,onSelectDefect,bottomLensOffset,popupDetails,popupControls}:Props){
  const dimensionsCallback=useRef(onDimensions);dimensionsCallback.current=onDimensions;
  const fullResolution=useRef(false);
  const host=useRef<HTMLDivElement>(null);const canvas=useRef<HTMLCanvasElement>(null);const source=useRef<HTMLImageElement|null>(null);const pixels=useRef<HTMLCanvasElement|null>(null);const frame=useRef<number|null>(null);const activeImage=useRef('');const loadSequence=useRef(0);const lastSize=useRef({width:0,height:0});
@@ -175,7 +177,7 @@ export function InspectionCanvas({imageUrl,thumbnailUrl,live=false,onDimensions,
  }
  function oneToOne(){const h=host.current,i=source.current;if(!h||!i)return;const r=h.getBoundingClientRect();setView({scale:1,x:(r.width-i.naturalWidth)/2,y:(r.height-i.naturalHeight)/2})}
  function focusDefect(){const i=source.current,h=host.current,d=defects[selectedDefect],bounds=d?defectBounds(d):null;if(!i||!h||!bounds||activeImage.current!==imageUrl)return;const[x,y,w,hh]=bounds,r=h.getBoundingClientRect();const targetW=Math.max(w*i.naturalWidth,60),targetH=Math.max(hh*i.naturalHeight,60),s=Math.min(r.width*.58/targetW,r.height*.58/targetH,8);const cx=(x+w/2)*i.naturalWidth,cy=(y+hh/2)*i.naturalHeight;setView({scale:s,x:r.width/2-cx*s,y:r.height/2-cy*s})}
- function toggleExpanded(){if(!expanded){const r=host.current?.getBoundingClientRect();if(r&&r.width>0&&r.height>0)setPopupAspect(Math.max(.55,Math.min(2.4,r.width/r.height)))}setExpanded(value=>!value)}
+ function toggleExpanded(){if(!expanded){const image=source.current,r=host.current?.getBoundingClientRect();if(image?.naturalWidth&&image.naturalHeight)setPopupAspect(image.naturalWidth/image.naturalHeight);else if(r&&r.width>0&&r.height>0)setPopupAspect(Math.max(.55,Math.min(2.4,r.width/r.height)))}setExpanded(value=>!value)}
  const canvasView=<div className={`canvasHost canvas-${state} ${expanded?'canvasPopupHost':''}`} ref={host} onWheel={wheel} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerEnd} onPointerCancel={pointerEnd} onPointerLeave={e=>{if(e.pointerType==='mouse'&&!activePointers.current.has(e.pointerId))setProbe(null)}} onDoubleClick={fit}>
    <canvas ref={canvas}/><div className="scanBeam" aria-hidden/>
    <div className="canvasTools" onPointerDown={e=>e.stopPropagation()}><button onClick={()=>zoomAt(1.22)} title="Zoom in" aria-label="Zoom in"><Plus/></button><button onClick={()=>zoomAt(.82)} title="Zoom out" aria-label="Zoom out"><Minus/></button><button onClick={fit} title="Fit image" aria-label="Fit image"><RotateCcw/></button><button onClick={oneToOne} title="1:1 pixels" aria-label="Show image at 1:1 pixels"><ScanSearch/></button><button onClick={focusDefect} disabled={!defects[selectedDefect]||!defectBounds(defects[selectedDefect])} title="Focus selected defect" aria-label="Focus selected defect"><Focus/></button><button onClick={toggleExpanded} title={expanded?'Close expanded viewer':'Open expanded viewer'} aria-label={expanded?'Close expanded viewer':'Open expanded viewer'}>{expanded?<Minimize2/>:<Maximize2/>}</button></div>
@@ -184,6 +186,6 @@ export function InspectionCanvas({imageUrl,thumbnailUrl,live=false,onDimensions,
    <div className="canvasHint"><Crosshair/><span className="canvasMouseHint">drag to pan · wheel to zoom · double click fit</span><span className="canvasTouchHint">drag to pan · pinch to zoom · use Fit to reset</span></div>
    {state==='ready'&&<div className="canvasScale"><span style={{'--scale-bar-width':`${Math.max(20,Math.min(280,Math.round(220*view.scale)))}px`} as React.CSSProperties}/><b>1 cm · {Math.round(view.scale*100)}%</b></div>}
  </div>;
- if(expanded&&typeof document!=='undefined')return createPortal(<div className="canvasPopupBackdrop" role="dialog" aria-modal="true" aria-label="Expanded inspection image" onPointerDown={e=>{if(e.target===e.currentTarget)setExpanded(false)}}><div className="canvasPopupWindow" style={{'--canvas-popup-ratio':String(popupAspect)} as React.CSSProperties}><div className="canvasPopupHeader"><span><i/><span><b>Inspection Image</b><em>Precision viewer</em></span></span><small><span className="canvasMouseHint">Scroll to zoom · drag to inspect · double-click to fit · Esc to close</span><span className="canvasTouchHint">Pinch to zoom · drag to inspect · tap Fit to reset</span></small><button onClick={()=>setExpanded(false)}><Minimize2/>Close</button></div><div className="canvasPopupStage"><i className="canvasCorner topLeft"/><i className="canvasCorner topRight"/><i className="canvasCorner bottomLeft"/><i className="canvasCorner bottomRight"/>{canvasView}</div></div></div>,document.body);
+ if(expanded&&typeof document!=='undefined')return createPortal(<div className="canvasPopupBackdrop" role="dialog" aria-modal="true" aria-label="Expanded inspection image" onPointerDown={e=>{if(e.target===e.currentTarget)setExpanded(false)}}><div className="canvasPopupWindow" style={{'--canvas-popup-ratio':String(popupAspect)} as React.CSSProperties}><div className="canvasPopupHeader"><span><i/><span><b>Inspection Image</b><em>Precision viewer</em></span></span><small><span className="canvasMouseHint">Scroll to zoom · drag to inspect · double-click to fit · Esc to close</span><span className="canvasTouchHint">Pinch to zoom · drag to inspect · tap Fit to reset</span></small><button onClick={()=>setExpanded(false)}><Minimize2/>Close</button></div><div className="canvasPopupBody"><div className="canvasPopupImageArea"><div className="canvasPopupStage"><i className="canvasCorner topLeft"/><i className="canvasCorner topRight"/><i className="canvasCorner bottomLeft"/><i className="canvasCorner bottomRight"/>{canvasView}</div></div><CanvasPopupDetailsPanel details={popupDetails} controls={popupControls} defects={defects} selectedDefect={selectedDefect} onSelectDefect={onSelectDefect} zoom={view.scale} live={live}/></div></div></div>,document.body);
  return canvasView
 }

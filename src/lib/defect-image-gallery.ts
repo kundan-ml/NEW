@@ -8,6 +8,17 @@ export interface DefectImageMatch {
   defects: Defect[];
 }
 
+/** Shared overlays retain source channels, but appear on every illumination. */
+export function galleryOverlayDefects(result: InspectionResult, className?:string): Defect[] {
+  const seen=new Set<string>();
+  return [...result.defects,...result.channels.flatMap(channel=>channel.defects)].filter(defect=>{
+    if(className&&defectClassKey(defect.name)!==defectClassKey(className))return false;
+    const key=JSON.stringify(defect);
+    if(seen.has(key))return false;
+    seen.add(key);return true;
+  });
+}
+
 /** One lens per class, retaining every matching instance and its actual output. */
 export function selectDefectImages(results: readonly InspectionResult[], name: string): DefectImageMatch[] {
   const wanted = defectClassKey(name);
